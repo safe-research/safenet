@@ -2,7 +2,7 @@ use super::{Packet, SigningState, State, Transition};
 use crate::{
     bindings::{self, Consensus, Coordinator, Oracle, SignNonces},
     consensus::{epoch::EpochId, hashing},
-    frost::{self, keygen::KeyShare, preprocess::Nonces},
+    frost::{self, preprocess::Nonces},
     merkle::MerkleRoot,
     service::{Action, Effect},
 };
@@ -11,11 +11,7 @@ use alloy::{
     sol_types::SolCall as _,
 };
 use safenet_core::state::{Command, Commands};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    mem,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, mem};
 
 impl Transition {
     /// Handles a validator's own request to sign a packet.
@@ -86,7 +82,6 @@ impl Transition {
                             signature_id: event.sid,
                             nonce,
                             revealed: BTreeMap::new(),
-                            last_signer: None,
                             packet,
                             signers,
                             deadline,
@@ -202,7 +197,6 @@ impl Transition {
                         signature_id,
                         nonce,
                         revealed: BTreeMap::new(),
-                        last_signer: None,
                         packet,
                         signers,
                         deadline,
@@ -252,7 +246,9 @@ impl Transition {
     /// has revealed, enters [`SigningState::CollectSigningShares`] and
     /// dispatches the [`Effect::UseNonce`] effect to burn this validator's own
     /// nonce and produce a signature share from the now-complete set of
-    /// revealed commitments.
+    /// revealed commitments. If the round times out first, the signers that did
+    /// reveal continue without the others instead (see
+    /// [`handle_signing_timeouts`](Self::handle_signing_timeouts)).
     pub(super) fn handle_sign_revealed_nonces(
         &self,
         mut state: State,
@@ -270,7 +266,6 @@ impl Transition {
                 signature_id,
                 nonce,
                 mut revealed,
-                mut last_signer,
                 packet,
                 signers,
                 deadline,
@@ -281,7 +276,6 @@ impl Transition {
                 {
                     Some(Ok(nonces)) => {
                         revealed.insert(event.participant, nonces);
-                        last_signer = Some(event.participant);
                     }
                     Some(Err(err)) => {
                         tracing::warn!(
@@ -310,7 +304,6 @@ impl Transition {
                             signature_id,
                             nonce,
                             revealed,
-                            last_signer,
                             packet,
                             signers,
                             deadline,
@@ -517,50 +510,6 @@ impl Transition {
         let next_deadline = block.saturating_add(self.config.signing_timeout.get());
         let mut commands = Vec::new();
 
-        // A helper for restarting a signing ceremony shared by timed out nonce
-        // collection and signing share broadcasting.
-        let restart_signing_ceremony =
-            |signature_id_to_message: &mut BTreeMap<B256, B256>,
-             commands: &mut Vec<Command<Action, Effect>>,
-             key_share: Arc<KeyShare>,
-             group_id: B256,
-             signature_id: B256,
-             signers: BTreeSet<Address>,
-             message: B256,
-             packet: Packet,
-             last_signer: Option<Address>| {
-                // The signature ID is no longer useful, unlink it.
-                signature_id_to_message.remove(&signature_id);
-
-                // Ensure that there are sufficient signers left (at least a
-                // group threshold of them) for restarting the ceremony. and
-                // that we are part of the signing selection.
-                if signers.len() < key_share.group_threshold() as usize
-                    || !signers.contains(&self.account)
-                {
-                    return None;
-                }
-
-                // We want to restart the signing process. By convention, the
-                // last signer to participate is responsible for kicking if off.
-                // If that is us, queue up an action for it.
-                if last_signer == Some(self.account) {
-                    commands.push(Command::Action(Action::Sign {
-                        group_id,
-                        message,
-                        expires_at: next_deadline,
-                    }));
-                }
-                Some(SigningState::WaitingForRequest {
-                    key_share,
-                    group_id,
-                    responsible: last_signer,
-                    packet,
-                    signers,
-                    deadline: next_deadline,
-                })
-            };
-
         for (message, signing) in &state.signing {
             if signing.deadline() <= block {
                 tracing::warn!(
@@ -634,40 +583,53 @@ impl Transition {
                 signature_id,
                 nonce,
                 revealed,
-                last_signer,
                 packet,
-                signers,
                 deadline,
+                ..
             } if *deadline <= block => {
-                // The remaining signers are all the ones that revealed nonces.
-                signers.retain(|signer| revealed.contains_key(signer));
-
-                if let Some(new_state) = restart_signing_ceremony(
-                    &mut state.signature_id_to_message,
-                    &mut commands,
-                    key_share.clone(),
-                    *group_id,
-                    *signature_id,
-                    mem::take(signers),
-                    *message,
-                    packet.clone(),
-                    *last_signer,
-                ) {
-                    *signing = new_state;
-                    true
-                } else {
-                    false
+                // Instead of restarting the signing ceremony, continue it with
+                // the signers that revealed their nonces before the deadline
+                // (any later reveals are ignored). Make sure that there are
+                // sufficient signers left (at least a group threshold of them)
+                // and that we are part of the signing selection.
+                if revealed.len() < key_share.group_threshold() as usize
+                    || !revealed.contains_key(&self.account)
+                {
+                    state.signature_id_to_message.remove(signature_id);
+                    return false;
                 }
+
+                tracing::info!(
+                    %message,
+                    %signature_id,
+                    signing_selection = ?revealed.keys().collect::<Vec<_>>(),
+                    "continuing signing ceremony with signers that revealed nonce commitments"
+                );
+                commands.push(Command::Effect(Effect::UseNonce {
+                    message: *message,
+                    root: nonce.root,
+                    offset: nonce.offset,
+                }));
+                *signing = SigningState::CollectSigningShares {
+                    key_share: key_share.clone(),
+                    group_id: *group_id,
+                    signature_id: *signature_id,
+                    signers: revealed.keys().copied().collect(),
+                    revealed: mem::take(revealed),
+                    selections: BTreeMap::new(),
+                    packet: packet.clone(),
+                    deadline: next_deadline,
+                };
+                true
             }
             SigningState::CollectSigningShares {
                 key_share,
                 group_id,
                 signature_id,
-                revealed,
                 selections,
                 packet,
-                signers,
                 deadline,
+                ..
             } if *deadline <= block => {
                 // Select the largest section that is at least as large as the
                 // group threshold. This is necessarily unique because the
@@ -681,23 +643,40 @@ impl Transition {
                     })
                     .max_by_key(|selection| selection.shares_from.len())
                     .unwrap_or_default();
+                let signers = canonical_selection.shares_from;
+                let last_signer = canonical_selection.last_signer;
 
-                if let Some(new_state) = restart_signing_ceremony(
-                    &mut state.signature_id_to_message,
-                    &mut commands,
-                    key_share.clone(),
-                    *group_id,
-                    *signature_id,
-                    canonical_selection.shares_from,
-                    *message,
-                    packet.clone(),
-                    canonical_selection.last_signer,
-                ) {
-                    *signing = new_state;
-                    true
-                } else {
-                    false
+                // The signature ID is no longer useful, unlink it.
+                state.signature_id_to_message.remove(signature_id);
+
+                // Ensure that there are sufficient signers left (at least a
+                // group threshold of them) for restarting the ceremony and
+                // that we are part of the signing selection.
+                if signers.len() < key_share.group_threshold() as usize
+                    || !signers.contains(&self.account)
+                {
+                    return false;
                 }
+
+                // We want to restart the signing process. By convention, the
+                // last signer to participate is responsible for kicking it off.
+                // If that is us, queue up an action for it.
+                if last_signer == Some(self.account) {
+                    commands.push(Command::Action(Action::Sign {
+                        group_id: *group_id,
+                        message: *message,
+                        expires_at: next_deadline,
+                    }));
+                }
+                *signing = SigningState::WaitingForRequest {
+                    key_share: key_share.clone(),
+                    group_id: *group_id,
+                    responsible: last_signer,
+                    packet: packet.clone(),
+                    signers,
+                    deadline: next_deadline,
+                };
+                true
             }
             SigningState::WaitingForAttestation {
                 signature_id,
