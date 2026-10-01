@@ -100,11 +100,15 @@ function SafeTxProposalVoting({ oracle, proposal }: { oracle: Address; proposal:
 }
 
 function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWithStatus; number: number }) {
+	const disputed = proposal.arbitration !== null;
+	// A disputed or denied proposal is never attested, so its signing progress is not loaded: it
+	// would never complete, and the page would keep polling for it.
+	const neverAttested = disputed || proposal.status === "DENIED";
 	return (
 		<Box className="space-y-2">
 			<div className="flex items-center gap-2">
 				<p className="font-semibold">Proposal #{number}</p>
-				<ProposalInfoButton proposal={proposal} />
+				{!neverAttested && <ProposalInfoButton proposal={proposal} />}
 			</div>
 			<div className="md:flex md:justify-between">
 				<p>Status:</p>
@@ -129,12 +133,14 @@ function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWit
 							<InlineBlockInfo block={proposal.attestedAt.block} />{" "}
 							<InlineExplorerTxLink txHash={proposal.attestedAt.tx}>Explorer Tx</InlineExplorerTxLink>
 						</>
+					) : disputed ? (
+						"Never attested, because the transaction entered arbitration"
 					) : (
 						"-"
 					)}
 				</p>
 			</div>
-			<SafeTxAttestationStatus proposal={proposal} />
+			{!neverAttested && <SafeTxAttestationStatus proposal={proposal} />}
 		</Box>
 	);
 }

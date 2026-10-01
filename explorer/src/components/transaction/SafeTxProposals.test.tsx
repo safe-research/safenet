@@ -19,7 +19,7 @@ vi.mock("@/hooks/useSubmitProposal", () => ({
 }));
 
 vi.mock("./SafeTxAttestationStatus", () => ({
-	SafeTxAttestationStatus: () => null,
+	SafeTxAttestationStatus: vi.fn(() => null),
 }));
 
 vi.mock("@/hooks/useSigningProgress", () => ({
@@ -55,7 +55,9 @@ import { useConsensusState } from "@/hooks/useConsensusState";
 import { useOracleArbitrator } from "@/hooks/useOracleArbitrator";
 import { useProposalsForTransaction } from "@/hooks/useProposalsForTransaction";
 import { useSentinelVotes } from "@/hooks/useSentinelVotes";
+import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useVotingStatus } from "@/hooks/useVotingStatus";
+import { SafeTxAttestationStatus } from "./SafeTxAttestationStatus";
 
 afterEach(cleanup);
 
@@ -191,6 +193,44 @@ describe("SafeTxProposals", () => {
 			vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal()]));
 			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
 			expect(screen.queryByText("Arbitration:")).toBeNull();
+			expect(rowText("Attested:")).toBe("Attested:-");
+		});
+
+		it.each<[string, Arbitration["outcome"]]>([
+			["a pending dispute", null],
+			["a ruled dispute", { kind: "ruled", secure: true, context: "", at: ruledAt }],
+			["an out-of-scope dispute", { kind: "outOfScope", context: "", at: ruledAt }],
+			["a timed-out dispute", { kind: "timedOut", at: ruledAt }],
+		])("explains that %s is never attested", (_, outcome) => {
+			renderArbitration(makeArbitration(outcome));
+			expect(rowText("Attested:")).toBe("Attested:Never attested, because the transaction entered arbitration");
+		});
+
+		it("does not load the signing progress of a disputed proposal", () => {
+			vi.mocked(useAttestationStatus).mockClear();
+			vi.mocked(SafeTxAttestationStatus).mockClear();
+			renderArbitration(makeArbitration());
+			expect(useAttestationStatus).not.toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).not.toHaveBeenCalled();
+		});
+
+		it("does not load the signing progress of a denied proposal", () => {
+			vi.mocked(useAttestationStatus).mockClear();
+			vi.mocked(SafeTxAttestationStatus).mockClear();
+			vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal({ status: "DENIED" })]));
+			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+			expect(useAttestationStatus).not.toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).not.toHaveBeenCalled();
+			expect(rowText("Attested:")).toBe("Attested:-");
+		});
+
+		it("loads the signing progress of a proposal without an arbitration", () => {
+			vi.mocked(useAttestationStatus).mockClear();
+			vi.mocked(SafeTxAttestationStatus).mockClear();
+			vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal()]));
+			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+			expect(useAttestationStatus).toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).toHaveBeenCalled();
 		});
 
 		it("shows a pending dispute with its start, deadline and closing note", () => {
