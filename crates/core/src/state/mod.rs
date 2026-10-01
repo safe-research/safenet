@@ -38,6 +38,10 @@ pub enum Error {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Message<Event, Resume> {
     /// A new block.
+    ///
+    /// The block is the next block that actions can be included in: every
+    /// event up to the previous block has been applied, and none of the new
+    /// block's events have. Note that the block may not have been mined yet.
     NewBlock(u64),
     /// A new event.
     Event(EventLog<Event>),
@@ -107,6 +111,7 @@ pub struct StateMachine<S, T> {
 enum Status {
     Initialized,
     BlockPending { pending: u64 },
+    BlockApplied { pending: u64 },
     BlockEvents { latest: u64 },
     WarpEvents { range: RangeInclusive<u64> },
 }
@@ -181,6 +186,7 @@ where
             }
             Update::Block(BlockUpdate::Uncle { number })
                 if matches!(status, Status::BlockPending { pending } if number < pending)
+                    || matches!(status, Status::BlockApplied { pending } if number < pending)
                     || matches!(status, Status::BlockEvents { latest } if number <= latest) =>
             {
                 let (_, state) = self.snapshots.reorg(number).await?;
@@ -189,11 +195,17 @@ where
             }
             Update::Block(BlockUpdate::New { number, .. })
                 if matches!(status, Status::Initialized)
-                    || matches!(status, Status::BlockPending { pending } if pending == number) =>
+                    || matches!(status, Status::BlockPending { pending } if pending == number)
+                    || matches!(status, Status::BlockApplied { pending } if pending == number) =>
             {
-                let (state, commands) = self
-                    .transition
-                    .apply_transition(state, Message::NewBlock(number));
+                // The block's transition may have already been applied when
+                // processing the previous block's logs.
+                let (state, commands) = match status {
+                    Status::BlockApplied { .. } => (state, vec![]),
+                    _ => self
+                        .transition
+                        .apply_transition(state, Message::NewBlock(number)),
+                };
                 let status = Status::BlockEvents { latest: number };
                 (state, status, commands)
             }
@@ -210,7 +222,7 @@ where
                     return Err(Error::BadUpdate);
                 }
 
-                let (state, commands) = {
+                let (mut state, mut commands) = {
                     let mut state = state;
                     let mut commands = Vec::new();
                     for log in logs {
@@ -222,7 +234,7 @@ where
                     (state, commands)
                 };
 
-                let status = match status {
+                let mut status = match status {
                     Status::WarpEvents { range } if blocks.last < range.last => {
                         let range = block_range(next_block(blocks.last)?, range.last)?;
                         Status::WarpEvents { range }
@@ -234,6 +246,20 @@ where
                 };
 
                 self.snapshots.commit(blocks.last, &state).await?;
+
+                // Optimistically apply the pending block's transition right
+                // away instead of waiting for the block to be observed, so
+                // that its actions can be included in the pending block. This
+                // happens after the snapshot is committed, so it gets replayed
+                // when the block is observed after a restart.
+                if let Status::BlockPending { pending } = status {
+                    let (new_state, new_commands) = self
+                        .transition
+                        .apply_transition(state, Message::NewBlock(pending));
+                    state = new_state;
+                    commands.extend(new_commands);
+                    status = Status::BlockApplied { pending };
+                }
 
                 (state, status, commands)
             }
@@ -413,7 +439,8 @@ mod tests {
         let mut machine = new_machine(&pool).await;
 
         // A new block runs the block transition; its events are applied and the
-        // resulting state is committed at the last block of the range.
+        // resulting state is committed at the last block of the range. The
+        // next block's transition is then applied without waiting for it.
         assert_eq!(
             machine.handle_update(new_block(1)).await.unwrap(),
             vec![Command::Action(Action::Block(1))]
@@ -425,9 +452,9 @@ mod tests {
                 Command::Effect(10),
                 Command::Action(Action::Event(20)),
                 Command::Effect(20),
+                Command::Action(Action::Block(2)),
             ]
         );
-
         assert_eq!(
             committed(&pool).await,
             Some((
@@ -435,6 +462,21 @@ mod tests {
                 TestState {
                     blocks: vec![1],
                     events: vec![10, 20],
+                    resumes: vec![],
+                },
+            ))
+        );
+
+        // Observing the next block does not apply its transition again.
+        assert_eq!(machine.handle_update(new_block(2)).await.unwrap(), vec![]);
+        machine.handle_update(logs(2..=2, [30])).await.unwrap();
+        assert_eq!(
+            committed(&pool).await,
+            Some((
+                2,
+                TestState {
+                    blocks: vec![1, 2],
+                    events: vec![10, 20, 30],
                     resumes: vec![],
                 },
             ))
@@ -489,9 +531,13 @@ mod tests {
         drop(machine);
 
         // A fresh machine over the same store resumes at block 1, so it accepts
-        // block 2 and carries the restored state forward.
+        // block 2 and carries the restored state forward. Block 2's transition
+        // was not part of the committed snapshot, so it is applied again.
         let mut machine = new_machine(&pool).await;
-        machine.handle_update(new_block(2)).await.unwrap();
+        assert_eq!(
+            machine.handle_update(new_block(2)).await.unwrap(),
+            vec![Command::Action(Action::Block(2))]
+        );
         machine.handle_update(logs(2..=2, [20])).await.unwrap();
 
         assert_eq!(
@@ -564,8 +610,12 @@ mod tests {
         // Blocks 2 and 3 are uncled; roll back to block 1's snapshot.
         assert_eq!(machine.handle_update(uncle(2)).await.unwrap(), vec![]);
 
-        // Re-apply forward on the new canonical chain.
-        machine.handle_update(new_block(2)).await.unwrap();
+        // Re-apply forward on the new canonical chain. The rollback also
+        // discards block 4's optimistically applied transition.
+        assert_eq!(
+            machine.handle_update(new_block(2)).await.unwrap(),
+            vec![Command::Action(Action::Block(2))]
+        );
         machine.handle_update(logs(2..=2, [21])).await.unwrap();
 
         assert_eq!(
@@ -619,10 +669,15 @@ mod tests {
         let mut machine = new_machine(&pool).await;
         assert_eq!(machine.handle_update(warp(4, 6)).await.unwrap(), vec![]);
 
-        // Continue with the next chunk of events from the warp.
+        // Continue with the last chunk of events from the warp, after which
+        // the block following the warp is applied.
         assert_eq!(
             machine.handle_update(logs(4..=6, [40])).await.unwrap(),
-            vec![Command::Action(Action::Event(40)), Command::Effect(40)]
+            vec![
+                Command::Action(Action::Event(40)),
+                Command::Effect(40),
+                Command::Action(Action::Block(7)),
+            ]
         );
         machine.prune(6).await.unwrap();
         assert_eq!(
