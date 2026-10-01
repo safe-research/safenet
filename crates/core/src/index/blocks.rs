@@ -14,31 +14,58 @@ use alloy::{
 use serde::Deserialize;
 use std::{collections::VecDeque, time::Duration};
 
-/// How the watcher determines the expected time between blocks.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
-pub enum BlockTime {
-    /// Detect the block time from the connected chain.
+/// A block watcher timing, in milliseconds, which is either configured
+/// explicitly or set to the default for the connected chain.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+pub enum Timing<T> {
+    /// Use the default for the connected chain.
     #[default]
     #[serde(rename = "auto")]
     Auto,
-    /// Use an explicit block time, in milliseconds.
+    /// Use an explicit timing, in milliseconds.
     #[serde(untagged)]
-    Millis(u64),
+    Millis(T),
 }
 
-impl BlockTime {
-    /// Resolves this configuration to milliseconds for `chain_id`.
-    ///
-    /// Explicit block times are returned as-is. Automatic block times use the
-    /// same chain-specific values as the block watcher.
-    pub fn resolve(self, chain_id: u64) -> Result<u64, Error> {
+impl<T: Clone> Timing<T> {
+    /// Resolves this timing for `chain_id`, selecting the for automatic
+    /// timings.
+    fn resolve(&self, chain_id: u64, default: impl FnOnce() -> Option<T>) -> Result<T, Error> {
         match self {
-            Self::Millis(block_time) => Ok(block_time),
-            Self::Auto => match chain_id {
-                100 => Ok(5_000),       // Gnosis Chain
-                11155111 => Ok(12_000), // Sepolia
-                chain_id => Err(Error::UnknownBlockTime { chain_id }),
-            },
+            Self::Millis(value) => Ok(value.clone()),
+            Self::Auto => default().ok_or(Error::UnknownChainTimings { chain_id }),
+        }
+    }
+}
+
+/// Block watcher timings resolved for a chain, in milliseconds.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Timings {
+    /// Expected time between blocks.
+    pub block_time: u64,
+    /// Extra delay after a block's expected mining time before polling for it.
+    pub block_propagation_delay: u64,
+    /// Successive delays between retries while waiting for an expected block.
+    pub block_retry_delays: Vec<u64>,
+}
+
+impl Timings {
+    /// Returns the default timings for `chain_id`, if it is a known chain.
+    fn for_chain(chain_id: u64) -> Option<Self> {
+        match chain_id {
+            // Gnosis Chain
+            100 => Some(Self {
+                block_time: 5_000,
+                block_propagation_delay: 500,
+                block_retry_delays: vec![500, 500, 500, 1_000, 250, 250],
+            }),
+            // Sepolia
+            11155111 => Some(Self {
+                block_time: 12_000,
+                block_propagation_delay: 1_000,
+                block_retry_delays: vec![1_000, 1_000, 1_000, 500, 500],
+            }),
+            _ => None,
         }
     }
 }
@@ -48,14 +75,14 @@ impl BlockTime {
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     /// Expected time between blocks.
-    pub block_time: BlockTime,
+    pub block_time: Timing<u64>,
     /// Extra delay after a block's expected mining time before polling for it,
     /// in milliseconds, to allow for propagation.
-    pub block_propagation_delay: u64,
+    pub block_propagation_delay: Timing<u64>,
     /// Successive delays, in milliseconds, between retries while waiting for an
     /// expected block to become available. Once exhausted, the watcher waits a
     /// whole `block_time` before trying again (to handle skipped slots).
-    pub block_retry_delays: Vec<u64>,
+    pub block_retry_delays: Timing<Vec<u64>>,
     /// How many of the most recent blocks are still considered mutable
     /// (i.e. how deep a reorg can be) before it is considered final. A reorg
     /// that reaches past this depth - replacing a block already considered
@@ -74,12 +101,37 @@ pub struct Config {
     pub start_block: Option<u64>,
 }
 
+impl Config {
+    /// Resolves the block watcher timings for `chain_id`.
+    ///
+    /// Explicit timings are returned as-is, and automatic timings use the
+    /// defaults for the chain. Fails if any timing is automatic and the chain
+    /// has no defaults.
+    pub fn timings(&self, chain_id: u64) -> Result<Timings, Error> {
+        let timings = Timings::for_chain(chain_id);
+        let block_time = self
+            .block_time
+            .resolve(chain_id, || Some(timings.as_ref()?.block_time))?;
+        let block_propagation_delay = self
+            .block_propagation_delay
+            .resolve(chain_id, || Some(timings.as_ref()?.block_propagation_delay))?;
+        let block_retry_delays = self
+            .block_retry_delays
+            .resolve(chain_id, move || Some(timings?.block_retry_delays))?;
+        Ok(Timings {
+            block_time,
+            block_propagation_delay,
+            block_retry_delays,
+        })
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
-            block_time: BlockTime::Auto,
-            block_propagation_delay: 500,
-            block_retry_delays: vec![200, 100, 100],
+            block_time: Timing::Auto,
+            block_propagation_delay: Timing::Auto,
+            block_retry_delays: Timing::Auto,
             max_reorg_depth: 5,
             start_block: None,
         }
@@ -121,9 +173,10 @@ pub enum Error {
     /// An RPC request failed.
     #[error(transparent)]
     Rpc(#[from] TransportError),
-    /// Automatic block time detection is not supported for the connected chain.
-    #[error("automatic block time detection is not supported for chain {chain_id}")]
-    UnknownBlockTime { chain_id: u64 },
+    /// Automatic block watcher timings are not supported for the connected
+    /// chain.
+    #[error("automatic block watcher timings are not supported for chain {chain_id}")]
+    UnknownChainTimings { chain_id: u64 },
     /// A block at or below the chain head was missing, indicating an
     /// inconsistent RPC node.
     #[error("block {0} is unexpectedly missing")]
@@ -177,7 +230,7 @@ struct SafeBlock {
 pub struct BlockWatcher {
     provider: Provider,
     config: Config,
-    block_time: u64,
+    timings: Timings,
     pending: PendingBlock,
     clock: Clock,
     /// The current `safe` block, kept explicitly so there is always
@@ -202,11 +255,11 @@ impl BlockWatcher {
         config: Config,
         indexed: Option<BlockStatus>,
     ) -> Result<Self, Error> {
-        let block_time = config.block_time.resolve(provider.chain_id())?;
+        let timings = config.timings(provider.chain_id())?;
         let mut watcher = Self {
             provider,
             config,
-            block_time,
+            timings,
             pending: PendingBlock {
                 number: 0,
                 timestamp_ms: 0,
@@ -401,9 +454,9 @@ impl BlockWatcher {
             // `block_retry_delays`. But on low-activity chains slots are commonly
             // skipped, so once the retries are exhausted, wait a whole block time
             // rather than hammering the node.
-            let index = retry_count % (self.config.block_retry_delays.len() + 1);
+            let index = retry_count % (self.timings.block_retry_delays.len() + 1);
             retry_count += 1;
-            if let Some(delay) = self.config.block_retry_delays.get(index).copied() {
+            if let Some(delay) = self.timings.block_retry_delays.get(index).copied() {
                 tracing::trace!(
                     number = self.pending.number,
                     delay_ms = delay,
@@ -411,7 +464,7 @@ impl BlockWatcher {
                 );
                 tokio::time::sleep(Duration::from_millis(delay)).await;
             } else {
-                self.pending.timestamp_ms += self.block_time;
+                self.pending.timestamp_ms += self.timings.block_time;
             }
         };
 
@@ -538,7 +591,7 @@ impl BlockWatcher {
     fn update_next_pending_block(&mut self, number: u64, timestamp: u64) {
         self.pending = PendingBlock {
             number: number + 1,
-            timestamp_ms: timestamp * 1000 + self.block_time,
+            timestamp_ms: timestamp * 1000 + self.timings.block_time,
         };
     }
 
@@ -546,7 +599,7 @@ impl BlockWatcher {
     /// is behind the head, the pending block's expected time is in the past, so
     /// this returns immediately and the watcher catches up as fast as it can.
     async fn wait_for_pending_block(&self) {
-        let target = self.pending.timestamp_ms + self.config.block_propagation_delay;
+        let target = self.pending.timestamp_ms + self.timings.block_propagation_delay;
         self.clock.sleep_until(target).await;
     }
 }
@@ -565,27 +618,69 @@ mod tests {
 
     fn config() -> Config {
         Config {
-            block_time: BlockTime::Millis(2_000),
-            block_propagation_delay: 500,
-            block_retry_delays: vec![200, 100, 50],
+            block_time: Timing::Millis(2_000),
+            block_propagation_delay: Timing::Millis(500),
+            block_retry_delays: Timing::Millis(vec![200, 100, 50]),
             max_reorg_depth: 2,
             start_block: None,
         }
     }
 
     #[test]
-    fn resolves_configured_and_automatic_block_times() {
-        assert_eq!(BlockTime::Millis(2_000).resolve(31_337).unwrap(), 2_000);
-        assert_eq!(BlockTime::Auto.resolve(100).unwrap(), 5_000);
-        assert_eq!(BlockTime::Auto.resolve(11_155_111).unwrap(), 12_000);
-        assert!(matches!(
-            BlockTime::Auto.resolve(31_337),
-            Err(Error::UnknownBlockTime { chain_id: 31_337 })
-        ));
+    fn resolves_configured_timings() {
+        assert_eq!(
+            config().timings(31_337).unwrap(),
+            Timings {
+                block_time: 2_000,
+                block_propagation_delay: 500,
+                block_retry_delays: vec![200, 100, 50],
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_automatic_timings_for_known_chains() {
+        let auto = Config::default();
+        assert_eq!(auto.timings(100).unwrap().block_time, 5_000);
+        assert_eq!(auto.timings(11_155_111).unwrap().block_time, 12_000);
+    }
+
+    #[test]
+    fn resolves_mixed_configured_and_automatic_timings() {
+        let config = Config {
+            block_retry_delays: Timing::Millis(vec![]),
+            ..Default::default()
+        };
+        let timings = config.timings(100).unwrap();
+        assert_eq!(timings.block_time, 5_000);
+        assert_eq!(timings.block_retry_delays, Vec::<u64>::new());
+    }
+
+    #[test]
+    fn rejects_automatic_timings_for_unknown_chains() {
+        for config in [
+            Config {
+                block_time: Timing::Auto,
+                ..config()
+            },
+            Config {
+                block_propagation_delay: Timing::Auto,
+                ..config()
+            },
+            Config {
+                block_retry_delays: Timing::Auto,
+                ..config()
+            },
+        ] {
+            assert!(matches!(
+                config.timings(31_337),
+                Err(Error::UnknownChainTimings { chain_id: 31_337 })
+            ));
+        }
     }
 
     #[tokio::test]
-    async fn auto_block_time_uses_chain_id() {
+    async fn auto_timings_use_chain_id() {
         let asserter = Asserter::new();
         asserter.push_success(&block(1000));
 
@@ -600,7 +695,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(blocks.block_time, 5000);
+        assert_eq!(blocks.timings, Config::default().timings(100).unwrap());
         assert!(asserter.read_q().is_empty());
     }
 
@@ -882,8 +977,7 @@ mod tests {
     async fn next_waits_for_pending_block_and_fetches_it() {
         let start = Instant::now();
         let asserter = Asserter::new();
-        let config = config();
-        let mut blocks = initialized_watcher_skip_ready(&asserter, config.clone()).await;
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config()).await;
 
         let next_block = block(1001);
         asserter.push_success(&next_block.clone());
@@ -892,7 +986,9 @@ mod tests {
         assert_eq!(update, new_block_update(&next_block));
         assert_eq!(
             start.elapsed(),
-            Duration::from_millis(blocks.block_time + config.block_propagation_delay)
+            Duration::from_millis(
+                blocks.timings.block_time + blocks.timings.block_propagation_delay
+            )
         );
         assert!(asserter.read_q().is_empty());
     }
@@ -901,8 +997,7 @@ mod tests {
     async fn next_retries_if_block_is_not_ready_when_expected() {
         let start = Instant::now();
         let asserter = Asserter::new();
-        let config = config();
-        let mut blocks = initialized_watcher_skip_ready(&asserter, config.clone()).await;
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config()).await;
 
         asserter.push_success::<Option<Block>>(&None);
         asserter.push_success::<Option<Block>>(&None);
@@ -915,10 +1010,10 @@ mod tests {
         assert_eq!(
             start.elapsed(),
             Duration::from_millis(
-                blocks.block_time
-                    + config.block_propagation_delay
-                    + config.block_retry_delays[0]
-                    + config.block_retry_delays[1]
+                blocks.timings.block_time
+                    + blocks.timings.block_propagation_delay
+                    + blocks.timings.block_retry_delays[0]
+                    + blocks.timings.block_retry_delays[1]
             ),
         );
 
@@ -934,9 +1029,9 @@ mod tests {
         assert_eq!(
             start.elapsed(),
             Duration::from_millis(
-                (2 * blocks.block_time)
-                    + config.block_propagation_delay
-                    + config.block_retry_delays[0]
+                (2 * blocks.timings.block_time)
+                    + blocks.timings.block_propagation_delay
+                    + blocks.timings.block_retry_delays[0]
             ),
         );
 
@@ -947,8 +1042,7 @@ mod tests {
     async fn next_waits_for_the_next_slot_after_retries_are_exhausted() {
         let start = Instant::now();
         let asserter = Asserter::new();
-        let config = config();
-        let mut blocks = initialized_watcher_skip_ready(&asserter, config.clone()).await;
+        let mut blocks = initialized_watcher_skip_ready(&asserter, config()).await;
 
         asserter.push_success::<Option<Block>>(&None);
         asserter.push_success::<Option<Block>>(&None);
@@ -961,12 +1055,12 @@ mod tests {
         assert_eq!(
             start.elapsed(),
             Duration::from_millis(
-                blocks.block_time
-                    + config.block_propagation_delay
-                    + config.block_retry_delays.iter().sum::<u64>()
+                blocks.timings.block_time
+                    + blocks.timings.block_propagation_delay
+                    + blocks.timings.block_retry_delays.iter().sum::<u64>()
                     // At this point, we wait for the next slot which comes
                     // `block_time` minus the retry delays we already waited.
-                    + (blocks.block_time - config.block_retry_delays.iter().sum::<u64>())
+                    + (blocks.timings.block_time - blocks.timings.block_retry_delays.iter().sum::<u64>())
             )
         );
         assert!(asserter.read_q().is_empty());

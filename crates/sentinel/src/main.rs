@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // before the reveal deadline to leave some wiggle room for delays, with a
     // one-second minimum for practical deployments.
     let engine_timeout = {
-        let block_time = config.driver.index.blocks.block_time.resolve(chain_id)?;
+        let block_time = config.driver.index.blocks.timings(chain_id)?.block_time;
         Duration::from_millis(
             u64::try_from(
                 u128::from(config.sentinel.voting_window.saturating_sub(1))

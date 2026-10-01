@@ -144,8 +144,8 @@ deploy_validator_contracts() {
 # signer, database, the `[validator]` table (consensus, blocks_per_epoch,
 # oracles, and one `[[validator.participants]]` entry per address in the
 # `participants_array_name` array), observability, and the `[index]` table's
-# `block_time`/`start_block`. Callers append any config specific to their own
-# test (e.g. `max_reorg_depth`) after calling this.
+# block timings and `start_block`. Callers append any config specific to their
+# own test (e.g. `max_reorg_depth`) after calling this.
 print_validator_config_base() {
     local rpc_url=$1 signer=$2 database=$3 consensus_addr=$4 oracle_addr=$5
     local blocks_per_epoch=$6 block_time_ms=$7 participants_array_name=$8
@@ -171,6 +171,9 @@ print_validator_config_base() {
     echo
     echo "[index]"
     echo "block_time = $block_time_ms"
+    # Anvil mines blocks locally, so there is no propagation to wait for.
+    echo "block_propagation_delay = 0"
+    echo "block_retry_delays = []"
     echo "start_block = 0"
 }
 

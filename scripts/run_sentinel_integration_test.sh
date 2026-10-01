@@ -217,6 +217,9 @@ engine = "http://$engine"
 
 [index]
 block_time = $((BLOCK_TIME_SECONDS * 1000))
+# Anvil mines blocks locally, so there is no propagation to wait for.
+block_propagation_delay = 0
+block_retry_delays = []
 EOF
 }
 
