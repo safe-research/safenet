@@ -46,6 +46,9 @@ pub enum Error {
     /// A transaction could not be signed.
     #[error(transparent)]
     Signing(#[from] SigningError),
+    /// The configured executor has no code.
+    #[error("executor {0} has no code")]
+    ExecutorWithoutCode(Address),
 }
 
 impl Error {
@@ -87,12 +90,23 @@ impl TransactionQueue {
     /// Creates a transaction queue that signs `chain_id` transactions with
     /// `signer`, reads chain state and broadcasts through `provider`, and
     /// persists its state in `pool`.
+    ///
+    /// Fails if an executor is configured and has no code at the latest
+    /// block.
     pub async fn new(
         provider: Provider,
         signer: Signer,
         pool: SqlitePool,
         config: Config,
     ) -> Result<Self, Error> {
+        if let SubmissionMode::Batched { executor, .. } = config.mode {
+            // Self-calls to an executor without code succeed without doing
+            // anything, which would silently drop every transaction.
+            let code = provider.get_code_at(executor).await?;
+            if code.is_empty() {
+                return Err(Error::ExecutorWithoutCode(executor));
+            }
+        }
         let storage = TransactionStorage::new(pool).await?;
         Ok(Self {
             provider,
@@ -401,7 +415,7 @@ mod tests {
     use alloy::{
         consensus::constants::KECCAK_EMPTY,
         eips::eip7702::constants::PER_EMPTY_ACCOUNT_COST,
-        primitives::{Address, B256, U256, address, b256, keccak256},
+        primitives::{Address, B256, Bytes, U256, address, b256, keccak256},
         rpc::{
             json_rpc::ErrorPayload,
             types::{EIP1186AccountProofResponse, FeeHistory},
@@ -417,13 +431,33 @@ mod tests {
 
     /// A transaction queue backed by a mocked RPC client and an in-memory pool.
     async fn queue(asserter: &Asserter) -> TransactionQueue {
+        queue_with_mode(asserter, Config::default().mode).await
+    }
+
+    /// A [`queue`] submitting transactions in `mode`, with any executor it
+    /// configures deployed.
+    async fn queue_with_mode(asserter: &Asserter, mode: SubmissionMode) -> TransactionQueue {
+        if let SubmissionMode::Batched { .. } = mode {
+            asserter.push_success(&Bytes::from_static(&[0xef])); // executor code
+        }
+        new_queue(asserter, mode).await.unwrap()
+    }
+
+    /// Creates a queue submitting transactions in `mode`, without mocking any
+    /// RPC responses.
+    async fn new_queue(
+        asserter: &Asserter,
+        mode: SubmissionMode,
+    ) -> Result<TransactionQueue, Error> {
         let provider = Provider::mocked_with_chain(asserter, CHAIN_ID);
         let private_key = SigningKey::from_slice(keccak256("test signer").as_slice()).unwrap();
         let signer = Signer::new(private_key);
         let pool = SqlitePool::connect("sqlite://:memory:").await.unwrap();
-        TransactionQueue::new(provider, signer, pool, Config::default())
-            .await
-            .unwrap()
+        let config = Config {
+            mode,
+            ..Default::default()
+        };
+        TransactionQueue::new(provider, signer, pool, config).await
     }
 
     /// A transaction carrying `data` as its calldata.
@@ -527,6 +561,23 @@ mod tests {
             address: Address::ZERO,
         };
         assert_eq!(undelegation.code_hash(), KECCAK_EMPTY);
+    }
+
+    #[tokio::test]
+    async fn fails_to_start_with_an_executor_without_code() {
+        let asserter = Asserter::new();
+        asserter.push_success(&Bytes::new()); // executor code
+        let result = new_queue(&asserter, batched()).await;
+        assert!(matches!(result, Err(Error::ExecutorWithoutCode(EXECUTOR))));
+    }
+
+    #[tokio::test]
+    async fn starts_with_an_executor_with_code() {
+        let asserter = Asserter::new();
+        asserter.push_success(&Bytes::from_static(&[0xef])); // executor code
+        let result = new_queue(&asserter, batched()).await;
+        assert!(result.is_ok());
+        assert!(asserter.read_q().is_empty());
     }
 
     #[tokio::test]
@@ -829,10 +880,13 @@ mod tests {
     #[tokio::test]
     async fn recovers_an_unused_authorization_nonce_with_a_full_budget() {
         let asserter = Asserter::new();
-        let mut queue = queue(&asserter).await;
-        queue.config.mode = SubmissionMode::Direct {
-            max_in_flight_transactions: 1,
-        };
+        let mut queue = queue_with_mode(
+            &asserter,
+            SubmissionMode::Direct {
+                max_in_flight_transactions: 1,
+            },
+        )
+        .await;
 
         // Nonce 0 carries an authorization that takes nonce 1, which fills the
         // in-flight budget, and another transaction is waiting behind it.
@@ -895,8 +949,7 @@ mod tests {
     #[tokio::test]
     async fn delegates_an_undelegated_account_to_the_executor() {
         let asserter = Asserter::new();
-        let mut queue = queue(&asserter).await;
-        queue.config.mode = batched();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
         queue.queue([(tx("0x01"), None)]).await.unwrap();
 
         // The first batch is a self-call that carries the authorization, which
@@ -936,8 +989,7 @@ mod tests {
     #[tokio::test]
     async fn redelegates_an_account_delegated_elsewhere_to_the_executor() {
         let asserter = Asserter::new();
-        let mut queue = queue(&asserter).await;
-        queue.config.mode = batched();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
         queue.queue([(tx("0x01"), None)]).await.unwrap();
 
         let elsewhere = delegated_to(Address::repeat_byte(0x77));
@@ -1020,8 +1072,7 @@ mod tests {
     #[tokio::test]
     async fn batches_transactions_queued_while_a_batch_is_in_flight() {
         let asserter = Asserter::new();
-        let mut queue = queue(&asserter).await;
-        queue.config.mode = batched();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
         queue.queue([(tx("0x01"), None)]).await.unwrap();
 
         asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
@@ -1056,8 +1107,7 @@ mod tests {
     #[tokio::test]
     async fn resubmits_a_stale_batch_with_the_same_calls() {
         let asserter = Asserter::new();
-        let mut queue = queue(&asserter).await;
-        queue.config.mode = batched();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
         queue
             .queue([(tx("0x01"), None), (tx("0x02"), None)])
             .await
@@ -1096,14 +1146,17 @@ mod tests {
     #[tokio::test]
     async fn splits_transactions_exceeding_the_batch_gas_into_successive_batches() {
         let asserter = Asserter::new();
-        let mut queue = queue(&asserter).await;
 
         // The limit fits two of the queued transactions per batch.
         let max_batch_gas = 300_000;
-        queue.config.mode = SubmissionMode::Batched {
-            executor: EXECUTOR,
-            max_batch_gas,
-        };
+        let mut queue = queue_with_mode(
+            &asserter,
+            SubmissionMode::Batched {
+                executor: EXECUTOR,
+                max_batch_gas,
+            },
+        )
+        .await;
         let transactions = (1..=5)
             .map(|i| Transaction {
                 gas: 100_000,
@@ -1147,8 +1200,7 @@ mod tests {
     #[tokio::test]
     async fn leaves_transactions_expired_behind_a_batch_out_of_the_next_one() {
         let asserter = Asserter::new();
-        let mut queue = queue(&asserter).await;
-        queue.config.mode = batched();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
         queue.queue([(tx("0x01"), None)]).await.unwrap();
 
         asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
