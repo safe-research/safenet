@@ -1,9 +1,6 @@
 //! Bundling queued transactions into the transaction sent at an allocated
 //! nonce.
 
-// The queue only batches transactions once an executor is wired in.
-#![cfg_attr(not(test), expect(dead_code))]
-
 use crate::tx::types::{AllocatedTransaction, Authorization, Transaction};
 use alloy::{
     eips::eip7702::constants::PER_EMPTY_ACCOUNT_COST,
@@ -150,6 +147,7 @@ impl Bundler {
             Inner::Direct(transaction) => transaction?,
             Inner::Batched {
                 account,
+                max_batch_gas,
                 calls,
                 gas,
                 ..
@@ -157,6 +155,13 @@ impl Bundler {
                 if calls.is_empty() {
                     return None;
                 }
+                tracing::debug!(
+                    nonce,
+                    calls = calls.len(),
+                    gas,
+                    max_batch_gas,
+                    "allocating transaction batch"
+                );
                 Transaction {
                     to: account,
                     value: U256::ZERO,
