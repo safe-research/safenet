@@ -39,11 +39,12 @@ impl Transition {
                     key_share,
                     group_id,
                     packet,
+                    oracle_approved,
                     signers,
                     ..
                 }),
             ) if group_id == event.gid => match packet {
-                Packet::Transaction { oracle, .. } => {
+                Packet::Transaction { oracle, .. } if !oracle_approved => {
                     let deadline = block.saturating_add(self.config.oracle_timeout.get());
                     tracing::info!(
                         message = %event.message,
@@ -69,7 +70,7 @@ impl Transition {
                         .signature_id_to_message
                         .insert(event.sid, event.message);
                 }
-                Packet::EpochRollover { .. } => {
+                Packet::Transaction { .. } | Packet::EpochRollover { .. } => {
                     let deadline = block.saturating_add(self.config.signing_timeout.get());
                     tracing::info!(
                         message = %event.message,
@@ -551,11 +552,15 @@ impl Transition {
                         expires_at: next_deadline,
                     }));
                 }
+                // Ceremonies are only ever restarted once they have reached
+                // the nonce commitment round, which for oracle-backed packets
+                // means that the oracle has already approved them.
                 Some(SigningState::WaitingForRequest {
                     key_share,
                     group_id,
                     responsible: last_signer,
                     packet,
+                    oracle_approved: true,
                     signers,
                     deadline: next_deadline,
                 })

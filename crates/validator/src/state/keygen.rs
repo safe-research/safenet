@@ -540,6 +540,7 @@ impl Transition {
                                         group_id,
                                         group_key,
                                     },
+                                    oracle_approved: false,
                                     signers: participating_epoch.group.participants().clone(),
                                     deadline: block
                                         .saturating_add(self.config.signing_timeout.get()),

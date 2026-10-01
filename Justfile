@@ -123,6 +123,11 @@ test-integration-validator:
 test-integration-validator-reorg-nonce:
     ./scripts/run_validator_reorg_nonce_test.sh
 
+# Regression test: a transaction signing ceremony whose signature share round
+# times out must restart and get attested (Anvil + three validator instances).
+test-integration-validator-signing-restart:
+    ./scripts/run_validator_signing_restart_test.sh
+
 # Regression test: a reorg deeper than the configured `max_reorg_depth` must
 # make the validator fail loudly instead of silently continuing (Anvil + a
 # single validator instance).
