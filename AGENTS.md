@@ -58,6 +58,7 @@ Integration tests start a local Anvil chain, deploy contracts, and run the valid
 ```sh
 just test-integration-sentinel            # ./scripts/run_sentinel_integration_test.sh (Rust sentinel)
 just test-integration-validator           # ./scripts/run_validator_integration_test.sh (two Rust validator instances, against an AlwaysApproveOracle-backed happy path, running in CI)
+just test-integration-validator-7702      # ./scripts/run_validator_7702_integration_test.sh (two Rust validator instances batching their transactions through a Safenet7702Executor, running in CI)
 ```
 
 These scripts require:

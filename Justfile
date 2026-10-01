@@ -129,6 +129,11 @@ test-integration-validator-reorg-nonce:
 test-integration-validator-deep-reorg:
     ./scripts/run_validator_deep_reorg_test.sh
 
+# Rust validator EIP-7702 batching integration test (Anvil + two validator
+# instances sending their transactions through a `Safenet7702Executor`).
+test-integration-validator-7702:
+    ./scripts/run_validator_7702_integration_test.sh
+
 # Run the explorer's Vite dev server.
 explorer-dev:
     npm --prefix explorer run dev
