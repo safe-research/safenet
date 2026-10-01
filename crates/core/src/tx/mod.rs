@@ -18,7 +18,7 @@ use self::{
     fees::cap_priority_fee,
     signer::SigningError,
     storage::{Status, Submission, TransactionStorage},
-    types::AllocatedTransaction,
+    types::{AccountStatus, AllocatedTransaction},
 };
 pub use self::{
     config::{Config, SubmissionMode},
@@ -78,7 +78,7 @@ pub struct TransactionQueue {
     storage: TransactionStorage,
     config: Config,
     block_status: Option<BlockStatus>,
-    nonce_cache: Option<u64>,
+    account_cache: Option<AccountStatus>,
     fee_cache: Option<Eip1559Estimation>,
 }
 
@@ -99,7 +99,7 @@ impl TransactionQueue {
             storage,
             config,
             block_status: None,
-            nonce_cache: None,
+            account_cache: None,
             fee_cache: None,
         })
     }
@@ -133,7 +133,7 @@ impl TransactionQueue {
 
         // Invalidate our caches if necessary.
         if previous.is_none_or(|previous| previous.latest != status.latest) {
-            self.nonce_cache = None;
+            self.account_cache = None;
             self.fee_cache = None;
         }
 
@@ -157,14 +157,15 @@ impl TransactionQueue {
             self.storage.unmark_executed(block).await?;
         }
 
-        // The signer nonce is an RPC round-trip needed both to mark executed
-        // transactions and to assign nonces to queued ones. Skip it and the
-        // remaining work when there is no new inclusion possibilities (either
-        // there is no new latest block, or there are no outstanding txs).
+        // The signer account is an RPC round-trip needed both to mark
+        // executed transactions and to assign nonces to queued ones. Skip it
+        // and the remaining work when there is no new inclusion possibilities
+        // (either there is no new latest block, or there are no outstanding
+        // txs).
         if previous.is_none_or(|previous| previous.latest < status.latest)
             && self.storage.count_outstanding(status.latest).await? > 0
         {
-            let nonce = self.nonce().await?;
+            let nonce = self.account().await?.nonce;
             self.storage
                 .mark_executed(Status {
                     block: status.latest,
@@ -189,7 +190,7 @@ impl TransactionQueue {
     async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
         let in_flight = self.storage.count_in_flight().await?;
         for _ in in_flight..self.config.mode.max_in_flight_transactions() {
-            let nonce = self.nonce().await?;
+            let nonce = self.account().await?.nonce;
             let Some(transaction) = self
                 .storage
                 .next_transaction(Status { nonce, block }, Bundler::direct(None))
@@ -280,23 +281,25 @@ impl TransactionQueue {
         Ok(())
     }
 
-    /// Returns the signer's onchain nonce at the latest block, fetched from
-    /// the chain on a cache miss and cached until the block status changes.
-    async fn nonce(&mut self) -> Result<u64, Error> {
-        match self.nonce_cache {
-            Some(nonce) => Ok(nonce),
+    /// Returns the signer account's onchain status at the latest block,
+    /// fetched from the chain on a cache miss and cached until the block status
+    /// changes.
+    async fn account(&mut self) -> Result<AccountStatus, Error> {
+        match self.account_cache {
+            Some(account) => Ok(account),
             None => {
                 let block_id = self
                     .block_status
                     .map(|block_status| BlockId::from(block_status.latest))
                     .unwrap_or_else(BlockId::latest);
-                let nonce = self
+                let proof = self
                     .provider
-                    .get_transaction_count(self.signer.address())
+                    .get_proof(self.signer.address(), vec![])
                     .block_id(block_id)
                     .await?;
-                self.nonce_cache = Some(nonce);
-                Ok(nonce)
+                let account = AccountStatus::new(proof.nonce, proof.code_hash);
+                self.account_cache = Some(account);
+                Ok(account)
             }
         }
     }
@@ -356,8 +359,12 @@ fn is_transaction_underpriced(err: &TransportError) -> bool {
 mod tests {
     use super::*;
     use alloy::{
-        primitives::{Address, B256, U64, address, keccak256},
-        rpc::{json_rpc::ErrorPayload, types::FeeHistory},
+        consensus::constants::KECCAK_EMPTY,
+        primitives::{Address, B256, address, keccak256},
+        rpc::{
+            json_rpc::ErrorPayload,
+            types::{EIP1186AccountProofResponse, FeeHistory},
+        },
         transports::mock::Asserter,
     };
     use k256::ecdsa::SigningKey;
@@ -387,6 +394,16 @@ mod tests {
 
     fn block_status(latest: u64) -> BlockStatus {
         BlockStatus { latest, safe: 0 }
+    }
+
+    /// An account-proof response for a signer account with `nonce` and
+    /// `code_hash`.
+    fn account_proof(nonce: u64, code_hash: B256) -> EIP1186AccountProofResponse {
+        EIP1186AccountProofResponse {
+            nonce,
+            code_hash,
+            ..Default::default()
+        }
     }
 
     /// A fee-history response yielding an estimate of a 210 max fee and 10
@@ -420,6 +437,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn treats_a_zero_code_hash_as_an_account_without_code() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+
+        // Some nodes report a zero code hash for an account that does not
+        // exist yet, such as a new signer that has never sent a transaction.
+        asserter.push_success(&account_proof(0, B256::ZERO)); // signer account
+        let account = queue.account().await.unwrap();
+        assert_eq!(account.code_hash, KECCAK_EMPTY);
+        assert!(!account.is_delegated());
+    }
+
+    #[tokio::test]
     async fn processes_each_block_status_once() {
         let asserter = Asserter::new();
         let mut queue = queue(&asserter).await;
@@ -427,7 +457,7 @@ mod tests {
 
         // The initial status submits the queued transaction against the block
         // watcher's already-known head.
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(10)).await.unwrap();
@@ -447,11 +477,11 @@ mod tests {
 
         // Submit at block 10, then observe the nonce advance at block 11 and
         // mark the transaction executed there.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(10)).await.unwrap();
-        asserter.push_success(&U64::from(1));
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY));
         queue.update_block_status(block_status(11)).await.unwrap();
         assert_eq!(queue.storage.count_in_flight().await.unwrap(), 0);
 
@@ -459,7 +489,7 @@ mod tests {
         // status invalidates execution markers above the safe block and then
         // reconciles them against the latest canonical nonce.
         queue.block_status = None;
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         queue
             .update_block_status(BlockStatus {
                 latest: 11,
@@ -477,14 +507,14 @@ mod tests {
         let mut queue = queue(&asserter).await;
         queue.queue([(tx("0x01"), Some(1000))]).await.unwrap();
 
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(10)).await.unwrap();
 
         // At block 11 the signer nonce has advanced to 1, so nonce 0 executed.
         // No transaction is broadcast, so only the nonce is fetched.
-        asserter.push_success(&U64::from(1));
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY));
         queue.update_block_status(block_status(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
@@ -496,11 +526,11 @@ mod tests {
         // We update up to block 12, where the nonce stays the same. This means
         // that it is not submitted and gets resubmitted (since it did not get
         // executed on the new canonical chain since the reorg).
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         queue.update_block_status(block_status(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(12)).await.unwrap();
@@ -509,7 +539,7 @@ mod tests {
         // Now the transaction gets picked up, and since there are no remaining
         // outstanding transactions we avoid any additional RPC requests on
         // future blocks.
-        asserter.push_success(&U64::from(1)); // signer transaction count
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY)); // signer account
         queue.update_block_status(block_status(13)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
@@ -528,7 +558,7 @@ mod tests {
         let mut queue = queue(&asserter).await;
 
         // Fill up the queue with transactions that will not execute.
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         for i in 0..queue.config.mode.max_in_flight_transactions() {
             queue
@@ -549,7 +579,7 @@ mod tests {
 
         // At block 11, the nonce advances by 1, opening up one more transaction
         // to be submitted.
-        asserter.push_success(&U64::from(1)); // signer transaction count
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(11)).await.unwrap();
@@ -560,7 +590,7 @@ mod tests {
         // do get resubmissions of the remaining original inflight transactions
         // because of the resubmit deadline, despite being past the expiry. This
         // is because once a transaction is in the mempool, it has to execute.
-        asserter.push_success(&U64::from(2)); // signer transaction count
+        asserter.push_success(&account_proof(2, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         for _ in 2..queue.config.mode.max_in_flight_transactions() {
             asserter.push_success(&B256::ZERO); // transaction hash from submission
@@ -570,9 +600,8 @@ mod tests {
 
         // At block 13, all the remaining transactions get mined, the second
         // transaction was already expired and does not resubmit.
-        asserter.push_success(&U64::from(
-            queue.config.mode.max_in_flight_transactions() + 1,
-        )); // signer transaction count
+        let nonce = queue.config.mode.max_in_flight_transactions() as u64 + 1;
+        asserter.push_success(&account_proof(nonce, KECCAK_EMPTY)); // signer account
         queue.update_block_status(block_status(13)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
@@ -605,7 +634,7 @@ mod tests {
 
         // The initial submission fails at the transport layer. It reserves a
         // nonce, but does not establish a fee floor.
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_failure_msg("no connection"); // submission fails
         queue.update_block_status(block_status(10)).await.unwrap();
@@ -616,7 +645,7 @@ mod tests {
 
         // It is retried on the next block with the fresh estimate, without a
         // replacement bump caused by the failed attempt.
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(11)).await.unwrap();
@@ -633,18 +662,18 @@ mod tests {
         queue.queue([(tx("0x01"), None)]).await.unwrap();
 
         // Establish a successfully submitted fee floor of 210 and 10.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(10)).await.unwrap();
 
         // The transaction is not stale at block 11.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         queue.update_block_status(block_status(11)).await.unwrap();
 
         // Its replacement at block 12 uses bumped fees, but fails for an
         // unrelated RPC reason.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_failure_msg("node unavailable");
         queue.update_block_status(block_status(12)).await.unwrap();
@@ -657,7 +686,7 @@ mod tests {
 
         // The next successful retry therefore records the same single bump,
         // rather than another bump above the failed attempt.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(13)).await.unwrap();
@@ -674,17 +703,17 @@ mod tests {
         queue.queue([(tx("0x01"), None)]).await.unwrap();
 
         // Establish a successfully submitted fee floor of 210 and 10.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(10)).await.unwrap();
 
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         queue.update_block_status(block_status(11)).await.unwrap();
 
         // The replacement is rejected specifically because its bumped fees
         // of 231 and 11 are still underpriced.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_failure_msg("replacement transaction underpriced");
         queue.update_block_status(block_status(12)).await.unwrap();
@@ -694,7 +723,7 @@ mod tests {
         assert_eq!(transaction.max_priority_fee_per_gas, Some(11));
 
         // The next retry bumps above the rejected fee floor.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(13)).await.unwrap();
@@ -731,7 +760,7 @@ mod tests {
         // Nonce 0 is consumed without its authorization, so the authorization's
         // nonce is cancelled and submitted, even though the cancellation takes
         // up the whole in-flight budget.
-        asserter.push_success(&U64::from(1)); // signer transaction count
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(10)).await.unwrap();
@@ -743,7 +772,7 @@ mod tests {
         assert_eq!(cancellation.max_fee_per_gas, Some(210));
 
         // Once it lands, the waiting transaction is submitted at the next nonce.
-        asserter.push_success(&U64::from(2)); // signer transaction count
+        asserter.push_success(&account_proof(2, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(11)).await.unwrap();

@@ -18,6 +18,10 @@ For more information on Safenet, consult the [technical overview](./overview.md)
 
 To run a sentinel, you need a reliable Ethereum RPC node, able to keep up with `eth_getLogs`/`eth_getBlockByNumber` polling plus the `commit`/`reveal`/`finalize`/`claim` transactions described under [Running](#running) below.
 
+##### `eth_getProof` Support
+
+The sentinel reads its account's nonce and code with `eth_getProof` at the latest block it has observed, which can trail the RPC node's tip by a few blocks. Your RPC node must therefore serve `eth_getProof` for recent blocks. Most public Gnosis Chain RPCs do, but some disable the method entirely. Reth nodes need a non-zero `--rpc.eth-proof-window`, as the default only serves proofs for the tip.
+
 ##### `eth_getLogs` Reliability
 
 Unfortunately, some RPC providers are unreliable with `eth_getLogs` requests: if the logs are queried too soon after a block is observed then an empty array will be returned even if there are logs in that block. This seems to affect RPC providers that use older versions of Nethermind before 1.36.
