@@ -19,6 +19,11 @@ contract MockTarget {
         observedGas = gasleft();
     }
 
+    // Records the value received, to observe the value forwarded with a call.
+    function deposit() external payable {
+        recorded.push(msg.value);
+    }
+
     // Burns roughly `amount` gas before recording, to drive the batch's remaining gas down.
     function burnGas(uint256 amount) external {
         uint256 start = gasleft();
@@ -70,7 +75,15 @@ contract Safenet7702ExecutorTest is Test {
         pure
         returns (Safenet7702Executor.Call memory)
     {
-        return Safenet7702Executor.Call({to: to, gasLimit: gasLimit, data: data});
+        return _call(to, 0, gasLimit, data);
+    }
+
+    function _call(address to, uint256 value, uint256 gasLimit, bytes memory data)
+        internal
+        pure
+        returns (Safenet7702Executor.Call memory)
+    {
+        return Safenet7702Executor.Call({to: to, value: value, gasLimit: gasLimit, data: data});
     }
 
     function test_Execute_ForwardsToPerCallTargets() public {
@@ -107,7 +120,7 @@ contract Safenet7702ExecutorTest is Test {
 
         assertEq(
             gasUsed,
-            147_481,
+            147_541,
             "execute gas changed for a fixed 4-call batch; update once the change is confirmed intentional"
         );
     }
@@ -191,6 +204,48 @@ contract Safenet7702ExecutorTest is Test {
         assertEq(targetA.recordedLength(), 2);
         assertEq(targetA.recorded(0), 11);
         assertEq(targetA.recorded(1), 33);
+    }
+
+    function test_Execute_ForwardsValueFromAccountBalance() public {
+        vm.deal(eoa, 1 ether);
+
+        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](2);
+        calls[0] = _call(address(targetA), 0.25 ether, AMPLE_GAS, abi.encodeCall(MockTarget.deposit, ()));
+        calls[1] = _call(address(targetB), AMPLE_GAS, abi.encodeCall(MockTarget.record, (22)));
+
+        vm.prank(eoa);
+        account.execute(calls);
+
+        // The call's value reached its target and was paid from the account's own balance, since the batch
+        // transaction itself carries none.
+        assertEq(targetA.recordedLength(), 1);
+        assertEq(targetA.recorded(0), 0.25 ether);
+        assertEq(address(targetA).balance, 0.25 ether);
+        assertEq(eoa.balance, 0.75 ether);
+        assertEq(targetB.recordedLength(), 1);
+        assertEq(targetB.recorded(0), 22);
+    }
+
+    // A call whose value exceeds the account's balance fails like any other call: it is reported through
+    // {CallFailed} and the rest of the batch still executes.
+    function test_Execute_UnaffordableValue_ContinuesPastFailure() public {
+        vm.deal(eoa, 1 ether);
+
+        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](2);
+        calls[0] = _call(address(targetA), 2 ether, AMPLE_GAS, abi.encodeCall(MockTarget.deposit, ()));
+        calls[1] = _call(address(targetB), AMPLE_GAS, abi.encodeCall(MockTarget.record, (22)));
+
+        vm.expectEmit(eoa);
+        emit Safenet7702Executor.CallFailed(0, "");
+
+        vm.prank(eoa);
+        account.execute(calls);
+
+        assertEq(targetA.recordedLength(), 0);
+        assertEq(address(targetA).balance, 0);
+        assertEq(eoa.balance, 1 ether);
+        assertEq(targetB.recordedLength(), 1);
+        assertEq(targetB.recorded(0), 22);
     }
 
     function test_Receive_AcceptsNativeToken() public {

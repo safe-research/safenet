@@ -23,7 +23,7 @@ pragma solidity ^0.8.30;
  *
  *      The account is intentionally minimal and is NOT ERC-4337 compatible: it has no entry point, no
  *      signature validation, and no functionality beyond batching calls and receiving the native token used
- *      to fund gas.
+ *      to fund gas and the value of batched calls.
  */
 contract Safenet7702Executor {
     // ============================================================
@@ -33,11 +33,13 @@ contract Safenet7702Executor {
     /**
      * @notice A single call to execute as part of a batch.
      * @custom:param to The target address of the call.
+     * @custom:param value The amount of native token to send with the call, paid from the account's own balance.
      * @custom:param gasLimit The maximum amount of gas to forward to the call.
      * @custom:param data The calldata of the call.
      */
     struct Call {
         address to;
+        uint256 value;
         uint256 gasLimit;
         bytes data;
     }
@@ -89,11 +91,15 @@ contract Safenet7702Executor {
 
     /**
      * @notice Executes a batch of calls on a best-effort basis.
-     * @dev Each entry in `calls` is forwarded to its target `to` with at most `gasLimit` gas. The batch is NOT
-     *      atomic: if a call reverts, its index and revert data are recorded with a {CallFailed} event and
-     *      execution continues with the remaining calls, so one failing call does not prevent the others from
-     *      running. Bounding each call's gas also prevents a single call from consuming the gas needed by the
-     *      rest of the batch.
+     * @dev Each entry in `calls` is forwarded to its target `to` with its `value` and at most `gasLimit` gas.
+     *      The batch is NOT atomic: if a call reverts, its index and revert data are recorded with a
+     *      {CallFailed} event and execution continues with the remaining calls, so one failing call does not
+     *      prevent the others from running. Bounding each call's gas also prevents a single call from consuming
+     *      the gas needed by the rest of the batch.
+     *
+     *      This function is not payable, so the batch transaction itself carries no value: each call's `value`
+     *      is paid from the account's own balance. A call whose `value` exceeds the remaining balance fails
+     *      like any other call, emitting {CallFailed} with empty revert data, and the batch carries on.
      *
      *      Each call is preceded by a best-effort check that enough gas remains to forward it its whole
      *      `gasLimit`, so an underfunded batch reverts (see {InsufficientGas}) rather than truncating its
@@ -114,7 +120,7 @@ contract Safenet7702Executor {
             // report success having silently dropped it.
             require(gasleft() * 63 / 64 >= call.gasLimit, InsufficientGas(i));
 
-            (bool success, bytes memory result) = call.to.call{gas: call.gasLimit}(call.data);
+            (bool success, bytes memory result) = call.to.call{gas: call.gasLimit, value: call.value}(call.data);
             if (!success) {
                 emit CallFailed(i, result);
             }
@@ -126,7 +132,8 @@ contract Safenet7702Executor {
     // ============================================================
 
     /**
-     * @notice Accepts the native token so that the delegating EOA can be funded with gas for batched calls.
+     * @notice Accepts the native token so that the delegating EOA can be funded with gas and value for batched
+     *         calls.
      */
     receive() external payable {}
 }
