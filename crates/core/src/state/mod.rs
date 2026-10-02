@@ -222,17 +222,26 @@ where
                     return Err(Error::BadUpdate);
                 }
 
-                let (mut state, mut commands) = {
-                    let mut state = state;
-                    let mut commands = Vec::new();
-                    for log in logs {
-                        let (new_state, new_commands) =
-                            self.transition.apply_transition(state, Message::Event(log));
-                        state = new_state;
-                        commands.extend(new_commands);
+                let mut state = state;
+                let mut commands = vec![];
+
+                let warping = matches!(status, Status::WarpEvents { .. });
+                let mut logs = logs.into_iter().peekable();
+                for block in blocks {
+                    // Live blocks have their transition applied when observed,
+                    // but warped blocks never are. Apply each warped block's
+                    // transition before its logs, including blocks without any
+                    // logs, so that block-driven transitions (such as timeouts)
+                    // happen at exactly the same blocks.
+                    if warping {
+                        (state, commands) =
+                            self.accumulate_transition(state, commands, Message::NewBlock(block));
                     }
-                    (state, commands)
-                };
+                    while let Some(log) = logs.next_if(|log| log.block == block) {
+                        (state, commands) =
+                            self.accumulate_transition(state, commands, Message::Event(log));
+                    }
+                }
 
                 let mut status = match status {
                     Status::WarpEvents { range } if blocks.last < range.last => {
@@ -253,11 +262,8 @@ where
                 // happens after the snapshot is committed, so it gets replayed
                 // when the block is observed after a restart.
                 if let Status::BlockPending { pending } = status {
-                    let (new_state, new_commands) = self
-                        .transition
-                        .apply_transition(state, Message::NewBlock(pending));
-                    state = new_state;
-                    commands.extend(new_commands);
+                    (state, commands) =
+                        self.accumulate_transition(state, commands, Message::NewBlock(pending));
                     status = Status::BlockApplied { pending };
                 }
 
@@ -287,6 +293,18 @@ where
     pub async fn prune(&self, safe: u64) -> Result<(), Error> {
         self.snapshots.prune(safe).await?;
         Ok(())
+    }
+
+    /// Accumulates a state and commands for a transition.
+    fn accumulate_transition(
+        &self,
+        state: S,
+        mut commands: Commands<S, T>,
+        message: Message<T::Event, T::Resume>,
+    ) -> (S, Commands<S, T>) {
+        let (state, new_commands) = self.transition.apply_transition(state, message);
+        commands.extend(new_commands);
+        (state, commands)
     }
 }
 
@@ -639,10 +657,17 @@ mod tests {
         assert_eq!(machine.handle_update(warp(1, 6)).await.unwrap(), vec![]);
 
         // Apply the first chunk of warped events and prune on the Safe block
-        // (which is the block at the end of the warp).
+        // (which is the block at the end of the warp). Each warped block's
+        // transition is applied before its events, even without any events.
         assert_eq!(
             machine.handle_update(logs(1..=3, [10])).await.unwrap(),
-            vec![Command::Action(Action::Event(10)), Command::Effect(10)]
+            vec![
+                Command::Action(Action::Block(1)),
+                Command::Action(Action::Event(10)),
+                Command::Effect(10),
+                Command::Action(Action::Block(2)),
+                Command::Action(Action::Block(3)),
+            ]
         );
         machine.prune(6).await.unwrap();
         assert_eq!(
@@ -650,7 +675,7 @@ mod tests {
             Some((
                 3,
                 TestState {
-                    blocks: vec![],
+                    blocks: vec![1, 2, 3],
                     events: vec![10],
                     resumes: vec![],
                 },
@@ -674,8 +699,11 @@ mod tests {
         assert_eq!(
             machine.handle_update(logs(4..=6, [40])).await.unwrap(),
             vec![
+                Command::Action(Action::Block(4)),
                 Command::Action(Action::Event(40)),
                 Command::Effect(40),
+                Command::Action(Action::Block(5)),
+                Command::Action(Action::Block(6)),
                 Command::Action(Action::Block(7)),
             ]
         );
@@ -685,7 +713,7 @@ mod tests {
             Some((
                 6,
                 TestState {
-                    blocks: vec![],
+                    blocks: (1..=6).collect(),
                     events: vec![10, 40],
                     resumes: vec![],
                 },
