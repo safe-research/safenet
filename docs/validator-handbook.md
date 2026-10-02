@@ -68,6 +68,8 @@ Safenet Testnet’s onchain components are planned for deployment on Gnosis Chai
 
 > [!TIP] On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/validator/validator.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
 
+> [!TIP] To reduce gas costs and improve throughput, the validator can batch its transactions through an EIP-7702 executor implementing `ISafenet7702Executor`, such as [`Safenet7702Executor`](../contracts/src/Safenet7702Executor.sol). Set `executor` (and optionally `max_batch_gas`) in the `[transactions]` table: every transaction is then sent as a self-call to the executor, batching all actions queued while the previous transaction was pending, so many actions can get onchain in a single transaction. The validator's first transaction also delegates its account to the executor. EIP-7702 mempools accept only one pending transaction from a delegated account, so the validator keeps a single transaction in flight while its account is delegated. Removing `executor` does not undelegate the account immediately: the validator's next transaction removes the delegation, and until it executes, only one transaction is in flight.
+
 #### Consensus Secrets
 
 While participating in consensus, validators generate short-term secrets required to attest Safe transactions and participate correctly. Specifically, it generates:

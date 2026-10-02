@@ -18,7 +18,7 @@ use self::{
     fees::cap_priority_fee,
     signer::SigningError,
     storage::{Status, Submission, TransactionStorage},
-    types::{AccountStatus, AllocatedTransaction},
+    types::{AccountStatus, AllocatedTransaction, Authorization},
 };
 pub use self::{
     config::{Config, SubmissionMode},
@@ -28,6 +28,7 @@ pub use self::{
 use crate::{index::BlockStatus, provider::Provider};
 use alloy::{
     eips::{BlockId, eip1559::Eip1559Estimation},
+    primitives::Address,
     providers::Provider as _,
     transports::TransportError,
 };
@@ -186,19 +187,58 @@ impl TransactionQueue {
     }
 
     /// Submits queued transactions while fewer than
-    /// `config.mode.max_in_flight_transactions()` are in flight.
+    /// `config.mode.max_in_flight_transactions()` are in flight, or none is
+    /// while the signer account is delegated. A transaction carries an
+    /// authorization whenever the account is not delegated as configured: to
+    /// the executor when one is configured, and to no delegate otherwise.
     async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
-        let in_flight = self.storage.count_in_flight().await?;
-        for _ in in_flight..self.config.mode.max_in_flight_transactions() {
-            let nonce = self.account().await?.nonce;
-            let Some(transaction) = self
-                .storage
-                .next_transaction(Status { nonce, block }, Bundler::direct(None))
-                .await?
-            else {
+        let mut in_flight = self.storage.count_in_flight().await?;
+        while in_flight < self.config.mode.max_in_flight_transactions() {
+            let account = self.account().await?;
+
+            // Mempools accept one pending transaction from a delegated account,
+            // even when no executor is configured and the queue is removing a
+            // leftover delegation. The account status is cached per block, so
+            // this holds for the whole pass.
+            if account.is_delegated() && in_flight > 0 {
+                break;
+            }
+
+            let authorize = |address| {
+                let wanted = Authorization { address };
+                (account.code_hash != wanted.code_hash()).then_some(wanted)
+            };
+            let bundler = match self.config.mode {
+                SubmissionMode::Direct { .. } => Bundler::direct(authorize(Address::ZERO)),
+                SubmissionMode::Batched {
+                    executor,
+                    max_batch_gas,
+                } => Bundler::batched(self.signer.address(), max_batch_gas, authorize(executor)),
+            };
+            let status = Status {
+                nonce: account.nonce,
+                block,
+            };
+            let Some(transaction) = self.storage.next_transaction(status, bundler).await? else {
                 break;
             };
+
+            if let Some(authorization) = transaction.authorization {
+                if authorization.address.is_zero() {
+                    tracing::info!(
+                        nonce = transaction.nonce,
+                        "removing the signer account's EIP-7702 delegation"
+                    );
+                } else {
+                    tracing::info!(
+                        nonce = transaction.nonce,
+                        executor = %authorization.address,
+                        "delegating the signer account to the executor"
+                    );
+                }
+            }
             self.submit_transaction(transaction, block).await?;
+            in_flight += 1;
         }
 
         Ok(())
@@ -360,6 +400,7 @@ mod tests {
     use super::*;
     use alloy::{
         consensus::constants::KECCAK_EMPTY,
+        eips::eip7702::constants::PER_EMPTY_ACCOUNT_COST,
         primitives::{Address, B256, address, b256, keccak256},
         rpc::{
             json_rpc::ErrorPayload,
@@ -371,6 +412,7 @@ mod tests {
 
     const CHAIN_ID: u64 = 1;
     const ENTRY_POINT: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
+    const EXECUTOR: Address = address!("0x7702770277027702770277027702770277027702");
 
     /// A transaction queue backed by a mocked RPC client and an in-memory pool.
     async fn queue(asserter: &Asserter) -> TransactionQueue {
@@ -404,6 +446,19 @@ mod tests {
             code_hash,
             ..Default::default()
         }
+    }
+
+    /// Batched submission mode through [`EXECUTOR`].
+    fn batched() -> SubmissionMode {
+        SubmissionMode::Batched {
+            executor: EXECUTOR,
+            max_batch_gas: 2_000_000,
+        }
+    }
+
+    /// The code hash of an account delegated to `delegate`.
+    fn delegated_to(delegate: Address) -> B256 {
+        Authorization { address: delegate }.code_hash()
     }
 
     /// A fee-history response yielding an estimate of a 210 max fee and 10
@@ -440,7 +495,7 @@ mod tests {
     fn computes_the_code_hash_of_an_authorized_account() {
         // The code hash Anvil reports for an account delegated to this
         // address.
-        let delegation = types::Authorization {
+        let delegation = Authorization {
             address: address!("0x4242424242424242424242424242424242424242"),
         };
         assert_eq!(
@@ -449,7 +504,7 @@ mod tests {
         );
 
         // Authorizing the zero address removes the delegation.
-        let undelegation = types::Authorization {
+        let undelegation = Authorization {
             address: Address::ZERO,
         };
         assert_eq!(undelegation.code_hash(), KECCAK_EMPTY);
@@ -767,7 +822,7 @@ mod tests {
             .storage
             .next_transaction(
                 Status { nonce: 0, block: 0 },
-                Bundler::direct(Some(types::Authorization {
+                Bundler::direct(Some(Authorization {
                     address: Address::repeat_byte(0x77),
                 })),
             )
@@ -799,5 +854,147 @@ mod tests {
 
         let next = in_flight(&queue).await;
         assert_eq!((next.nonce, next.transaction), (2, tx("0x02")));
+    }
+
+    #[tokio::test]
+    async fn sends_transactions_as_is_without_an_executor() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let transaction = in_flight(&queue).await;
+        assert_eq!(transaction.transaction, tx("0x01"));
+        assert_eq!(transaction.authorization, None);
+    }
+
+    #[tokio::test]
+    async fn delegates_an_undelegated_account_to_the_executor() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.config.mode = batched();
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        // The first batch is a self-call that carries the authorization, which
+        // takes nonce 1.
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let delegation = in_flight(&queue).await;
+        assert_eq!(delegation.nonce, 0);
+        assert_eq!(delegation.transaction.to, queue.signer.address());
+        assert_eq!(
+            delegation.authorization,
+            Some(Authorization { address: EXECUTOR })
+        );
+
+        // Nothing else is submitted while the batch is in flight.
+        queue.queue([(tx("0x02"), None)]).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // Once it executes with its authorization, the delegated account's next
+        // batch skips the authorization's nonce and carries no authorization.
+        asserter.push_success(&account_proof(2, delegated_to(EXECUTOR))); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let next = in_flight(&queue).await;
+        assert_eq!(next.nonce, 2);
+        assert_eq!(next.transaction.to, queue.signer.address());
+        assert_eq!(next.authorization, None);
+    }
+
+    #[tokio::test]
+    async fn redelegates_an_account_delegated_elsewhere_to_the_executor() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.config.mode = batched();
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        let elsewhere = delegated_to(Address::repeat_byte(0x77));
+        asserter.push_success(&account_proof(0, elsewhere)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let delegation = in_flight(&queue).await;
+        assert_eq!(delegation.transaction.to, queue.signer.address());
+        assert_eq!(
+            delegation.authorization,
+            Some(Authorization { address: EXECUTOR })
+        );
+    }
+
+    #[tokio::test]
+    async fn undelegates_a_delegated_account_without_an_executor() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue
+            .queue([(tx("0x01"), None), (tx("0x02"), None), (tx("0x03"), None)])
+            .await
+            .unwrap();
+
+        // The account is still delegated, for example from an earlier executor
+        // configuration, so only its next transaction is submitted. It is sent
+        // as is, carrying an authorization that removes the delegation.
+        asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let undelegation = in_flight(&queue).await;
+        assert_eq!(undelegation.nonce, 0);
+        assert_eq!(
+            undelegation.transaction,
+            Transaction {
+                gas: tx("0x01").gas + PER_EMPTY_ACCOUNT_COST,
+                ..tx("0x01")
+            }
+        );
+        assert_eq!(
+            undelegation.authorization,
+            Some(Authorization {
+                address: Address::ZERO
+            })
+        );
+
+        // While the account is delegated, nothing else is submitted.
+        asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // Once the delegation is removed, the configured in-flight limit applies
+        // again, and the remaining transactions are submitted together.
+        asserter.push_success(&account_proof(2, KECCAK_EMPTY)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(12)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let in_flight = queue.storage.stale_submissions(Some(1_000)).await.unwrap();
+        let in_flight = in_flight
+            .into_iter()
+            .map(|transaction| {
+                (
+                    transaction.nonce,
+                    transaction.transaction,
+                    transaction.authorization,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(in_flight, [(2, tx("0x02"), None), (3, tx("0x03"), None)]);
     }
 }
