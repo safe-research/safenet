@@ -69,7 +69,12 @@ contract FROSTCoordinatorTest is Test {
         FROSTCoordinator.KeyGenCommitment[] memory commitments = new FROSTCoordinator.KeyGenCommitment[](COUNT);
         for (uint256 i = 0; i < COUNT; i++) {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[i];
-            (commitment.r, commitment.mu) = FROSTMath.proofOfKnowledge(participants.addr(i), a[i][0]);
+            commitment.pok = FROSTMath.proofOfKnowledge(participants.addr(i), a[i][0]);
+
+            // EXTENSION: We additionally prove possession of the encryption
+            // key, so that participants cannot reuse another participant's key
+            // in order to decrypt the secret shares intended for them.
+            commitment.pop = FROSTMath.proofOfKnowledge(participants.addr(i), q[i]);
         }
 
         // Round 1.3
@@ -111,11 +116,9 @@ contract FROSTCoordinatorTest is Test {
         // included in events emitted during the `KeyGen` process.
         for (uint256 i = 0; i < COUNT; i++) {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[i];
-            uint256 c = FROST.keyGenChallenge(participants.addr(i), commitment.c[0], commitment.r);
-            Secp256k1.mulmuladd(commitment.mu, c, commitment.c[0], commitment.r);
+            FROST.verifyProofOfKnowledge(participants.addr(i), commitment.c[0], commitment.pok);
 
-            commitment.mu = 0;
-            commitment.r = Secp256k1.Point({x: 0, y: 0});
+            delete commitment.pok;
         }
 
         // Round 2.1*
@@ -140,9 +143,14 @@ contract FROSTCoordinatorTest is Test {
                 // EXTENSION: We apply ECDH to encrypt the `f_i(l)` evaluation
                 // for the target participant. This allows us to use the same
                 // onchain coordinator for the secret shares and not require an
-                // additional secret channel. This also implies that we only
-                // completely delete `f` in 2.3, as we need `a_0` to recover the
-                // secret shares sent by other participants.
+                // additional secret channel. This also implies that we need to
+                // keep the encryption key `q` until 2.2, in order to recover
+                // the secret shares sent by other participants. Before
+                // encrypting, we verify the target participant's proof of
+                // possession of its encryption key, so that we only ever
+                // encrypt to keys that the target participant owns. Note that
+                // this is also verified onchain by the coordinator.
+                FROST.verifyProofOfKnowledge(participants.addr(l), commitments[l].q, commitments[l].pop);
                 fi = FROSTMath.ecdh(fi, q[i], qq[l]);
 
                 share.f[k++] = fi;
@@ -238,12 +246,39 @@ contract FROSTCoordinatorTest is Test {
             commitment.c[j] = ForgeSecp256k1.g(vm.randomUint(1, Secp256k1.N - 1)).toPoint();
         }
         commitment.c[0] = coordinator.groupKey(existing);
-        commitment.r = ForgeSecp256k1.g(vm.randomUint(1, Secp256k1.N - 1)).toPoint();
-        commitment.mu = vm.randomUint(0, Secp256k1.N - 1);
+        commitment.pok.r = ForgeSecp256k1.g(vm.randomUint(1, Secp256k1.N - 1)).toPoint();
+        commitment.pok.z = vm.randomUint(0, Secp256k1.N - 1);
+        commitment.pop = FROSTMath.proofOfKnowledge(participant, 1);
 
         vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
         vm.prank(participant);
         coordinator.keyGenCommit(gid, poap, commitment);
+    }
+
+    function test_KeyGenCommit_RevertsWithoutProofOfPossession() public {
+        // A participant must not be able to reuse another participant's
+        // encryption key, otherwise it could use the plaintext secret share
+        // revealed in response to a complaint in order to decrypt the secret
+        // shares intended for that participant.
+        FROSTGroupId.T gid = coordinator.keyGen(participants.root(), COUNT, THRESHOLD, bytes32(0));
+
+        uint256 q = vm.randomUint(1, Secp256k1.N - 1);
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        commitment.q = ForgeSecp256k1.g(q).toPoint();
+        commitment.c = new Secp256k1.Point[](THRESHOLD);
+        commitment.c[0] = ForgeSecp256k1.g(1).toPoint();
+
+        (address owner, bytes32[] memory ownerPoap) = participants.proof(0);
+        commitment.pok = FROSTMath.proofOfKnowledge(owner, 1);
+        commitment.pop = FROSTMath.proofOfKnowledge(owner, q);
+        vm.prank(owner);
+        coordinator.keyGenCommit(gid, ownerPoap, commitment);
+
+        (address copier, bytes32[] memory copierPoap) = participants.proof(1);
+        commitment.pok = FROSTMath.proofOfKnowledge(copier, 1);
+        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
+        vm.prank(copier);
+        coordinator.keyGenCommit(gid, copierPoap, commitment);
     }
 
     function test_Sign() public {
@@ -399,7 +434,8 @@ contract FROSTCoordinatorTest is Test {
 
         FROSTCoordinator.KeyGenCommitment memory commitment;
         // Because we are in a trusted setup, we don't actually need to encrypt
-        // anything. Specify a dummy encryption key.
+        // anything. Specify a dummy encryption key (which every participant
+        // still needs to provide a proof of possession for).
         commitment.q = ForgeSecp256k1.g(1).toPoint();
         // In our trusted key gen setup, we pretend like the first participant
         // has the full polynomial for deriving all the shares, and all other
@@ -410,7 +446,8 @@ contract FROSTCoordinatorTest is Test {
         for (uint256 i = 1; i < COUNT; i++) {
             bytes32 root = participants.root();
             (address participant, bytes32[] memory poap) = participants.proof(i);
-            (commitment.r, commitment.mu) = FROSTMath.proofOfKnowledge(participant, 1);
+            commitment.pok = FROSTMath.proofOfKnowledge(participant, 1);
+            commitment.pop = FROSTMath.proofOfKnowledge(participant, 1);
             vm.prank(participant);
             coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, poap, commitment);
         }
@@ -420,7 +457,8 @@ contract FROSTCoordinatorTest is Test {
             }
             bytes32 root = participants.root();
             (address participant, bytes32[] memory poap) = participants.proof(0);
-            (commitment.r, commitment.mu) = FROSTMath.proofOfKnowledge(participant, a[0]);
+            commitment.pok = FROSTMath.proofOfKnowledge(participant, a[0]);
+            commitment.pop = FROSTMath.proofOfKnowledge(participant, 1);
             vm.prank(participant);
             (gid,) = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, poap, commitment);
         }

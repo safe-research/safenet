@@ -59,10 +59,10 @@ library FROSTMath {
         return x ^ ForgeSecp256k1.mul(k, q).toPoint().x;
     }
 
-    function proofOfKnowledge(address participant, uint256 a0) internal returns (Secp256k1.Point memory r, uint256 mu) {
+    function proofOfKnowledge(address participant, uint256 secret) internal returns (FROST.Signature memory proof) {
         uint256 k = _VM.randomUint(1, Secp256k1.N - 1);
-        r = ForgeSecp256k1.g(k).toPoint();
-        uint256 c = FROST.keyGenChallenge(participant, ForgeSecp256k1.g(a0).toPoint(), r);
-        mu = addmod(k, mulmod(a0, c, Secp256k1.N), Secp256k1.N);
+        proof.r = ForgeSecp256k1.g(k).toPoint();
+        uint256 c = FROST.keyGenChallenge(participant, ForgeSecp256k1.g(secret).toPoint(), proof.r);
+        proof.z = addmod(k, mulmod(secret, c, Secp256k1.N), Secp256k1.N);
     }
 }
