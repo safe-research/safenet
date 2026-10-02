@@ -331,8 +331,6 @@ enum SigningState {
         nonce: NonceIndex,
         /// Verified revealed nonce commitments received from peers so far.
         revealed: BTreeMap<Address, RevealedNonces>,
-        /// The last participant to reveal a valid nonce commitment, if any.
-        last_signer: Option<Address>,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
@@ -340,9 +338,11 @@ enum SigningState {
         /// The block by which the commitment round must complete.
         deadline: u64,
     },
-    /// Every signer's nonce commitment has been revealed and this
-    /// validator's own signature share is being produced; waiting for the
-    /// [`Effect::UseNonce`] effect to complete before it can be published.
+    /// Every signer's nonce commitment has been revealed (or the commitment
+    /// round timed out and the signers that did reveal continue without the
+    /// others) and this validator's own signature share is being produced;
+    /// waiting for the [`Effect::UseNonce`] effect to complete before it can
+    /// be published.
     CollectSigningShares {
         /// The key share for participating in the signing ceremony.
         key_share: Arc<KeyShare>,
