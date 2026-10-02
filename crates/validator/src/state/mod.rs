@@ -15,8 +15,7 @@ use crate::{
     },
     frost::{
         keygen::{
-            GroupCommitments, KeyShare, PublicKeyShare, Secrets, SharingState, VerifiedCommitment,
-            VerifiedShare,
+            GroupCommitments, KeyShare, Secrets, SharingState, VerifiedCommitment, VerifiedShare,
         },
         sign::RevealedNonces,
     },
@@ -133,8 +132,8 @@ enum RolloverState {
         group: Group,
         /// This validator's participation.
         participation: KeyGenParticipation,
-        /// Verified participant public key shares.
-        public_keys: BTreeMap<Address, PublicKeyShare>,
+        /// Participants whose public key shares have been verified.
+        shared: BTreeSet<Address>,
         /// Verified secret shares received from peers so far, keyed by
         /// participant.
         shares: BTreeMap<Address, VerifiedShare>,

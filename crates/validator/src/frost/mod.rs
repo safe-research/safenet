@@ -12,13 +12,14 @@ pub mod keygen;
 mod marshal;
 mod participants;
 pub mod preprocess;
+mod serialization;
 pub mod sign;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::merkle::MerkleRoot;
-    use alloy::primitives::{address, keccak256};
+    use alloy::primitives::{Address, address, keccak256};
     use std::collections::BTreeMap;
 
     #[test]
@@ -74,7 +75,7 @@ mod tests {
             let verified_shares = shares
                 .iter()
                 .map(|(peer, share)| {
-                    let (_, encrypted_shares) = keygen::verify_secret_share(
+                    let encrypted_shares = keygen::verify_secret_share(
                         sharing_state.group_commitments(),
                         *peer,
                         share,
@@ -254,5 +255,85 @@ mod tests {
                 assert_eq!(group_commitment, *signature.R());
             }
         }
+    }
+
+    fn commitments() -> [(Address, crate::bindings::KeyGenCommitment); 3] {
+        let mut rng = rand::thread_rng();
+        [
+            address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
+            address!("70997970C51812dc3A010C7d01b50e0d17dc79C8"),
+            address!("3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"),
+        ]
+        .map(|participant| {
+            let secrets = keygen::setup(&mut rng, participant, 3, 2).unwrap();
+            (participant, secrets.commitment())
+        })
+    }
+
+    fn group_commitments(
+        commitments: &[(Address, crate::bindings::KeyGenCommitment)],
+    ) -> keygen::GroupCommitments {
+        let verified = commitments
+            .iter()
+            .map(|(participant, commitment)| {
+                let verified = keygen::verify_commitment(*participant, commitment).unwrap();
+                (*participant, verified)
+            })
+            .collect();
+        keygen::group_commitments(verified).unwrap()
+    }
+
+    fn assert_roundtrip<T>(value: &T)
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned,
+    {
+        let json = serde_json::to_string(value).unwrap();
+        let decoded = serde_json::from_str::<T>(&json).unwrap();
+        assert_eq!(serde_json::to_string(&decoded).unwrap(), json);
+    }
+
+    #[test]
+    fn persists_cancelled_group_commitment_coefficients() {
+        let mut commitments = commitments();
+
+        // Only the constant term is bound by the proof of knowledge, so the
+        // last participant to commit can cancel out any other coefficient of
+        // the group commitment.
+        let (honest, attacker) = commitments.split_at_mut(2);
+        let sum = honest
+            .iter()
+            .map(|(_, commitment)| marshal::frost_point(&commitment.c[1]).unwrap())
+            .sum::<k256::ProjectivePoint>();
+        attacker[0].1.c[1] = marshal::solidity_point(&-sum);
+
+        assert_roundtrip(&group_commitments(&commitments));
+    }
+
+    #[test]
+    fn accepts_cancelled_public_key_shares() {
+        let mut commitments = commitments();
+        let victim = commitments[0].0;
+        let x = participants::identifier(victim).to_scalar();
+
+        // Similarly, the last participant to commit can cancel out the
+        // victim's verifying share, which the victim then publishes. The victim
+        // is honest, so its share must not be rejected.
+        let (honest, attacker) = commitments.split_at_mut(2);
+        let evaluation = honest
+            .iter()
+            .chain([&attacker[0]])
+            .map(|(_, commitment)| marshal::frost_point(&commitment.c[0]).unwrap())
+            .sum::<k256::ProjectivePoint>()
+            + honest
+                .iter()
+                .map(|(_, commitment)| marshal::frost_point(&commitment.c[1]).unwrap() * x)
+                .sum::<k256::ProjectivePoint>();
+        attacker[0].1.c[1] = marshal::solidity_point(&(-evaluation * x.invert().unwrap()));
+
+        let share = crate::bindings::KeyGenSecretShare {
+            y: crate::bindings::Point::default(),
+            f: vec![],
+        };
+        keygen::verify_secret_share(&group_commitments(&commitments), victim, &share).unwrap();
     }
 }
