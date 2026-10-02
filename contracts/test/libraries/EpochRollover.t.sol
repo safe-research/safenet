@@ -6,6 +6,7 @@ import {Vm} from "@forge-std/Vm.sol";
 import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {EpochRollover} from "@/libraries/EpochRollover.sol";
 import {FROST} from "@/libraries/FROST.sol";
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 
@@ -22,6 +23,8 @@ contract EpochRolloverTest is Test {
     uint256 public constant GENESIS_SK = 1;
     uint256 public constant GENESIS_NK = 2;
     uint64 public constant GENESIS_EPOCH = 1;
+
+    FROSTGroupId.T public constant GROUP_ID = FROSTGroupId.T.wrap(keccak256("group"));
 
     bytes32 internal domainSep;
 
@@ -41,10 +44,13 @@ contract EpochRolloverTest is Test {
         uint64 parentEpoch,
         uint64 proposedEpoch,
         uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
         Secp256k1.Point calldata newGroupKey,
         FROST.Signature calldata signature
     ) external {
-        state.rollover(domainSeparator, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature);
+        state.rollover(
+            domainSeparator, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature
+        );
     }
 
     /// @dev External wrapper so a reverting `initialize` reverts at a lower call depth than the cheatcode.
@@ -80,9 +86,10 @@ contract EpochRolloverTest is Test {
     ) internal {
         Secp256k1.Point memory parentKey = _key(parentSk);
         Secp256k1.Point memory newKey = _key(newSk);
-        bytes32 message = ConsensusMessages.epochRollover(domainSep, parentEpoch, proposedEpoch, rolloverBlock, newKey);
+        bytes32 message =
+            ConsensusMessages.epochRollover(domainSep, parentEpoch, proposedEpoch, rolloverBlock, GROUP_ID, newKey);
         FROST.Signature memory sig = _sign(parentSk, parentNk, message);
-        state.rollover(domainSep, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newKey, sig);
+        state.rollover(domainSep, parentKey, parentEpoch, proposedEpoch, rolloverBlock, GROUP_ID, newKey, sig);
     }
 
     function _dummySig() internal returns (FROST.Signature memory) {
@@ -116,12 +123,13 @@ contract EpochRolloverTest is Test {
         Secp256k1.Point memory parentKey = _key(GENESIS_SK);
         Secp256k1.Point memory newKey = _key(5);
         uint64 proposedEpoch = GENESIS_EPOCH + 1;
-        bytes32 message = ConsensusMessages.epochRollover(domainSep, GENESIS_EPOCH, proposedEpoch, 100, newKey);
+        bytes32 message =
+            ConsensusMessages.epochRollover(domainSep, GENESIS_EPOCH, proposedEpoch, 100, GROUP_ID, newKey);
         FROST.Signature memory sig = _sign(GENESIS_SK, GENESIS_NK, message);
 
         vm.expectEmit(true, true, false, true);
         emit EpochRollover.EpochRolledOver(GENESIS_EPOCH, proposedEpoch, parentKey, newKey);
-        state.rollover(domainSep, parentKey, GENESIS_EPOCH, proposedEpoch, 100, newKey, sig);
+        state.rollover(domainSep, parentKey, GENESIS_EPOCH, proposedEpoch, 100, GROUP_ID, newKey, sig);
 
         assertTrue(state.isKnown(newKey, proposedEpoch));
     }
@@ -164,17 +172,17 @@ contract EpochRolloverTest is Test {
         FROST.Signature memory dummy = _dummySig();
 
         vm.expectRevert(EpochRollover.EpochNotAdvancing.selector);
-        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, GENESIS_EPOCH, 100, newKey, dummy); // equal
+        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, GENESIS_EPOCH, 100, GROUP_ID, newKey, dummy); // equal
 
         vm.expectRevert(EpochRollover.EpochNotAdvancing.selector);
-        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, 0, 100, newKey, dummy); // lower
+        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, 0, 100, GROUP_ID, newKey, dummy); // lower
     }
 
     function test_rollover_revertsUnknownParent() public {
         _seedGenesis();
         Secp256k1.Point memory unknownParent = _key(123);
         vm.expectRevert(EpochRollover.UnknownParent.selector);
-        this.callRollover(domainSep, unknownParent, GENESIS_EPOCH, 2, 100, _key(5), _dummySig());
+        this.callRollover(domainSep, unknownParent, GENESIS_EPOCH, 2, 100, GROUP_ID, _key(5), _dummySig());
     }
 
     function test_rollover_revertsKnownKeyWrongEpoch() public {
@@ -182,14 +190,16 @@ contract EpochRolloverTest is Test {
         // Genesis key is known at epoch 1; passing it as the epoch-2 parent must be rejected.
         Secp256k1.Point memory parentKey = _key(GENESIS_SK);
         vm.expectRevert(EpochRollover.UnknownParent.selector);
-        this.callRollover(domainSep, parentKey, GENESIS_EPOCH + 1, 3, 100, _key(5), _dummySig());
+        this.callRollover(domainSep, parentKey, GENESIS_EPOCH + 1, 3, 100, GROUP_ID, _key(5), _dummySig());
     }
 
     function test_rollover_revertsOnZeroNewKey() public {
         _seedGenesis();
         Secp256k1.Point memory parentKey = _key(GENESIS_SK);
         vm.expectRevert(Secp256k1.NotOnCurve.selector);
-        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, 2, 100, Secp256k1.Point({x: 0, y: 0}), _dummySig());
+        this.callRollover(
+            domainSep, parentKey, GENESIS_EPOCH, 2, 100, GROUP_ID, Secp256k1.Point({x: 0, y: 0}), _dummySig()
+        );
     }
 
     function test_rollover_revertsOnMismatchedMessageField() public {
@@ -197,26 +207,40 @@ contract EpochRolloverTest is Test {
         Secp256k1.Point memory parentKey = _key(GENESIS_SK);
         Secp256k1.Point memory newKey = _key(5);
         // Sign for rolloverBlock 100 but submit with 200 — the reconstructed message differs.
-        bytes32 message = ConsensusMessages.epochRollover(domainSep, GENESIS_EPOCH, 2, 100, newKey);
+        bytes32 message = ConsensusMessages.epochRollover(domainSep, GENESIS_EPOCH, 2, 100, GROUP_ID, newKey);
         FROST.Signature memory sig = _sign(GENESIS_SK, GENESIS_NK, message);
 
         vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
-        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, 2, 200, newKey, sig);
+        this.callRollover(domainSep, parentKey, GENESIS_EPOCH, 2, 200, GROUP_ID, newKey, sig);
+    }
+
+    function test_rollover_revertsOnMismatchedGroupId() public {
+        _seedGenesis();
+        Secp256k1.Point memory parentKey = _key(GENESIS_SK);
+        Secp256k1.Point memory newKey = _key(5);
+        // Sign for `GROUP_ID` but submit with a different group ID sharing the same key.
+        bytes32 message = ConsensusMessages.epochRollover(domainSep, GENESIS_EPOCH, 2, 100, GROUP_ID, newKey);
+        FROST.Signature memory sig = _sign(GENESIS_SK, GENESIS_NK, message);
+
+        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
+        this.callRollover(
+            domainSep, parentKey, GENESIS_EPOCH, 2, 100, FROSTGroupId.T.wrap(keccak256("other")), newKey, sig
+        );
     }
 
     function test_rollover_idempotentResubmission() public {
         _seedGenesis();
         Secp256k1.Point memory parentKey = _key(GENESIS_SK);
         Secp256k1.Point memory newKey = _key(5);
-        bytes32 message = ConsensusMessages.epochRollover(domainSep, GENESIS_EPOCH, 2, 100, newKey);
+        bytes32 message = ConsensusMessages.epochRollover(domainSep, GENESIS_EPOCH, 2, 100, GROUP_ID, newKey);
         FROST.Signature memory sig = _sign(GENESIS_SK, GENESIS_NK, message);
 
-        state.rollover(domainSep, parentKey, GENESIS_EPOCH, 2, 100, newKey, sig);
+        state.rollover(domainSep, parentKey, GENESIS_EPOCH, 2, 100, GROUP_ID, newKey, sig);
         assertTrue(state.isKnown(newKey, 2));
 
         // Re-submitting the identical rollover is a no-op: no revert, no event, state unchanged.
         vm.recordLogs();
-        state.rollover(domainSep, parentKey, GENESIS_EPOCH, 2, 100, newKey, sig);
+        state.rollover(domainSep, parentKey, GENESIS_EPOCH, 2, 100, GROUP_ID, newKey, sig);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(logs.length, 0);

@@ -48,6 +48,7 @@ sol! {
         uint64 activeEpoch;
         uint64 proposedEpoch;
         uint64 rolloverBlock;
+        bytes32 groupId;
         uint256 groupKeyX;
         uint256 groupKeyY;
     }
@@ -155,12 +156,14 @@ impl ConsensusDomain {
         active_epoch: EpochId,
         proposed_epoch: NonZeroU64,
         rollover_block: u64,
+        group_id: B256,
         group_key: &Point,
     ) -> B256 {
         EpochRollover {
             activeEpoch: active_epoch.raw_value(),
             proposedEpoch: proposed_epoch.get(),
             rolloverBlock: rollover_block,
+            groupId: group_id,
             groupKeyX: group_key.x,
             groupKeyY: group_key.y,
         }
@@ -242,8 +245,14 @@ mod tests {
             y: U256::from(2u64),
         };
         assert_eq!(
-            TEST_DOMAIN.epoch_rollover_hash(EpochId::Genesis, NonZeroU64::MIN, 1000, &group_key),
-            b256!("75b33b36b42d249c4cccf1c86bce59897c0ebbaa829ab5d8926e1bff1cee4355")
+            TEST_DOMAIN.epoch_rollover_hash(
+                EpochId::Genesis,
+                NonZeroU64::MIN,
+                1000,
+                b256!("0123456789abcdef0123456789abcdef0123456789abcdef0000000000000000"),
+                &group_key,
+            ),
+            b256!("a177686b6873ca4e8f50208e879cfdbf02d012d0d9a480d56a8b399e07d1100c")
         );
     }
 }

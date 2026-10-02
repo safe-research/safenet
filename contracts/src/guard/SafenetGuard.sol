@@ -5,6 +5,7 @@ import {AttestationTrailer} from "@/libraries/AttestationTrailer.sol";
 import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {EpochRollover} from "@/libraries/EpochRollover.sol";
 import {FROST} from "@/libraries/FROST.sol";
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {TransactionAnnouncement} from "@/libraries/TransactionAnnouncement.sol";
@@ -127,11 +128,19 @@ contract SafenetGuard is ISafenetGuard, BaseTransactionGuard {
         uint64 parentEpoch,
         uint64 proposedEpoch,
         uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
         Secp256k1.Point calldata newGroupKey,
         FROST.Signature calldata signature
     ) external {
         $epochs.rollover(
-            _CONSENSUS_DOMAIN_SEPARATOR, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature
+            _CONSENSUS_DOMAIN_SEPARATOR,
+            parentKey,
+            parentEpoch,
+            proposedEpoch,
+            rolloverBlock,
+            groupId,
+            newGroupKey,
+            signature
         );
     }
 

@@ -522,6 +522,7 @@ impl Transition {
                             active_epoch,
                             proposed_epoch,
                             rollover_block,
+                            group_id,
                             &group_key,
                         );
                         // If we are participating in the active epoch, then

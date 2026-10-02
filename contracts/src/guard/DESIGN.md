@@ -8,6 +8,7 @@ Deliberate choices with their rationale, recorded so reviewers and auditors can 
 - **A recorded historical key may attest future transactions and sign new rollover branches.** Accepted as a direct consequence of the above (shares no longer exist to abuse). It cannot replay past transactions, which the Safe nonce binds.
 - **`updateEpoch` is permissionless** — the FROST signature is the authorization; the caller names the explicit parent pair; re-submitting a known pair is a no-op.
 - **`rolloverBlock` is not checked against local `block.number`** — it is a Gnosis Chain block number, meaningless on the guard's chain, folded into the signed message only.
+- **`groupId` is not checked** — it is the new group's Gnosis Chain FROST coordinator group ID, meaningless on the guard's chain (which tracks group keys), folded into the signed message only.
 
 ## Consensus binding
 

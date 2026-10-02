@@ -4,17 +4,20 @@ pragma solidity ^0.8.30;
 import {Test, Vm} from "@forge-std/Test.sol";
 import {MockCoordinator} from "@test/util/MockCoordinator.sol";
 import {Consensus, IConsensus} from "@/Consensus.sol";
+import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {SafeId} from "@/libraries/SafeId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
+import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 contract MockOracle {
     function postRequest(bytes32, address, bytes calldata) external {}
 }
 
 contract ConsensusTest is Test {
+    using ConsensusMessages for bytes32;
     using FROSTGroupId for FROSTGroupId.T;
     using SafeTransaction for SafeTransaction.T;
 
@@ -94,6 +97,33 @@ contract ConsensusTest is Test {
         assertEq(0x5afe02, epochs.active);
         assertEq(0x5afe03, epochs.staged);
         assertEq(nextBlock, epochs.rolloverBlock);
+    }
+
+    function test_ProposeEpoch_SignsGroupBoundMessage() public {
+        FROSTGroupId.T groupId = FROSTGroupId.T.wrap(keccak256("testGroup"));
+        Secp256k1.Point memory groupKey = Secp256k1.Point({x: 7, y: 9});
+        coordinator.setGroupKey(groupId, groupKey);
+
+        bytes32 message = consensus.domainSeparator().epochRollover(0, 0x5afe, 0x100, groupId, groupKey);
+        vm.expectCall(address(coordinator), abi.encodeCall(MockCoordinator.sign, (GENESIS_GROUP, message)));
+        consensus.proposeEpoch(0x5afe, 0x100, groupId);
+    }
+
+    function test_StageEpoch_VerifiesGroupBoundMessage() public {
+        FROSTGroupId.T groupId = FROSTGroupId.T.wrap(keccak256("testGroup"));
+        Secp256k1.Point memory groupKey = Secp256k1.Point({x: 7, y: 9});
+        coordinator.setGroupKey(groupId, groupKey);
+        FROSTSignatureId.T signatureId = FROSTSignatureId.T.wrap(keccak256("testSig"));
+
+        bytes32 message = consensus.domainSeparator().epochRollover(0, 0x5afe, 0x100, groupId, groupKey);
+        vm.expectCall(
+            address(coordinator), abi.encodeCall(MockCoordinator.signatureVerify, (signatureId, GENESIS_GROUP, message))
+        );
+        consensus.stageEpoch(0x5afe, 0x100, groupId, signatureId);
+        assertEq(
+            FROSTSignatureId.T.unwrap(consensus.getAttestationSignatureId(message)),
+            FROSTSignatureId.T.unwrap(signatureId)
+        );
     }
 
     function test_updateValidatorStaker() public {

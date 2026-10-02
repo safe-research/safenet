@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
 import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
@@ -10,19 +11,29 @@ contract ConsensusMessagesTest is Test {
     using ConsensusMessages for bytes32;
     using SafeTransaction for SafeTransaction.T;
 
+    function test_EpochRolloverTypehash() public pure {
+        assertEq(
+            ConsensusMessages.EPOCH_ROLLOVER_TYPEHASH,
+            keccak256(
+                "EpochRollover(uint64 activeEpoch,uint64 proposedEpoch,uint64 rolloverBlock,bytes32 groupId,uint256 groupKeyX,uint256 groupKeyY)"
+            )
+        );
+    }
+
     function test_EpochRollover() public pure {
         bytes32 message = ConsensusMessages.domain(23, 0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97)
             .epochRollover(
                 0,
                 1,
                 0xbaddad42,
+                FROSTGroupId.T.wrap(0x0123456789abcdef0123456789abcdef0123456789abcdef0000000000000000),
                 Secp256k1.Point({
                     x: 0x8318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75,
                     y: 0x3547f11ca8696646f2f3acb08e31016afac23e630c5d11f59f61fef57b0d2aa5
                 })
             );
 
-        assertEq(message, hex"c1e4d484d6c376741c904290cc043f4afb4618f9d567dcdd0edcbf22abae57f7");
+        assertEq(message, hex"841f3710a6febcc13c18c6c32c7d06c0467ceb1f691fa4d80da15519bc0666f5");
     }
 
     function test_TransactionProposalTypehash() public pure {
@@ -74,9 +85,21 @@ contract ConsensusMessagesTest is Test {
     /// inputs) must never collide.
     function test_messageFamiliesDoNotCollide() public pure {
         bytes32 sep = ConsensusMessages.domain(23, 0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97);
-        bytes32 rollover = sep.epochRollover(1, 2, 3, Secp256k1.Point({x: 7, y: 9}));
+        bytes32 rollover =
+            sep.epochRollover(1, 2, 3, FROSTGroupId.T.wrap(bytes32(uint256(5))), Secp256k1.Point({x: 7, y: 9}));
         bytes32 proposal = sep.transactionProposal(1, address(uint160(7)), bytes32(uint256(9)), bytes32(uint256(2)));
         assertTrue(rollover != proposal, "epochRollover and transactionProposal must be domain-separated");
+    }
+
+    /// epochRollover binds the group ID, not just its key: two groups sharing a key must produce different messages,
+    /// so a rollover attestation cannot be used to stage a different group with the same key.
+    function test_epochRollover_bindsGroupId() public pure {
+        bytes32 sep = ConsensusMessages.domain(23, 0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97);
+        Secp256k1.Point memory groupKey = Secp256k1.Point({x: 7, y: 9});
+
+        bytes32 message = sep.epochRollover(1, 2, 3, FROSTGroupId.T.wrap(keccak256("group")), groupKey);
+        bytes32 other = sep.epochRollover(1, 2, 3, FROSTGroupId.T.wrap(keccak256("other")), groupKey);
+        assertTrue(message != other, "groupId is bound");
     }
 
     /// transactionProposal is injective in each of its arguments (and in the domain separator): changing
