@@ -343,6 +343,47 @@ contract FROSTCoordinatorTest is Test {
         FROST.verify(groupKey, signature, message);
     }
 
+    function test_KeyGenComplain_CompromisedByRespondedComplaints() public {
+        // The commitments are not verified onchain, so dummy values suffice to
+        // get the group into the sharing phase where complaints are allowed.
+        FROSTGroupId.T gid;
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        commitment.q = ForgeSecp256k1.g(1).toPoint();
+        commitment.c = new Secp256k1.Point[](THRESHOLD);
+        for (uint256 i = 0; i < COUNT; i++) {
+            bytes32 root = participants.root();
+            (address participant, bytes32[] memory poap) = participants.proof(i);
+            vm.prank(participant);
+            (gid,) = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, bytes32(0), poap, commitment);
+        }
+
+        // Each complaint response publicly reveals a share of the accused's
+        // secret polynomial, so responded complaints still count towards the
+        // threshold that compromises the group.
+        address accused = participants.addr(0);
+        for (uint256 i = 1; i <= THRESHOLD; i++) {
+            address plaintiff = participants.addr(i);
+            bool compromised = i == THRESHOLD;
+
+            vm.expectEmit();
+            emit FROSTCoordinator.KeyGenComplained(gid, plaintiff, accused, compromised);
+            vm.prank(plaintiff);
+            assertEq(coordinator.keyGenComplain(gid, accused), compromised);
+
+            if (!compromised) {
+                vm.prank(accused);
+                coordinator.keyGenComplaintResponse(gid, plaintiff, vm.randomUint());
+            }
+        }
+
+        // Once compromised, no more secret shares can be revealed.
+        address lastPlaintiff = participants.addr(THRESHOLD);
+        uint256 secretShare = vm.randomUint();
+        vm.expectRevert(FROSTCoordinator.GroupNotReady.selector);
+        vm.prank(accused);
+        coordinator.keyGenComplaintResponse(gid, lastPlaintiff, secretShare);
+    }
+
     function test_SignCommitNonces_RevertsWhenNotSigning() public {
         (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
         FROSTSignatureId.T sid = FROSTSignatureId.create(gid, 0);

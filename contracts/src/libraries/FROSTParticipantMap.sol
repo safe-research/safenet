@@ -45,7 +45,7 @@ library FROSTParticipantMap {
      * @custom:param status The current status of a participant.
      * @custom:param complaints The number of unresolved complaints this participant has filed against others. A
      *               participant cannot finalize DKG with a non-zero count.
-     * @custom:param accusations The number of unresolved accusations filed against this participant by others.
+     * @custom:param accusations The total number of accusations filed against this participant by others.
      * @dev This struct tracks a participant's progress and status within the DKG ceremony, particularly for the
      *      complaint and resolution process.
      */
@@ -172,7 +172,7 @@ library FROSTParticipantMap {
      * @param self The storage struct.
      * @param plaintiff The plaintiff's address.
      * @param accused The accused's address.
-     * @return totalAccusations The total number of unresolved accusations against the accused.
+     * @return totalAccusations The total number of accusations against the accused.
      * @dev This function is a key part of the DKG's security. If a participant detects that another participant is
      *      misbehaving (e.g., by providing an invalid secret share), they can file a public complaint on-chain. A
      *      participant cannot file the same complaint twice or complain after they have already confirmed their own
@@ -199,13 +199,14 @@ library FROSTParticipantMap {
      * @param accused The accused's address.
      * @dev When accused, a participant can resolve the complaint by taking an action, which is signaled by calling
      *      this function. This involves revealing the secret share that was sent to the plaintiff. This function
-     *      decrements the complaint/accusation counters, marking the specific dispute as resolved.
+     *      decrements the plaintiff's complaint counter, marking the specific dispute as resolved. The accused's
+     *      accusation counter is not decremented, as each response reveals a share of its secret polynomial, which is
+     *      reconstructable from `threshold` revealed shares.
      */
     function respond(T storage self, address plaintiff, address accused) internal {
         require(self.complaints[plaintiff][accused] == ComplaintStatus.SUBMITTED, NotComplaining());
         self.complaints[plaintiff][accused] = ComplaintStatus.RESPONDED;
         self.states[plaintiff].complaints--;
-        self.states[accused].accusations--;
     }
 
     /**
