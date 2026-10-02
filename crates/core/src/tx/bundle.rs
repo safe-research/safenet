@@ -1,7 +1,10 @@
 //! Bundling queued transactions into the transaction sent at an allocated
 //! nonce.
 
-use crate::tx::types::{AllocatedTransaction, Authorization, Transaction};
+use crate::{
+    metrics,
+    tx::types::{AllocatedTransaction, Authorization, Transaction},
+};
 use alloy::{
     eips::eip7702::constants::PER_EMPTY_ACCOUNT_COST,
     primitives::{Address, U256},
@@ -162,6 +165,8 @@ impl Bundler {
                     max_batch_gas,
                     "allocating transaction batch"
                 );
+                metrics::transaction_batch_size().record(calls.len() as f64);
+                metrics::transaction_batch_gas().record(gas as f64);
                 Transaction {
                     to: account,
                     value: U256::ZERO,
