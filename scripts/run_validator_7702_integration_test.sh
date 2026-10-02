@@ -7,9 +7,9 @@
 # self-call to `execute`. After genesis key generation, three transactions
 # are proposed in a single block, and the test succeeds once the genesis group
 # has attested all of them and every transaction either validator sent is
-# such a self-call. One validator is then restarted without the executor, and
-# its signer account must be undelegated by the time it has helped attest a
-# fourth transaction.
+# such a self-call with none of its calls failing. One validator is then
+# restarted without the executor, and its signer account must be undelegated
+# by the time it has helped attest a fourth transaction.
 #
 # Prints the gas limit and gas used of each `execute` transaction, to check
 # the offchain batch gas estimate against what batches actually use. It does
@@ -41,6 +41,7 @@ SENDER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 SENDER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 EXECUTE_SIG='execute((address,uint256,uint256,bytes)[])'
+CALL_FAILED_SIG='CallFailed(uint256,bytes)'
 SAFE_TRANSACTION='(uint256,address,address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256)'
 TRANSACTION_PROPOSED_SIG="TransactionProposed(bytes32,bytes32,address,uint64,bytes,$SAFE_TRANSACTION)"
 TRANSACTION_ATTESTED_SIG='TransactionAttested(bytes32,bytes32,address,uint64,bytes32,bytes32,((uint256,uint256),uint256))'
@@ -69,6 +70,7 @@ deploy_safenet_7702_executor "$ANVIL_RPC_URL" "$SENDER" "$CHAIN_ID"
 
 DELEGATED_CODE=$(echo "0xef0100${EXECUTOR_ADDR#0x}" | tr '[:upper:]' '[:lower:]')
 EXECUTE_SELECTOR=$(cast sig "$EXECUTE_SIG")
+CALL_FAILED_TOPIC=$(cast keccak "$CALL_FAILED_SIG")
 
 # `blocks_per_epoch` is set far out of this test's window, so that the
 # genesis group attests every transaction.
@@ -193,7 +195,7 @@ wait_for_attestations() {
 
 wait_for_attestations "$TRANSACTION_HASHES"
 
-echo "==> Checking every validator transaction up to block $ATTESTED_BLOCK is a successful self-call to execute..."
+echo "==> Checking every validator transaction up to block $ATTESTED_BLOCK is a self-call to execute with no failed calls..."
 PARTICIPANTS_JSON=$(printf '%s\n' "${PARTICIPANTS[@]}" | jq -R 'ascii_downcase' | jq -s .)
 BATCHES=0
 for block in $(seq 1 "$ATTESTED_BLOCK"); do
@@ -213,6 +215,15 @@ for block in $(seq 1 "$ATTESTED_BLOCK"); do
         RECEIPT=$(cast receipt "$HASH" --json --rpc-url "$ANVIL_RPC_URL")
         if [ "$(jq -r '.status' <<< "$RECEIPT")" != "0x1" ]; then
             EXIT_MESSAGE="FAILURE: validator $FROM's batch $HASH in block $block reverted."
+            exit 1
+        fi
+        # The executor swallows failing calls and only logs them, so a batch
+        # that succeeds may still have dropped some of its calls.
+        FAILED_CALLS=$(jq --arg account "$FROM" --arg topic "$CALL_FAILED_TOPIC" \
+            '[.logs[] | select((.address | ascii_downcase) == $account and .topics[0] == $topic)] | length' \
+            <<< "$RECEIPT")
+        if [ "$FAILED_CALLS" -ne 0 ]; then
+            EXIT_MESSAGE="FAILURE: $FAILED_CALLS call(s) in validator $FROM's batch $HASH in block $block failed."
             exit 1
         fi
         CALLS=$(cast decode-calldata "$EXECUTE_SIG" "$INPUT" --json | jq '.[0] | length')

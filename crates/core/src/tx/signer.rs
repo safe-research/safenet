@@ -48,6 +48,12 @@ impl Signer {
         &self,
         tx: UnsignedTransaction,
     ) -> Result<SignedTransaction, SigningError> {
+        // A chain ID of `0` would make the authorization valid on every chain
+        // and is generally not a permitted chain ID value.
+        if tx.chain_id == 0 {
+            return Err(SigningError);
+        }
+
         let raw_tx = match tx.authorization {
             None => {
                 let mut tx = TxEip1559 {
@@ -229,6 +235,22 @@ mod tests {
         assert_eq!(authorization.chain_id, U256::from(tx.chain_id));
         assert_eq!(authorization.address, delegate);
         assert_eq!(authorization.nonce, tx.nonce + 1);
+    }
+
+    #[test]
+    fn cannot_sign_for_chain_id_zero() {
+        for authorization in [
+            None,
+            Some(Authorization {
+                address: Address::ZERO,
+            }),
+        ] {
+            let tx = UnsignedTransaction {
+                chain_id: 0,
+                ..unsigned(authorization)
+            };
+            assert!(signer().sign_transaction(tx).is_err());
+        }
     }
 
     #[test]

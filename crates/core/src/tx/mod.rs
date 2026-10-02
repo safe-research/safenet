@@ -49,6 +49,14 @@ pub enum Error {
     /// The configured executor has no code.
     #[error("executor {0} has no code")]
     ExecutorWithoutCode(Address),
+    /// The configured maximum batch gas exceeds half of the block gas limit.
+    #[error("max batch gas {max_batch_gas} exceeds half of the block gas limit {gas_limit}")]
+    BatchGasExceedsBlockGasLimit {
+        /// The configured maximum batch gas.
+        max_batch_gas: u64,
+        /// The gas limit of the latest block.
+        gas_limit: u64,
+    },
 }
 
 impl Error {
@@ -92,14 +100,33 @@ impl TransactionQueue {
     /// persists its state in `pool`.
     ///
     /// Fails if an executor is configured and has no code at the latest
-    /// block.
+    /// block, or if the maximum batch gas exceeds half of the latest block's
+    /// gas limit.
     pub async fn new(
         provider: Provider,
         signer: Signer,
         pool: SqlitePool,
         config: Config,
     ) -> Result<Self, Error> {
-        if let SubmissionMode::Batched { executor, .. } = config.mode {
+        if let SubmissionMode::Batched {
+            executor,
+            max_batch_gas,
+        } = config.mode
+        {
+            // Leave room in the block for other transactions, so that batches
+            // can still be included when blocks are busy.
+            let gas_limit = provider
+                .get_block(BlockId::latest())
+                .await?
+                .map(|block| block.header.gas_limit)
+                .unwrap_or_default();
+            if max_batch_gas > gas_limit / 2 {
+                return Err(Error::BatchGasExceedsBlockGasLimit {
+                    max_batch_gas,
+                    gas_limit,
+                });
+            }
+
             // Self-calls to an executor without code succeed without doing
             // anything, which would silently drop every transaction.
             let code = provider.get_code_at(executor).await?;
@@ -418,7 +445,7 @@ mod tests {
         primitives::{Address, B256, Bytes, U256, address, b256, keccak256},
         rpc::{
             json_rpc::ErrorPayload,
-            types::{EIP1186AccountProofResponse, FeeHistory},
+            types::{Block, EIP1186AccountProofResponse, FeeHistory, Header},
         },
         sol_types::SolCall as _,
         transports::mock::Asserter,
@@ -438,6 +465,7 @@ mod tests {
     /// configures deployed.
     async fn queue_with_mode(asserter: &Asserter, mode: SubmissionMode) -> TransactionQueue {
         if let SubmissionMode::Batched { .. } = mode {
+            asserter.push_success(&latest_block(30_000_000));
             asserter.push_success(&Bytes::from_static(&[0xef])); // executor code
         }
         new_queue(asserter, mode).await.unwrap()
@@ -471,6 +499,17 @@ mod tests {
 
     fn block_status(latest: u64) -> BlockStatus {
         BlockStatus { latest, safe: 0 }
+    }
+
+    /// A latest-block response with `gas_limit`.
+    fn latest_block(gas_limit: u64) -> Block {
+        Block::empty(Header {
+            inner: alloy::consensus::Header {
+                gas_limit,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
     }
 
     /// An account-proof response for a signer account with `nonce` and
@@ -566,14 +605,30 @@ mod tests {
     #[tokio::test]
     async fn fails_to_start_with_an_executor_without_code() {
         let asserter = Asserter::new();
+        asserter.push_success(&latest_block(30_000_000));
         asserter.push_success(&Bytes::new()); // executor code
         let result = new_queue(&asserter, batched()).await;
         assert!(matches!(result, Err(Error::ExecutorWithoutCode(EXECUTOR))));
     }
 
     #[tokio::test]
+    async fn fails_to_start_with_a_batch_gas_above_half_the_block_gas_limit() {
+        let asserter = Asserter::new();
+        asserter.push_success(&latest_block(3_999_998));
+        let result = new_queue(&asserter, batched()).await;
+        assert!(matches!(
+            result,
+            Err(Error::BatchGasExceedsBlockGasLimit {
+                max_batch_gas: 2_000_000,
+                gas_limit: 3_999_998,
+            })
+        ));
+    }
+
+    #[tokio::test]
     async fn starts_with_an_executor_with_code() {
         let asserter = Asserter::new();
+        asserter.push_success(&latest_block(4_000_000));
         asserter.push_success(&Bytes::from_static(&[0xef])); // executor code
         let result = new_queue(&asserter, batched()).await;
         assert!(result.is_ok());
