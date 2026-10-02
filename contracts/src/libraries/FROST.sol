@@ -225,6 +225,29 @@ library FROST {
         return _hdkg(abi.encodePacked(id, phiv, phix, rv, rx));
     }
 
+    /**
+     * @notice Verifies a key generation proof of knowledge.
+     * @param participant The participant address.
+     * @param phi The participant public key share.
+     * @param r The commitment point used in the proof.
+     * @param mu The proof of knowledge scalar.
+     * @dev Matches the official FROST implementation KeyGen `verify_proof_of_knowledge` function. A valid proof
+     *      demonstrates that the participant knows the discrete logarithm of `phi`.
+     */
+    function verifyProofOfKnowledge(
+        address participant,
+        Secp256k1.Point memory phi,
+        Secp256k1.Point memory r,
+        uint256 mu
+    ) internal view {
+        // The official FROST implementation KeyGen `verify_proof_of_knowledge` function.
+        // <https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-core/src/keys/dkg.rs#L459-L478>
+
+        require(mu < Secp256k1.N, InvalidScalar());
+        uint256 c = keyGenChallenge(participant, phi, r);
+        Secp256k1.mulmuladd(mu, c, phi, r);
+    }
+
     // ============================================================
     // PRIVATE FUNCTIONS
     // ============================================================

@@ -4,6 +4,7 @@ pragma solidity ^0.8.30;
 import {Test} from "@forge-std/Test.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
+import {FROSTMath} from "@test/util/FROSTMath.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 
 contract FROSTTest is Test {
@@ -13,6 +14,16 @@ contract FROSTTest is Test {
     ///      (an inlined internal call reverts in the test's own frame, which the cheatcode cannot match).
     function callVerify(Secp256k1.Point memory y, FROST.Signature memory signature, bytes32 message) external view {
         FROST.verify(y, signature, message);
+    }
+
+    /// @dev External wrapper so `vm.expectRevert` can catch a revert from the internal `FROST.verifyProofOfKnowledge`.
+    function callVerifyProofOfKnowledge(
+        address participant,
+        Secp256k1.Point memory phi,
+        Secp256k1.Point memory r,
+        uint256 mu
+    ) external view {
+        FROST.verifyProofOfKnowledge(participant, phi, r, mu);
     }
 
     function test_Identifier() public view {
@@ -117,5 +128,51 @@ contract FROSTTest is Test {
 
         uint256 c = FROST.keyGenChallenge(address(1), phi, r);
         assertEq(c, 0xd11b55fe7ad428ecdeefa22b651e2caeb2b8a8443271fc60f84a2ca9ef1aa167);
+    }
+
+    function test_VerifyProofOfKnowledge() public {
+        address participant = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045;
+        Secp256k1.Point memory phi = ForgeSecp256k1.g(0xa0).toPoint();
+        (Secp256k1.Point memory r, uint256 mu) = FROSTMath.proofOfKnowledge(participant, 0xa0);
+
+        FROST.verifyProofOfKnowledge(participant, phi, r, mu);
+    }
+
+    /// @dev A proof is bound to the participant that produced it, so it cannot be replayed by another participant.
+    function test_VerifyProofOfKnowledge_revertsOnOtherParticipant() public {
+        Secp256k1.Point memory phi = ForgeSecp256k1.g(0xa0).toPoint();
+        (Secp256k1.Point memory r, uint256 mu) = FROSTMath.proofOfKnowledge(address(1), 0xa0);
+
+        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
+        this.callVerifyProofOfKnowledge(address(2), phi, r, mu);
+    }
+
+    /// @dev A proof for one public key share does not verify for another, so a participant cannot commit to a public
+    ///      key share whose discrete logarithm it does not know.
+    function test_VerifyProofOfKnowledge_revertsOnOtherPublicKeyShare() public {
+        address participant = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045;
+        (Secp256k1.Point memory r, uint256 mu) = FROSTMath.proofOfKnowledge(participant, 0xa0);
+        Secp256k1.Point memory phi = ForgeSecp256k1.g(0xa1).toPoint();
+
+        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
+        this.callVerifyProofOfKnowledge(participant, phi, r, mu);
+    }
+
+    function test_VerifyProofOfKnowledge_revertsOnIdentityPublicKeyShare() public {
+        address participant = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045;
+        (Secp256k1.Point memory r, uint256 mu) = FROSTMath.proofOfKnowledge(participant, 0xa0);
+        Secp256k1.Point memory phi = Secp256k1.Point({x: 0, y: 0});
+
+        vm.expectRevert(Secp256k1.NotOnCurve.selector);
+        this.callVerifyProofOfKnowledge(participant, phi, r, mu);
+    }
+
+    function test_VerifyProofOfKnowledge_revertsOnNonCanonicalScalar() public {
+        address participant = 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045;
+        Secp256k1.Point memory phi = ForgeSecp256k1.g(0xa0).toPoint();
+        (Secp256k1.Point memory r,) = FROSTMath.proofOfKnowledge(participant, 0xa0);
+
+        vm.expectRevert(FROST.InvalidScalar.selector);
+        this.callVerifyProofOfKnowledge(participant, phi, r, Secp256k1.N);
     }
 }
