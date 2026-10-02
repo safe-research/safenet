@@ -16,7 +16,7 @@ This design supersedes the `feat/batex_*` branches. Two of their phases are kept
 2. **Config** — take `feat/batex_2`'s TOML keys, but replace `max_in_flight_transactions` with a `SubmissionMode` enum, either `Direct { max_in_flight_transactions }` or `Batched { executor, max_batch_gas }`, deserialized through a private flat `RawConfig`, so that mixing keys from both modes is a config error. Configuring an executor limits the queue to one transaction in flight.
 3. **Storage** — split the transaction storage into the queued `transactions` and an `allocated_nonces` table holding one row per nonce the queue uses: one for each onchain transaction, and one for each authorization it carries. Several queued transactions can be allocated to one nonce, and the nonce's row stores the onchain transaction built for them. If a transaction's nonce is consumed without its authorization's nonce, the storage recovers by turning the authorization's row into a cancellation transaction.
 4. **Unsigned transactions** — replace `TxEip1559` inside the `tx` module with a queue-owned `UnsignedTransaction`. The `Signer` then builds and signs either a `TxEip1559` or a `TxEip7702` (with a self-signed authorization at `nonce + 1`).
-5. **Batching** — replace the nonce cache with an `eth_getProof`-backed account cache (`nonce` and `code_hash`). Add the batch encoder and the EIP-7702 delegation code hash helper. Then wire them into `TransactionQueue::submit_pending`: when an executor is configured, allocate the longest prefix of queued transactions that fits in `max_batch_gas` as one batch. Attach an authorization whenever the account's code hash differs from the one wanted: the executor's delegation designator when an executor is configured, and empty code when none is (an authorization to `address(0)`, which removes a leftover delegation). While the account is delegated, keep one transaction in flight. Histogram metrics show how many calls batches carry and how much gas they use.
+5. **Batching** — replace the nonce cache with an `eth_getProof`-backed account cache (`nonce` and `code_hash`). Add the EIP-7702 delegation code hash helper. Then wire it into `TransactionQueue::submit_pending`: when an executor is configured, allocate the longest prefix of queued transactions that fits in `max_batch_gas` as one batch. Attach an authorization whenever the account's code hash differs from the one wanted: the executor's delegation designator when an executor is configured, and empty code when none is (an authorization to `address(0)`, which removes a leftover delegation). While the account is delegated, keep one transaction in flight. Histogram metrics show how many calls batches carry and how much gas they use.
 6. **Integration test** — a 7702 integration test in which validators delegate on demand and serve three signing requests through `execute` self-calls only.
 7. **Startup check** — `TransactionQueue::new` refuses to start with a configured executor that has no code.
 8. **Cleanup** — remove this specification and the temporary test-network migration script.
@@ -34,15 +34,15 @@ Batching and delegation live entirely inside `crates/core/src/tx`. The services'
  TransactionQueue::queue -> TransactionStorage::enqueue            one row per transaction, as today
         v
  TransactionQueue::submit_pending (while in flight < limit; limit is 1 with an executor or a delegated account)
-        |-- allocation := Single without an executor, or
-        |                 Batch { build: executor::batch(account, .., max_batch_gas) } with one
         |-- wanted := Authorization { address: executor or address(0) }
         |   authorization := account.code_hash != wanted.code_hash()   (address(0) wants empty code)
+        |-- bundler := Bundler::direct(authorization) without an executor, or
+        |              Bundler::batched(account, max_batch_gas, authorization) with one
         v
- storage.next_transaction(status, allocation, authorization)
-        |   the oldest unexpired unallocated transactions; `build` takes a prefix and builds the batch
-        |   allocated_nonces row N (the onchain transaction), and row N + 1 (delegate) when authorized
-        |   transactions.nonce = N for the prefix
+ storage.next_transaction(status, bundler)
+        |   streams the oldest unexpired unallocated transactions into the bundler until it is full
+        |   allocated_nonces row N (the bundle), and row N + 1 (delegate) when authorized
+        |   transactions.nonce = N for the bundled prefix
         v
  AllocatedTransaction { nonce, transaction, authorization, fees } -> build -> UnsignedTransaction
         v
@@ -67,7 +67,7 @@ A batch's contents are fixed when its nonce is allocated. Resubmission rebroadca
 
 The storage does not know about calldata encoding or batch gas. It is a queue of transactions plus a store of allocated nonces. Each transaction row of `allocated_nonces` holds the onchain transaction built for that nonce (the queued transaction itself without an executor, or the `execute` batch with one) and all of its submission state. Which queued transactions it carries follows from `transactions.nonce`.
 
-The queue decides what to allocate through an `Allocation`: `Single` takes the oldest queued transaction as it is, and `Batch` passes the oldest queued transactions to a pure `build` function, which returns how long a prefix it took and the batch it built from it. The storage allocates the nonce, stores the transaction, and links the prefix to it, all in one SQLite transaction, and tracks submission and execution per nonce, as it does per transaction today.
+The queue decides what to allocate through a `Bundler`: the storage pushes the oldest queued transactions into it, in order, until it refuses one, and the bundler builds the transaction sent at the nonce from the prefix it took. A direct bundler takes one transaction and sends it as is, and a batched one builds an `execute` batch. The storage allocates the nonce, stores the bundle, and links the prefix to it, all in one SQLite transaction, and tracks submission and execution per nonce, as it does per transaction today.
 
 The row stores what was actually sent, so it does not depend on the configuration. After a restart with a different `executor`, or none, a nonce allocated earlier is still resubmitted exactly as it was built, whether it is a one-call batch or a plain transaction.
 
@@ -132,7 +132,8 @@ Expiry does not split batches. `next_transaction` only considers transactions th
 - **A nullable `authorization` column on the transaction's row that reserves `nonce + 1`.** The next free nonce becomes `MAX(nonce + 1 + (authorization IS NOT NULL))`, an implicit rule every nonce query has to know. Recovery must insert a row into the reserved gap. Rejected in favor of a row per nonce.
 - **A separate `authorizations` table.** SQL cannot enforce that a nonce is unique across two tables, and the next free nonce needs a `UNION`. Rejected.
 - **Return a nonce's queued transactions and build the onchain transaction on every submission.** The storage would not duplicate the queued requests in the batch calldata. But the row would no longer say what was sent: whether one queued transaction went out as is or as a one-call batch would need a stored flag, or would follow from the current config, which can change across a restart. Rejected: the nonce row stores the built transaction.
-- **`queued(block, limit)` and `allocate(status, ids, transaction, authorization)`** (this epic's previous revision). Queued row ids leak out of the storage, and the queue has to hand them back consistently with the batch it built. Rejected in favor of one `next_transaction` that takes an `Allocation`.
+- **`queued(block, limit)` and `allocate(status, ids, transaction, authorization)`** (this epic's previous revision). Queued row ids leak out of the storage, and the queue has to hand them back consistently with the batch it built. Rejected in favor of one `next_transaction` that takes a `Bundler`.
+- **An `Allocation` enum, `Single` or `Batch { limit, build }`, with a pure `build` over a slice of queued transactions** (this epic's previous revision). The storage has to query a bounded number of rows up front (`max_batch_gas / 5_000 + 1`) and validate the count `build` returns. Rejected in favor of streaming rows into a `Bundler` until it is full, which needs no limit and cannot return an invalid prefix.
 - **Leave the delegation in place when the executor is removed.** The account stays delegated, and the mempool keeps capping it at one pending transaction, so `max_in_flight_transactions` would be silently ignored. It would also leave the account's behavior depending on an executor the operator no longer configures. Rejected: the queue undelegates the account.
 - **Unbatched single transactions** (send a batch of one as the original transaction). This saves the executor overhead for lone actions. Rejected per the section above.
 - **`eth_getCode` next to `eth_getTransactionCount`** instead of `eth_getProof`. `eth_getCode` is universally supported, but this takes two requests and two failure modes for what `eth_getProof` returns in one. Rejected. The RPC node must support `eth_getProof` for recent blocks (see Assumptions).
@@ -273,15 +274,15 @@ A `transactions` row is a queued transaction, exactly as enqueued. An `allocated
 Storage methods:
 
 - **`enqueue`:** unchanged. It still takes `(Transaction, Option<u64>)` tuples. Nothing about a queued transaction is decided at enqueue any more.
-- **`next_transaction(status, allocation, authorization)`:** in one SQLite transaction, selects the oldest queued transactions with no nonce that have not expired at `status.block` (one for `Allocation::Single`, up to `limit` for `Allocation::Batch`), inserts the transaction row at the next free nonce (`MAX(status.nonce, MAX(nonce) + 1)`) holding the transaction to send (the queued one, or the batch `build` returns), inserts the authorization row at the nonce after it when `authorization` is set, and sets `transactions.nonce` for the allocated prefix. Returns `None`, allocating nothing, when nothing is queued. In Phase 3a it keeps today's signature and allocates one transaction.
+- **`next_transaction(status, bundler)`:** in one SQLite transaction (`BEGIN IMMEDIATE`), streams the oldest queued transactions with no nonce that have not expired at `status.block` into `bundler` until it refuses one, inserts the transaction row at the next free nonce (`MAX(status.nonce, MAX(nonce) + 1)`) holding the bundle, inserts the authorization row at the nonce after it when the bundle carries an authorization, and sets `transactions.nonce` for the bundled prefix. Returns `None`, allocating nothing, when nothing is queued. In Phase 3a it keeps today's signature and allocates one transaction.
 - **`count_in_flight`:** transaction rows with `executed_at IS NULL`.
 - **`count_outstanding(block)`:** rows not yet executed, including authorization rows, plus unallocated transactions not yet expired. It only gates whether `update_block_status` fetches the account status, and an authorization row left behind by a skipped authorization must keep that happening, so the recovery can run.
 - **`record_submission`, `stale_submissions`:** today's queries, on transaction rows.
 - **`mark_executed`, `unmark_executed`:** today's queries, on every row. `mark_executed` marks rows whose nonce is below the account nonce.
-- **`recover_authorization_gap(status)`:** sets the `request` of an authorization row at `status.nonce` to `Transaction::default()` (`WHERE nonce = ? AND request IS NULL`), turning it into a cancellation. It can only apply once.
+- **`recover_authorization_gap(nonce)`:** sets the `request` of an authorization row at the account's `nonce` to `Transaction::default()` (`WHERE nonce = ? AND delegate IS NOT NULL AND request IS NULL`), turning it into a cancellation, and returns whether it did. It can only apply once.
 - **`prune(safe)`:** deletes rows executed at or below `safe` together with their transactions (the transactions first), and unallocated transactions that expired at or before `safe`.
 
-Loading an `AllocatedTransaction` reads the row's `request` and, from Phase 3b, joins the authorization row at `nonce + 1` (`LEFT JOIN allocated_nonces a ON a.nonce = n.nonce + 1 AND a.delegate IS NOT NULL`). sqlx enables `PRAGMA foreign_keys` by default, so the reference is enforced.
+Loading an `AllocatedTransaction` reads the row's `request` and, from Phase 3b-ii, joins the authorization row at `nonce + 1` (`LEFT JOIN allocated_nonces a ON a.nonce = n.nonce + 1 AND a.delegate IS NOT NULL`). sqlx enables `PRAGMA foreign_keys` by default, so the reference is enforced.
 
 **Migration.** Safenet has not been released and does not run in production, so there is no in-app migration. `TransactionStorage::new` only changes its `CREATE TABLE IF NOT EXISTS` definitions, and a recreated database gets the new schema. It adds no schema probes, no `ALTER TABLE` calls and no migration execution.
 
@@ -332,28 +333,9 @@ pub struct UnsignedTransaction {
 }
 ```
 
-`crates/core/src/tx/storage.rs`:
-
-```rust
-/// How `next_transaction` allocates a nonce.
-pub enum Allocation<'a> {
-    /// The oldest queued transaction, sent as is.
-    Single,
-    /// A batch of the oldest queued transactions: `build` is given up to
-    /// `limit` of them and returns how many it took, at least one, and the
-    /// batch built from them.
-    Batch {
-        limit: usize,
-        build: &'a dyn Fn(&[Transaction]) -> (usize, Transaction),
-    },
-}
-```
-
-The storage fails with an error, allocating nothing, if `build` returns a count of zero or more than the transactions it passed.
-
 The public `TransactionQueue::queue` and `ActionEncoder` signatures keep their tuples, and so does `TransactionStorage::enqueue`: batching and authorization are decided at allocation.
 
-`AllocatedTransaction::build` adds EIP-7702's `PER_EMPTY_ACCOUNT_COST` of 25,000 gas to the stored transaction's gas when an authorization is set, so the stored transaction and `max_batch_gas` exclude it. Until Phase 4a, `build` returns a `TxEip1559` and panics with `todo!()` for `Some(authorization)`. Nothing sets one before Phase 5d. From Phase 4a it returns an `UnsignedTransaction`, and the `todo!()` moves to the `UnsignedTransaction` → `TxEip1559` conversion that `submit_transaction` uses until Phase 4b. Phase 4b removes it.
+`AllocatedTransaction::build` returns an `UnsignedTransaction` with the stored transaction's gas. EIP-7702's `PER_EMPTY_ACCOUNT_COST` of 25,000 gas is already included in it: the bundler adds it when it finishes a bundle that carries an authorization (see Bundling).
 
 ### Signer
 
@@ -374,34 +356,44 @@ It is fetched with `eth_getProof(signer, [], block)`, at the same block as today
 
 This makes `eth_getProof` for recent blocks a requirement on the RPC node, whether or not an executor is configured. Phase 5a documents it in both handbooks, and replaces `eth_getTransactionCount` with `eth_getProof` in the validator handbook's RPC method table. Of the public Gnosis Chain RPCs listed on chainlist that responded, all but one (`gnosis.oat.farm`, which disables the method) serve `eth_getProof` for the latest and recent block numbers. Reth nodes need a non-zero `--rpc.eth-proof-window`, because the requested block can trail the node's tip.
 
-### Batch encoding
+### Bundling
 
-New module `crates/core/src/tx/executor.rs`, with a `sol!` transcription of `ISafenet7702Executor` (following the repo's existing inline `sol!` bindings) and one pure function, the `build` of `Allocation::Batch`:
+`crates/core/src/tx/bundle.rs` has a `sol!` transcription of `ISafenet7702Executor` (following the repo's existing inline `sol!` bindings) and the `Bundler` that `next_transaction` pushes queued transactions into:
 
 ```rust
-/// Builds an `ISafenet7702Executor.execute` self-call sent to `account` from
-/// the longest prefix of `transactions` whose batch gas stays within
-/// `max_batch_gas`, and at least the first transaction. Returns the number of
-/// transactions taken and the batch.
-pub fn batch(
-    account: Address,
-    transactions: &[Transaction],
-    max_batch_gas: u64,
-) -> (usize, Transaction);
+impl Bundler {
+    /// A bundler that sends a single queued transaction as is, carrying
+    /// `authorization`.
+    pub fn direct(authorization: Option<Authorization>) -> Self;
+
+    /// A bundler that sends queued transactions as one
+    /// `ISafenet7702Executor.execute` self-call to `account`, carrying
+    /// `authorization`, while the batch's estimated gas stays within
+    /// `max_batch_gas`.
+    pub fn batched(account: Address, max_batch_gas: u64, authorization: Option<Authorization>) -> Self;
+
+    /// Adds `transaction` to the bundle, returning whether it was added. Once
+    /// it returns `false`, every later transaction is refused as well.
+    pub fn push(&mut self, transaction: Transaction) -> bool;
+
+    /// Finishes the bundle as the transaction allocated to `nonce`, or `None`
+    /// if no transaction was added to it.
+    pub fn finish(self, nonce: u64) -> Option<AllocatedTransaction>;
+}
 ```
 
 `account` is the signer's own address, not the executor's. Sending `execute` calldata to the executor implementation instead would silently discard every action, so the parameter is named to make the two hard to confuse.
 
-Rules:
+Rules for a batched bundler:
 
-1. Take transactions in order while the batch gas stays within `max_batch_gas`. Stop at the first one that does not fit. Transactions after it are not considered, so order is preserved.
+1. Take transactions in order while the batch gas stays within `max_batch_gas`. Stop at the first one that does not fit. Transactions after it are refused, so order is preserved.
 2. Every batch goes through `execute`, including a batch of one.
-3. A first transaction whose own gas exceeds `max_batch_gas` becomes a one-call batch (over the limit) and is never dropped. This is normal operation and logs at `debug`, not `warn`. It also means `max_batch_gas = 0` sends every transaction as its own one-call batch, for operators who want the executor (for onchain accounting, say) without batching.
+3. A first transaction whose own gas exceeds `max_batch_gas` becomes a one-call batch (over the limit) and is never dropped. This is normal operation. It also means `max_batch_gas = 0` sends every transaction as its own one-call batch, for operators who want the executor (for onchain accounting, say) without batching.
 4. A batch is `Transaction { to: account, value: 0, data: executeCall { calls }.abi_encode(), gas }`, where each call is `Call { to, value, gasLimit: gas, data }` from the original transaction. A transaction's `value` travels in its `Call` and is paid from the account's own balance.
 
-`submit_pending` sets the `Allocation::Batch` `limit` to `max_batch_gas / 5_000 + 1` queued transactions. Every call adds at least the formula's 5,000 per-call overhead, so no batch within the limit can hold more, and the bound caps the query without cutting a batch short.
+When the bundle carries an authorization, `finish` adds the 25,000 `PER_EMPTY_ACCOUNT_COST` to its gas, for direct and batched bundles alike. It does not count towards `max_batch_gas`.
 
-The batch gas is computed from the encoded calldata, so it needs no RPC request. The formula is carried over from `feat/batex_*`:
+The batch gas is estimated from the encoded calldata, so it needs no RPC request. The calldata length is tracked per call rather than by encoding the batch on every push. The formula is carried over from `feat/batex_*`:
 
 ```text
 gas = 26_000                                  // intrinsic + array decode
@@ -410,18 +402,7 @@ gas = 26_000                                  // intrinsic + array decode
     + Σ (call.value != 0 ? 34_000 : 0)        // CALL value transfer + possible account creation
 ```
 
-The `⌈call.gas / 63⌉` term is exactly what the `InsufficientGas` guard checks (`gasleft() * 63 / 64 >= call.gas` holds from `call.gas + ⌈call.gas / 63⌉` gas left), so it must not be dropped, and rounding it down could underfund a call by one gas. The `5_000` covers the executor's per-call overhead plus the `CALL` base cost the onchain check ignores. A value-bearing `CALL` also pays 9,000 for the value transfer and, if the target account is empty, 25,000 to create it. The EVM deducts both before the 63/64 rule applies, and the onchain guard does not model them, so the formula budgets them on top of the call's own `gasLimit`. Phase 5b confirms these constants against the gas snapshot pinned in Phase 1a and updated in 1b.
-
-Unit tests cover:
-
-- one transaction (still batched);
-- several under the limit (one batch, all taken);
-- a stop at the gas limit (the prefix that fits, the rest left);
-- no packing past a transaction that does not fit, even if a later one would;
-- an oversized first transaction (a batch of one);
-- `max_batch_gas = 0` (a batch of one);
-- a value-bearing transaction (value carried in its `Call`, value-transfer gas added);
-- decoding every batch back through `executeCall::abi_decode` to assert the exact calls.
+The `⌈call.gas / 63⌉` term is exactly what the `InsufficientGas` guard checks (`gasleft() * 63 / 64 >= call.gas` holds from `call.gas + ⌈call.gas / 63⌉` gas left), so it must not be dropped, and rounding it down could underfund a call by one gas. The `5_000` covers the executor's per-call overhead plus the `CALL` base cost the onchain check ignores. A value-bearing `CALL` also pays 9,000 for the value transfer and, if the target account is empty, 25,000 to create it. The EVM deducts both before the 63/64 rule applies, and the onchain guard does not model them, so the formula budgets them on top of the call's own `gasLimit`. The pinned gas snapshot from Phases 1a and 1b includes the callees' own work, so it cannot isolate the per-call overhead. Phase 6 confirms the constants against the gas the integration test's batches actually use.
 
 ### Wiring
 
@@ -437,18 +418,17 @@ async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
     for _ in in_flight..limit {
         let account = self.account().await?;
         let status = Status { nonce: account.nonce, block };
-        let account_address = self.signer.address();
-        let build;
-        let (allocation, wanted) = match self.config.mode {
-            SubmissionMode::Direct { .. } => (Allocation::Single, Authorization { address: Address::ZERO }),
+        let authorize = |address| {
+            let wanted = Authorization { address };
+            (account.code_hash != wanted.code_hash()).then_some(wanted)
+        };
+        let bundler = match self.config.mode {
+            SubmissionMode::Direct { .. } => Bundler::direct(authorize(Address::ZERO)),
             SubmissionMode::Batched { executor, max_batch_gas } => {
-                build = move |queued: &[Transaction]| executor::batch(account_address, queued, max_batch_gas);
-                let limit = usize::try_from(max_batch_gas / 5_000 + 1).unwrap_or(usize::MAX);
-                (Allocation::Batch { limit, build: &build }, Authorization { address: executor })
+                Bundler::batched(self.signer.address(), max_batch_gas, authorize(executor))
             }
         };
-        let authorization = (account.code_hash != wanted.code_hash()).then_some(wanted);
-        let Some(transaction) = self.storage.next_transaction(status, allocation, authorization).await? else {
+        let Some(transaction) = self.storage.next_transaction(status, bundler).await? else {
             break;
         };
         self.submit_transaction(transaction, block).await?;
@@ -457,15 +437,15 @@ async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
 }
 ```
 
-`queue()` itself goes back to only enqueueing and calling `submit_pending`, as today. The 25,000 authorization gas is added by `build`, on top of the batch's gas and not counted against `max_batch_gas`. The account status is already required for the nonce, so the authorization decision adds no request and no failure mode. The account status is cached per block, so within one `submit_pending` pass the code hash does not change, and at most one transaction is allocated while the account is delegated.
+`queue()` itself goes back to only enqueueing and calling `submit_pending`, as today. The 25,000 authorization gas is added by the bundler, on top of the batch's gas and not counted against `max_batch_gas`. The account status is already required for the nonce, so the authorization decision adds no request and no failure mode. The account status is cached per block, so within one `submit_pending` pass the code hash does not change, and at most one transaction is allocated while the account is delegated.
 
-`update_block_status` calls `storage.recover_authorization_gap(status)` right after `mark_executed`, before `resubmit_stale`.
+`update_block_status` calls `storage.recover_authorization_gap(nonce)` right after `mark_executed`, before `resubmit_stale`, and logs at `warn` when it recovers an authorization.
 
-`submit_pending` logs at `debug` for each batch (call count and gas), and at `info` when it attaches an authorization, naming whether it delegates or undelegates the account.
+`submit_pending` logs at `debug` for each batch (call count and gas), including a batch of one that exceeds `max_batch_gas` on its own, and at `info` when it attaches an authorization, naming whether it delegates or undelegates the account.
 
 ### Metrics
 
-`crates/core/src/metrics.rs` gains two histograms, following the existing `metrics::histogram!` pattern in `crates/sentinel/src/metrics.rs`. Both are recorded by the `build` closure that `submit_pending` passes in `Allocation::Batch`, from the prefix length and the batch `executor::batch` returns. Resubmissions do not build, so they are not counted again, and only batches are recorded:
+`crates/core/src/metrics.rs` gains two histograms, following the existing `metrics::histogram!` pattern in `crates/sentinel/src/metrics.rs`. Both are recorded by `Bundler::finish` for batched bundles, from its calls and estimated gas. Resubmissions do not build a bundle, so they are not counted again, and only batches are recorded:
 
 - `safenet_core_transaction_batch_size` — the number of calls in each batch. This is the measure of whether batching pays off at all: a distribution stuck at 1 means the executor adds overhead without coalescing anything.
 - `safenet_core_transaction_batch_gas` — the gas limit of each batch, excluding the authorization gas. Values near `max_batch_gas` mean the limit is what splits batches.
@@ -487,7 +467,7 @@ The test:
 6. Asserts that every transaction either validator sent between the recorded block and the last attestation is addressed to the validator itself and calls `execute`.
 7. Restarts one validator without `executor`, proposes one more transaction, waits for its `TransactionAttested`, and asserts that the restarted validator's `cast code` is empty.
 
-It does not assert how many transactions the validators used. Nonce reveals and signature shares reach the queue one effect resume at a time, so how many coalesce depends on timing.
+The script also prints the gas limit and gas used of each `execute` transaction, to confirm the batch gas constants (see Bundling). It does not assert how many transactions the validators used. Nonce reveals and signature shares reach the queue one effect resume at a time, so how many coalesce depends on timing.
 
 ---
 
@@ -498,14 +478,14 @@ Each phase is a separate PR, targeting fewer than 300 changed lines and fewer th
 Parallel tracks:
 
 - **Contracts** (1a → 1b → 1c) are independent of all Rust work until Phase 6.
-- **Config** (2a → 2b) is independent and only needs to land before 5d.
-- **Storage** (3a → 3b → 3c) then **unsigned transactions** (4a → 4b) form the main sequential track.
-- **Account cache** (5a) and **batch encoder** (5b) are independent of the storage track and of each other. 5b's binding must match 1c's interface.
-- **Code hash** (5c) needs only the `Authorization` type from 3b.
-- **Wiring** (5d) joins every track. Tests (5e) and metrics (5f) follow it and are independent of each other, as is the integration test (6).
+- **Config** (2a → 2b) is independent and only needs to land before 5c.
+- **Storage** (3a → 3b-i → 3b-ii → 3c) then **unsigned transactions** (4a → 4b) form the main sequential track. 3b-i's binding must match 1c's interface.
+- **Account cache** (5a) is independent of the storage track.
+- **Code hash** (5b) needs only the `Authorization` type from 3b-ii.
+- **Wiring** (5c) joins every track. Tests (5d) and metrics (5e) follow it and are independent of each other, as is the integration test (6).
 - **Startup check** (7) only needs 2b, but is scheduled last as a short follow-up.
 
-Nothing is observable to operators until 5d, except the in-flight limit of 1 from 2b. Before then, setting `executor` parses but does not batch, which the sample TOML comments added in Phase 2b must not contradict: they describe the behavior once it ships, and 5d is where it becomes true.
+Nothing is observable to operators until 5c, except the in-flight limit of 1 from 2b. Before then, setting `executor` parses but does not batch, which the sample TOML comments added in Phase 2b must not contradict: they describe the behavior once it ships, and 5c is where it becomes true.
 
 ### Phase 1a — Rename, gas-optimize and guard the executor contract
 
@@ -543,21 +523,38 @@ Introduce the full final schema (`allocated_nonces` with its unused `delegate` c
 
 **Files:** `crates/core/src/tx/storage.rs`, `migrations/2026_09_23_safenet_7702_executor_tx_batching.sql` (new).
 
-### Phase 3b — Allocate batches and authorizations
+### Phase 3b-i — Add the transaction `Bundler`
 
-Add `types::Authorization`, `AllocatedTransaction::authorization` and `storage::Allocation`. `next_transaction` takes an `Allocation` and an `Option<Authorization>`: a batch stores the transaction `build` returns and allocates its prefix, an authorization gets its own row at `N + 1`, and `AllocatedTransaction::authorization` is loaded from that row. `submit_pending` passes `Allocation::Single` and no authorization. `build` panics with `todo!()` for `Some(authorization)`.
+Add `tx/bundle.rs` with the `ISafenet7702Executor` binding, the `Bundler`, the batch gas formula and their unit tests. Nothing uses it yet.
+
+Unit tests cover:
+
+- a direct bundler takes exactly one transaction, as is;
+- one transaction (still batched);
+- the prefix that fits under the limit, with the rest refused;
+- no packing past a transaction that does not fit, even if a later one would;
+- an oversized first transaction, and `max_batch_gas = 0` (a batch of one);
+- a value-bearing transaction (value carried in its `Call`, value-transfer gas added);
+- an empty bundle finishes as `None`;
+- decoding every batch back through `executeCall::abi_decode` to assert the exact calls, and checking its gas against the formula computed from the encoded batch.
+
+**Files:** `crates/core/src/tx/bundle.rs` (new), `crates/core/src/tx/mod.rs` (module declaration).
+
+### Phase 3b-ii — Allocate bundles and authorizations
+
+Add `types::Authorization` and `AllocatedTransaction::authorization`, and give the `Bundler` constructors the authorization the bundle carries. `next_transaction` takes a `Bundler` and streams queued transactions into it: a bundle stores the transaction the bundler finishes and allocates its prefix, an authorization gets its own row at `N + 1`, and `AllocatedTransaction::authorization` is loaded from that row. `submit_pending` passes `Bundler::direct(None)`. `build` panics with `todo!()` for `Some(authorization)`.
 
 Storage tests cover:
 
-- a batch of several transactions allocated to one nonce, which records its submission and is marked executed as one, and stores the transaction `build` returned;
-- `build` is given only unexpired, unallocated transactions in order, at most `limit`, and a count of zero or more than it was given fails without allocating anything;
+- a batch of several transactions allocated to one nonce, which records its submission and is marked executed as one, and stores the batch the bundler built;
+- only unexpired, unallocated transactions are bundled, in order;
 - a nonce with an authorization takes `N`, the authorization row takes `N + 1`, and the next allocation takes `N + 2`;
 - allocation without authorizations is unchanged;
 - a nonce consumed outside the queue still wins over the next free nonce;
 - `AllocatedTransaction::authorization` round-trips, and a transaction without one has none;
 - pruning removes a nonce row, its authorization row and all of its transactions.
 
-**Files:** `crates/core/src/tx/types.rs`, `crates/core/src/tx/storage.rs`, `crates/core/src/tx/mod.rs`.
+**Files:** `crates/core/src/tx/types.rs`, `crates/core/src/tx/bundle.rs`, `crates/core/src/tx/storage.rs`, `crates/core/src/tx/mod.rs`.
 
 ### Phase 3c — Recover an unused authorization nonce
 
@@ -575,9 +572,9 @@ A queue test covers recovery with the in-flight budget already full.
 
 ### Phase 4a — `UnsignedTransaction`
 
-Add `types::UnsignedTransaction`. `AllocatedTransaction::build` returns it, and `submit_transaction` reads the submission fees from it. Until 4b, a temporary conversion to `TxEip1559` feeds the unchanged `Signer` and holds the `todo!()` for authorizations. No behavior change.
+Add `types::UnsignedTransaction`. `AllocatedTransaction::build` returns it, and `submit_transaction` reads the submission fees from it. `Bundler::finish` adds the 25,000 authorization gas to a bundle that carries an authorization. Until 4b, a temporary conversion to `TxEip1559` feeds the unchanged `Signer` and holds the `todo!()` for authorizations. No behavior change.
 
-**Files:** `crates/core/src/tx/types.rs`, `crates/core/src/tx/mod.rs`.
+**Files:** `crates/core/src/tx/types.rs`, `crates/core/src/tx/bundle.rs`, `crates/core/src/tx/storage.rs` (tests), `crates/core/src/tx/mod.rs`.
 
 ### Phase 4b — Sign `UnsignedTransaction`
 
@@ -591,21 +588,15 @@ Replace `nonce_cache`/`nonce()` with `account_cache`/`account()` returning `Acco
 
 **Files:** `crates/core/src/tx/mod.rs` (plus `types.rs` if `AccountStatus` lives there), `docs/validator-handbook.md`, `docs/sentinel-handbook.md`.
 
-### Phase 5b — Batch encoder
+### Phase 5b — Delegation code hash
 
-Add `tx/executor.rs` with the `ISafenet7702Executor` binding, `batch`, the gas formula and its unit tests. Nothing calls it yet. Confirm the formula's constants against the gas snapshot from Phases 1a and 1b, and record the numbers in the PR description.
-
-**Files:** `crates/core/src/tx/executor.rs` (new), `crates/core/src/tx/mod.rs` (module declaration).
-
-### Phase 5c — Delegation code hash
-
-Add `Authorization::code_hash`, using alloy's EIP-7702 delegation designator constant, with `KECCAK_EMPTY` for `Address::ZERO`. Test it against a known delegated account's code hash, and for `Address::ZERO`. Can be done in parallel with 5a and 5b once 3b has landed.
+Add `Authorization::code_hash`, using alloy's EIP-7702 delegation designator constant, with `KECCAK_EMPTY` for `Address::ZERO`. Test it against a known delegated account's code hash, and for `Address::ZERO`. Can be done in parallel with 5a once 3b-ii has landed.
 
 **Files:** `crates/core/src/tx/types.rs`.
 
-### Phase 5d — Batch and authorize at allocation
+### Phase 5c — Batch and authorize at allocation
 
-Wire `Allocation::Batch` with `executor::batch`, the authorization decision (delegating and undelegating) and the delegated-account in-flight limit into `TransactionQueue::submit_pending` as specified above, and add the 25,000 authorization gas in `build`. Add a batching tip to the `[transactions]` sections of both handbooks, covering the one-in-flight limit and how removing `executor` undelegates the account.
+Wire `Bundler::batched`, the authorization decision (delegating and undelegating) and the delegated-account in-flight limit into `TransactionQueue::submit_pending` as specified above, with the batch logging, and remove `bundle.rs`'s staged `dead_code` expectation. Add a batching tip to the `[transactions]` sections of both handbooks, covering the one-in-flight limit and how removing `executor` undelegates the account.
 
 Queue tests cover:
 
@@ -617,7 +608,7 @@ Queue tests cover:
 
 **Files:** `crates/core/src/tx/mod.rs`, `docs/validator-handbook.md`, `docs/sentinel-handbook.md`.
 
-### Phase 5e — Batching queue tests
+### Phase 5d — Batching queue tests
 
 Tests in `safenet_core::tx::tests` only:
 
@@ -628,15 +619,15 @@ Tests in `safenet_core::tx::tests` only:
 
 **Files:** `crates/core/src/tx/mod.rs`.
 
-### Phase 5f — Batching metrics
+### Phase 5e — Batching metrics
 
-Add the `safenet_core_transaction_batch_size` and `safenet_core_transaction_batch_gas` histograms and record them in `submit_pending` as specified above.
+Add the `safenet_core_transaction_batch_size` and `safenet_core_transaction_batch_gas` histograms and record them in `Bundler::finish` as specified above.
 
-**Files:** `crates/core/src/metrics.rs`, `crates/core/src/tx/mod.rs`.
+**Files:** `crates/core/src/metrics.rs`, `crates/core/src/tx/bundle.rs`.
 
 ### Phase 6 — 7702 integration test
 
-Add the script, the shared helpers, the Justfile recipe and the CI matrix entry described above.
+Add the script, the shared helpers, the Justfile recipe and the CI matrix entry described above. Record the gas limit and gas used of the test's `execute` transactions in the PR description, confirming the batch gas constants, and adjust the constants if any batch comes close to its limit.
 
 **Files:** `scripts/run_validator_7702_integration_test.sh` (new), `scripts/lib/shared_test_scripts.sh`, `Justfile`, `.github/workflows/integration.yml`, and the `AGENTS.md` integration test list.
 
@@ -644,7 +635,7 @@ Add the script, the shared helpers, the Justfile recipe and the CI matrix entry 
 
 When an executor is configured, `TransactionQueue::new` fetches `eth_getCode(executor)` at `latest` and fails with a new `Error::ExecutorWithoutCode(Address)` if the code is empty. Without this check, a mistyped `executor` means every `execute` self-call runs against empty code and succeeds as a no-op, silently dropping actions. An RPC failure here also fails startup, as the driver's other startup RPC requests already do.
 
-Queue tests cover a configured executor with no code (startup fails) and with code (startup succeeds). Tests that build a queue with an executor configured (from 5d, 5e and 5f) push a code response first, through their shared constructor helper. Unconfigured queues make no extra request.
+Queue tests cover a configured executor with no code (startup fails) and with code (startup succeeds). Tests that build a queue with an executor configured (from 5c, 5d and 5e) push a code response first, through their shared constructor helper. Unconfigured queues make no extra request.
 
 **Files:** `crates/core/src/tx/mod.rs`.
 
@@ -667,7 +658,7 @@ None at the moment.
 - The configured RPC supports `eth_getProof` for the latest block and blocks shortly before it. Geth, Nethermind, Erigon and Anvil do by default, and Reth does with a non-zero `--rpc.eth-proof-window`. On Gnosis Chain, the public RPCs listed on chainlist that responded all do, except `gnosis.oat.farm`. Operators must pick an RPC that supports it, whether or not they configure an executor.
 - An EOA's only possible code is an EIP-7702 delegation designator, so a non-empty code hash always means the account is delegated.
 - Mempools accept one pending transaction from an account that is delegated or has a pending authorization (see the Architecture Decision). Operators who run a node with a raised limit gain nothing, because other nodes would not propagate the extra transactions.
-- Anvil under Foundry 1.5.1 runs a Prague-or-later hardfork by default. If not, Phase 6 passes `--hardfork prague` through `start_anvil`. Anvil does not enforce the one-in-flight mempool limit, so the integration test does not exercise it. Phases 5d and 5e cover it through the in-flight limit of 1.
+- Anvil under Foundry 1.5.1 runs a Prague-or-later hardfork by default. If not, Phase 6 passes `--hardfork prague` through `start_anvil`. Anvil does not enforce the one-in-flight mempool limit, so the integration test does not exercise it. Phases 5c and 5d cover it through the in-flight limit of 1.
 - Foundry 1.5.1's `cast send --auth` can delegate and call in one transaction for the integration test's batched proposal. If not, a small Forge script using `vm.signAndAttachDelegation` does the same.
 - The signer account is dedicated to the service. Using it outside the queue is handled (the Phase 3c recovery) but not supported: an action whose nonce was taken by an outside transaction is lost, exactly as it is today.
 - `max_batch_gas` (default 2,000,000) stays well below the block gas limit of every target chain, so the 25,000 authorization gas added on top of it never matters for inclusion.

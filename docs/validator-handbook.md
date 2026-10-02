@@ -24,9 +24,13 @@ Additionally, the validator node stores intermediate state in a SQLite database 
 
 To run a validator, you need a reliable Ethereum RPC node that can accommodate a peak of 100.000 requests per day. The following table shows the approximate breakdown by RPC method (exact ratios depend on Safenet activity):
 
-| eth_getBlockByNumber | eth_sendRawTransaction | eth_maxPriorityFeePerGas | eth_getLogs | eth_getTransactionCount |
+| eth_getBlockByNumber | eth_sendRawTransaction | eth_maxPriorityFeePerGas | eth_getLogs | eth_getProof |
 | --- | --- | --- | --- | --- |
 | 42% | 8% | 11% | 11% | 28% |
+
+##### `eth_getProof` Support
+
+The validator reads its account's nonce and code with `eth_getProof` at the latest block it has observed, which can trail the RPC node's tip by a few blocks. Your RPC node must therefore serve `eth_getProof` for recent blocks. Most public Gnosis Chain RPCs do, but some disable the method entirely. Reth nodes need a non-zero `--rpc.eth-proof-window`, as the default only serves proofs for the tip.
 
 ##### `eth_getLogs` Reliability
 

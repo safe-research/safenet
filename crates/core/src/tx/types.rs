@@ -2,8 +2,9 @@
 
 use crate::tx::fees;
 use alloy::{
+    consensus::constants::KECCAK_EMPTY,
     eips::eip1559::Eip1559Estimation,
-    primitives::{Address, Bytes, U256},
+    primitives::{Address, B256, Bytes, U256},
 };
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +44,35 @@ pub struct Authorization {
     /// The delegate the signer account authorizes, or `Address::ZERO` to
     /// remove the account's delegation.
     pub address: Address,
+}
+
+/// The onchain state of the signer account.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AccountStatus {
+    /// The account nonce.
+    pub nonce: u64,
+    /// The hash of the account's code, which is [`KECCAK_EMPTY`] for an
+    /// account without code.
+    pub code_hash: B256,
+}
+
+impl AccountStatus {
+    /// Creates an account status, treating a zero `code_hash`, which some
+    /// nodes return for an account that does not exist, as no code.
+    pub fn new(nonce: u64, code_hash: B256) -> Self {
+        let code_hash = match code_hash {
+            B256::ZERO => KECCAK_EMPTY,
+            code_hash => code_hash,
+        };
+        Self { nonce, code_hash }
+    }
+
+    /// Whether the account is delegated with EIP-7702.
+    pub fn is_delegated(&self) -> bool {
+        // An externally owned account's only possible code is a delegation
+        // designator.
+        self.code_hash != KECCAK_EMPTY
+    }
 }
 
 /// A [`Transaction`] with a nonce allocated for submission.
