@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /**
@@ -18,10 +19,10 @@ library ConsensusMessages {
     bytes32 internal constant DOMAIN_TYPEHASH = hex"47e79534a245952e8b16893a336b85a3d9ea9fa8c573f3d803afb92a79469218";
 
     /**
-     * @custom:precomputed keccak256("EpochRollover(uint64 activeEpoch,uint64 proposedEpoch,uint64 rolloverBlock,uint256 groupKeyX,uint256 groupKeyY)")
+     * @custom:precomputed keccak256("EpochRollover(uint64 activeEpoch,uint64 proposedEpoch,uint64 rolloverBlock,bytes32 groupId,uint256 groupKeyX,uint256 groupKeyY)")
      */
     bytes32 internal constant EPOCH_ROLLOVER_TYPEHASH =
-        hex"13de01993286119c9a7628720a5b7d7c32841dbf2d23752b59de86a7e03fe1bf";
+        hex"cbf61ba47ed21236cbe25dd15c4803bcf6eced55df22dac331b4c693f7744012";
 
     /**
      * @custom:precomputed keccak256("TransactionProposal(uint64 epoch,address oracle,bytes oracleData,bytes32 safeTxHash)")
@@ -55,14 +56,18 @@ library ConsensusMessages {
      * @param activeEpoch The current active epoch.
      * @param proposedEpoch The proposed new epoch.
      * @param rolloverBlock The block number for the rollover.
-     * @param groupKey The group public key.
+     * @param groupId The proposed group ID.
+     * @param groupKey The proposed group public key.
      * @return result The epoch rollover message hash.
+     * @dev The message binds the group ID in addition to its public key, since the key alone does not identify a group:
+     *      otherwise, the signature could be used to stage a different group with the same key that cannot sign.
      */
     function epochRollover(
         bytes32 domainSeparator,
         uint64 activeEpoch,
         uint64 proposedEpoch,
         uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
         Secp256k1.Point memory groupKey
     ) internal pure returns (bytes32 result) {
         assembly ("memory-safe") {
@@ -71,8 +76,9 @@ library ConsensusMessages {
             mstore(add(ptr, 0x20), activeEpoch)
             mstore(add(ptr, 0x40), proposedEpoch)
             mstore(add(ptr, 0x60), rolloverBlock)
-            mcopy(add(ptr, 0x80), groupKey, 0x40)
-            mstore(add(ptr, 0x22), keccak256(ptr, 0xc0))
+            mstore(add(ptr, 0x80), groupId)
+            mcopy(add(ptr, 0xa0), groupKey, 0x40)
+            mstore(add(ptr, 0x22), keccak256(ptr, 0xe0))
             mstore(ptr, hex"1901")
             mstore(add(ptr, 0x02), domainSeparator)
             result := keccak256(ptr, 0x42)

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.30;
 
 import {FROST} from "@/libraries/FROST.sol";
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {TransactionAnnouncement} from "@/libraries/TransactionAnnouncement.sol";
 import {ITransactionGuard} from "@safe/base/GuardManager.sol";
@@ -102,11 +103,13 @@ interface ISafenetGuard is ITransactionGuard {
     /**
      * @notice Records a new `(group key, epoch)` pair from a FROST-signed rollover of a trusted parent.
      * @dev Permissionless (the signature is the authorisation); the caller names the parent explicitly;
-     *      re-submitting a known pair is a no-op. `rolloverBlock` is folded into the signed message only.
+     *      re-submitting a known pair is a no-op. `rolloverBlock` and `groupId` are folded into the signed message
+     *      only.
      * @param parentKey Trusted parent group key; `(parentKey, parentEpoch)` must already be trusted.
      * @param parentEpoch Epoch of `parentKey`.
      * @param proposedEpoch New epoch; must be strictly greater than `parentEpoch`.
      * @param rolloverBlock Gnosis Chain block number from the signed rollover message.
+     * @param groupId Gnosis Chain FROST coordinator group ID of the new group, from the signed rollover message.
      * @param newGroupKey New group key; must be a non-zero secp256k1 point.
      * @param signature FROST signature from the parent group over the rollover message.
      */
@@ -115,6 +118,7 @@ interface ISafenetGuard is ITransactionGuard {
         uint64 parentEpoch,
         uint64 proposedEpoch,
         uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
         Secp256k1.Point calldata newGroupKey,
         FROST.Signature calldata signature
     ) external;

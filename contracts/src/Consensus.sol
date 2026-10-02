@@ -218,7 +218,8 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         Epochs memory epochs = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
         Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(groupId);
-        bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        bytes32 message =
+            domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupId, groupKey);
         emit EpochProposed(epochs.active, proposedEpoch, rolloverBlock, groupId, groupKey);
         _COORDINATOR.sign($groups[epochs.active], message);
     }
@@ -235,7 +236,8 @@ contract Consensus is IConsensus, IERC165, IFROSTCoordinatorCallback {
         Epochs memory epochs = _processRollover();
         _requireValidRollover(epochs, proposedEpoch, rolloverBlock);
         Secp256k1.Point memory groupKey = _COORDINATOR.groupKey(groupId);
-        bytes32 message = domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupKey);
+        bytes32 message =
+            domainSeparator().epochRollover(epochs.active, proposedEpoch, rolloverBlock, groupId, groupKey);
         FROST.Signature memory attestation = _COORDINATOR.signatureVerify(signatureId, $groups[epochs.active], message);
         epochs.staged = proposedEpoch;
         epochs.rolloverBlock = rolloverBlock;

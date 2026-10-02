@@ -5,6 +5,7 @@ import {Test} from "@forge-std/Test.sol";
 import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {EpochRollover} from "@/libraries/EpochRollover.sol";
 import {FROST} from "@/libraries/FROST.sol";
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {SafeTransaction} from "@/libraries/SafeTransaction.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 import {TransactionAnnouncement} from "@/libraries/TransactionAnnouncement.sol";
@@ -46,6 +47,7 @@ contract SafenetGuardTest is Test {
     uint256 public constant ALLOW_TX_WINDOW_SECONDS = 3 days;
     uint64 public constant GENESIS_EPOCH = 1;
     uint64 public constant ROLLOVER_BLOCK = 100;
+    FROSTGroupId.T public constant GROUP_ID = FROSTGroupId.T.wrap(keccak256("group"));
 
     address public other = address(0xABCDE);
 
@@ -234,10 +236,10 @@ contract SafenetGuardTest is Test {
         Secp256k1.Point memory parentKey = ForgeSecp256k1.g(parentSk).toPoint();
         newKey = ForgeSecp256k1.g(newSk).toPoint();
         bytes32 message = ConsensusMessages.epochRollover(
-            guard.getConsensusDomainSeparator(), parentEpoch, proposedEpoch, ROLLOVER_BLOCK, newKey
+            guard.getConsensusDomainSeparator(), parentEpoch, proposedEpoch, ROLLOVER_BLOCK, GROUP_ID, newKey
         );
         FROST.Signature memory sig = _frostSign(parentSk, parentNk, message);
-        guard.updateEpoch(parentKey, parentEpoch, proposedEpoch, ROLLOVER_BLOCK, newKey, sig);
+        guard.updateEpoch(parentKey, parentEpoch, proposedEpoch, ROLLOVER_BLOCK, GROUP_ID, newKey, sig);
     }
 
     /// @dev The default announced transaction (the default test tx, all gas fields zero).
@@ -908,11 +910,11 @@ contract SafenetGuardTest is Test {
         Secp256k1.Point memory unknownParent = ForgeSecp256k1.g(UNKNOWN_SK).toPoint();
         Secp256k1.Point memory newKey = ForgeSecp256k1.g(EPOCH2_SK).toPoint();
         bytes32 message = ConsensusMessages.epochRollover(
-            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, newKey
+            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, GROUP_ID, newKey
         );
         FROST.Signature memory sig = _frostSign(UNKNOWN_SK, UNKNOWN_NK, message);
         vm.expectRevert(EpochRollover.UnknownParent.selector);
-        guard.updateEpoch(unknownParent, GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, newKey, sig);
+        guard.updateEpoch(unknownParent, GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, GROUP_ID, newKey, sig);
     }
 
     function test_updateEpoch_revertsWhenNotAdvancing() public {
@@ -920,11 +922,11 @@ contract SafenetGuardTest is Test {
         Secp256k1.Point memory newKey = ForgeSecp256k1.g(EPOCH2_SK).toPoint();
         // proposedEpoch == parentEpoch (not strictly greater).
         bytes32 message = ConsensusMessages.epochRollover(
-            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH, ROLLOVER_BLOCK, newKey
+            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH, ROLLOVER_BLOCK, GROUP_ID, newKey
         );
         FROST.Signature memory sig = _frostSign(GENESIS_SK, GENESIS_NK, message);
         vm.expectRevert(EpochRollover.EpochNotAdvancing.selector);
-        guard.updateEpoch(parentKey, GENESIS_EPOCH, GENESIS_EPOCH, ROLLOVER_BLOCK, newKey, sig);
+        guard.updateEpoch(parentKey, GENESIS_EPOCH, GENESIS_EPOCH, ROLLOVER_BLOCK, GROUP_ID, newKey, sig);
     }
 
     function test_updateEpoch_revertsOnInvalidNewKey() public {
@@ -933,7 +935,13 @@ contract SafenetGuardTest is Test {
         // Known parent + advancing epoch, but a zero new key → requireNonZero reverts before verify.
         vm.expectRevert(Secp256k1.NotOnCurve.selector);
         guard.updateEpoch(
-            parentKey, GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, Secp256k1.Point({x: 0, y: 0}), dummySig
+            parentKey,
+            GENESIS_EPOCH,
+            GENESIS_EPOCH + 1,
+            ROLLOVER_BLOCK,
+            GROUP_ID,
+            Secp256k1.Point({x: 0, y: 0}),
+            dummySig
         );
     }
 
@@ -941,11 +949,11 @@ contract SafenetGuardTest is Test {
         Secp256k1.Point memory parentKey = ForgeSecp256k1.g(GENESIS_SK).toPoint();
         Secp256k1.Point memory newKey = ForgeSecp256k1.g(EPOCH2_SK).toPoint();
         bytes32 message = ConsensusMessages.epochRollover(
-            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, newKey
+            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, GROUP_ID, newKey
         );
         FROST.Signature memory sig = _frostSign(GENESIS_SK, GENESIS_NK, message);
         vm.prank(other); // an arbitrary caller holding the rollover signature
-        guard.updateEpoch(parentKey, GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, newKey, sig);
+        guard.updateEpoch(parentKey, GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, GROUP_ID, newKey, sig);
         assertTrue(guard.isKnownEpoch(newKey, GENESIS_EPOCH + 1));
     }
 
@@ -953,24 +961,24 @@ contract SafenetGuardTest is Test {
         Secp256k1.Point memory parentKey = ForgeSecp256k1.g(GENESIS_SK).toPoint();
         Secp256k1.Point memory newKey = ForgeSecp256k1.g(EPOCH2_SK).toPoint();
         bytes32 message = ConsensusMessages.epochRollover(
-            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, newKey
+            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, GROUP_ID, newKey
         );
         FROST.Signature memory sig = _frostSign(GENESIS_SK, GENESIS_NK, message);
         vm.expectEmit(true, true, false, true);
         emit EpochRollover.EpochRolledOver(GENESIS_EPOCH, GENESIS_EPOCH + 1, parentKey, newKey);
-        guard.updateEpoch(parentKey, GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, newKey, sig);
+        guard.updateEpoch(parentKey, GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, GROUP_ID, newKey, sig);
     }
 
     function test_integration_updateEpoch_revertsWithTamperedSignature() public {
         Secp256k1.Point memory parentKey = ForgeSecp256k1.g(GENESIS_SK).toPoint();
         Secp256k1.Point memory newKey = ForgeSecp256k1.g(EPOCH2_SK).toPoint();
         bytes32 message = ConsensusMessages.epochRollover(
-            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, newKey
+            guard.getConsensusDomainSeparator(), GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, GROUP_ID, newKey
         );
         FROST.Signature memory sig = _frostSign(GENESIS_SK, GENESIS_NK, message);
         sig.z = addmod(sig.z, 1, Secp256k1.N); // tamper
         vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
-        guard.updateEpoch(parentKey, GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, newKey, sig);
+        guard.updateEpoch(parentKey, GENESIS_EPOCH, GENESIS_EPOCH + 1, ROLLOVER_BLOCK, GROUP_ID, newKey, sig);
     }
 
     // ============================================================

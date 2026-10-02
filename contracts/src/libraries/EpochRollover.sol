@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {ConsensusMessages} from "@/libraries/ConsensusMessages.sol";
 import {FROST} from "@/libraries/FROST.sol";
+import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 /**
@@ -96,6 +97,8 @@ library EpochRollover {
      * @param proposedEpoch The new epoch; must be strictly greater than `parentEpoch`.
      * @param rolloverBlock Folded into the verified message but not checked here — a Consensus-chain
      *        block number with no meaning on a remote chain.
+     * @param groupId Folded into the verified message but not checked here — the new group's Consensus-chain
+     *        FROST coordinator group ID.
      * @param newGroupKey The new group public key; must be a non-zero curve point.
      * @param signature The FROST signature produced by the parent group over the rollover message.
      */
@@ -106,6 +109,7 @@ library EpochRollover {
         uint64 parentEpoch,
         uint64 proposedEpoch,
         uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
         Secp256k1.Point memory newGroupKey,
         FROST.Signature memory signature
     ) internal {
@@ -113,8 +117,9 @@ library EpochRollover {
         require(proposedEpoch > parentEpoch, EpochNotAdvancing());
         Secp256k1.requireNonZero(newGroupKey);
 
-        bytes32 message =
-            ConsensusMessages.epochRollover(domainSeparator, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey);
+        bytes32 message = ConsensusMessages.epochRollover(
+            domainSeparator, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey
+        );
         FROST.verify(parentKey, signature, message);
 
         if (!isKnown(self, newGroupKey, proposedEpoch)) {

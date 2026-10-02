@@ -57,7 +57,7 @@ rule onlyUpdateEpochAddsPair(env e, method f, calldataarg args, Secp256k1.Point 
 
     assert isKnownEpoch(groupKey, epoch) =>
         f.selector == sig:updateEpoch(
-            Secp256k1.Point, uint64, uint64, uint64, Secp256k1.Point, FROST.Signature).selector,
+            Secp256k1.Point, uint64, uint64, uint64, FROSTGroupId.T, Secp256k1.Point, FROST.Signature).selector,
         "only updateEpoch ever extends the trusted forest";
 }
 
@@ -71,10 +71,11 @@ rule updateEpochRecordsChild(
     uint64 parentEpoch,
     uint64 proposedEpoch,
     uint64 rolloverBlock,
+    FROSTGroupId.T groupId,
     Secp256k1.Point newGroupKey,
     FROST.Signature signature
 ) {
-    updateEpoch(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature);
+    updateEpoch(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature);
 
     assert isKnownEpoch(newGroupKey, proposedEpoch), "a successful rollover records the child (key, epoch)";
 }
@@ -90,6 +91,7 @@ rule updateEpochRecordsOnlyChild(
     uint64 parentEpoch,
     uint64 proposedEpoch,
     uint64 rolloverBlock,
+    FROSTGroupId.T groupId,
     Secp256k1.Point newGroupKey,
     FROST.Signature signature,
     Secp256k1.Point otherKey,
@@ -99,7 +101,7 @@ rule updateEpochRecordsOnlyChild(
 
     bool knownBefore = isKnownEpoch(otherKey, otherEpoch);
 
-    updateEpoch(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature);
+    updateEpoch(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature);
 
     assert isKnownEpoch(otherKey, otherEpoch) == knownBefore,
         "a rollover records only the named (newGroupKey, proposedEpoch) pair";
@@ -116,13 +118,14 @@ rule updateEpochRequiresKnownParent(
     uint64 parentEpoch,
     uint64 proposedEpoch,
     uint64 rolloverBlock,
+    FROSTGroupId.T groupId,
     Secp256k1.Point newGroupKey,
     FROST.Signature signature
 ) {
     require e.msg.value == 0; // non-payable
     require !isKnownEpoch(parentKey, parentEpoch);
 
-    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature);
+    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature);
 
     assert lastReverted, "updateEpoch must revert when the parent (key, epoch) is not trusted";
 }
@@ -133,13 +136,14 @@ rule updateEpochRequiresAdvancingEpoch(
     uint64 parentEpoch,
     uint64 proposedEpoch,
     uint64 rolloverBlock,
+    FROSTGroupId.T groupId,
     Secp256k1.Point newGroupKey,
     FROST.Signature signature
 ) {
     require e.msg.value == 0; // non-payable
     require proposedEpoch <= parentEpoch;
 
-    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature);
+    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature);
 
     assert lastReverted, "updateEpoch must revert unless the proposed epoch strictly advances";
 }
@@ -156,13 +160,14 @@ rule updateEpochRequiresVerifyingProof(
     uint64 parentEpoch,
     uint64 proposedEpoch,
     uint64 rolloverBlock,
+    FROSTGroupId.T groupId,
     Secp256k1.Point newGroupKey,
     FROST.Signature signature
 ) {
     require e.msg.value == 0; // non-payable
     require !frostAccepts; // the rollover proof does NOT verify (F-06 model)
 
-    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature);
+    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature);
 
     assert lastReverted, "a rollover must revert when the FROST proof does not verify";
 }
@@ -180,6 +185,7 @@ rule updateEpochIdempotent(
     uint64 parentEpoch,
     uint64 proposedEpoch,
     uint64 rolloverBlock,
+    FROSTGroupId.T groupId,
     Secp256k1.Point newGroupKey,
     FROST.Signature signature
 ) {
@@ -192,7 +198,7 @@ rule updateEpochIdempotent(
     requireInvariant zeroKeyNeverTrusted(proposedEpoch);
 
     storage before = lastStorage;
-    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature);
+    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature);
 
     assert !lastReverted, "re-submitting an already-known pair does not revert";
     assert lastStorage == before, "re-submitting an already-known pair changes nothing";
@@ -211,6 +217,7 @@ rule updateEpochSucceedsFromKnownParent(
     uint64 parentEpoch,
     uint64 proposedEpoch,
     uint64 rolloverBlock,
+    FROSTGroupId.T groupId,
     Secp256k1.Point newGroupKey,
     FROST.Signature signature
 ) {
@@ -220,7 +227,7 @@ rule updateEpochSucceedsFromKnownParent(
     require isKnownEpoch(parentKey, parentEpoch);
     require proposedEpoch > parentEpoch;
 
-    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature);
+    updateEpoch@withrevert(e, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature);
 
     assert !lastReverted, "the two documented preconditions are the only gates on a rollover";
 }
@@ -239,6 +246,7 @@ rule updateEpochOutcomeIndependentOfSender(
     uint64 parentEpoch,
     uint64 proposedEpoch,
     uint64 rolloverBlock,
+    FROSTGroupId.T groupId,
     Secp256k1.Point newGroupKey,
     FROST.Signature signature
 ) {
@@ -246,11 +254,13 @@ rule updateEpochOutcomeIndependentOfSender(
 
     storage init = lastStorage;
 
-    updateEpoch@withrevert(eA, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature);
+    updateEpoch@withrevert(eA, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature);
     bool revertedA = lastReverted;
     storage afterA = lastStorage;
 
-    updateEpoch@withrevert(eB, parentKey, parentEpoch, proposedEpoch, rolloverBlock, newGroupKey, signature) at init;
+    updateEpoch@withrevert(
+        eB, parentKey, parentEpoch, proposedEpoch, rolloverBlock, groupId, newGroupKey, signature
+    ) at init;
 
     assert revertedA == lastReverted, "updateEpoch's revert outcome does not depend on msg.sender";
     assert lastStorage == afterA, "updateEpoch's state effect does not depend on msg.sender";

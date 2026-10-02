@@ -53,6 +53,7 @@ methods {
         uint64 parentEpoch,
         uint64 proposedEpoch,
         uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
         Secp256k1.Point newGroupKey,
         FROST.Signature signature
     ) external;
@@ -122,6 +123,7 @@ methods {
         uint64 activeEpoch,
         uint64 proposedEpoch,
         uint64 rolloverBlock,
+        FROSTGroupId.T groupId,
         Secp256k1.Point memory groupKey
     ) internal returns (bytes32) => NONDET;
 
