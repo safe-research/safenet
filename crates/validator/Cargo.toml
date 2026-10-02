@@ -9,6 +9,7 @@ alloy.workspace = true
 argh.workspace = true
 frost-core = { version = "3", features = ["internals"] }
 frost-secp256k1 = "3"
+hkdf = "0.12"
 k256.workspace = true
 metrics.workspace = true
 rand.workspace = true

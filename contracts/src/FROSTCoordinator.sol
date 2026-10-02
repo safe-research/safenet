@@ -367,6 +367,14 @@ contract FROSTCoordinator {
      * @param commitment The key generation commitment.
      * @return committed True if all commitments are received and the phase completes.
      * @dev This corresponds to Round 1 of the FROST KeyGen algorithm.
+     *
+     *      The encryption public key `q` is not proven to be owned by the participant, so a malicious participant can
+     *      copy another participant's key (or submit a related one) in order to share an ECDH secret with them.
+     *      Implementations must therefore derive the encryption key for each secret share from the ECDH shared secret
+     *      using a key derivation function that binds it to both the sender and the recipient. Otherwise, the
+     *      plaintext share revealed in response to a complaint also decrypts the share sent to the honest owner of the
+     *      copied key. Additionally, the encryption key and polynomial coefficients must be freshly generated for each
+     *      key generation ceremony and never reused.
      */
     function keyGenCommit(FROSTGroupId.T gid, bytes32[] calldata poap, KeyGenCommitment calldata commitment)
         public

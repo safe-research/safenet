@@ -147,7 +147,7 @@ contract FROSTCoordinatorTest is Test {
                 // additional secret channel. This also implies that we only
                 // completely delete `f` in 2.3, as we need `a_0` to recover the
                 // secret shares sent by other participants.
-                fi = FROSTMath.ecdh(fi, q[i], qq[l]);
+                fi = FROSTMath.ecdh(fi, q[i], qq[l], participants.addr(l), participants.addr(i));
 
                 share.f[k++] = fi;
             }
@@ -177,7 +177,7 @@ contract FROSTCoordinatorTest is Test {
 
                 // EXTENSION: We need to reverse the ECDH we applied in the
                 // previous step.
-                f[i][l] = FROSTMath.ecdh(f[i][l], q[i], qq[l]);
+                f[i][l] = FROSTMath.ecdh(f[i][l], q[i], qq[l], participants.addr(i), participants.addr(l));
 
                 Secp256k1.Point memory gf = ForgeSecp256k1.g(f[i][l]).toPoint();
                 Secp256k1.Point memory fc = FROSTMath.evalCommitmentPolynomial(cc[l], participants.addr(i)).toPoint();

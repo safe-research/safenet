@@ -50,7 +50,19 @@ library FROSTMath {
         return mulmod(numerator, Math.invModPrime(denominator, Secp256k1.N), Secp256k1.N);
     }
 
-    function ecdh(uint256 x, uint256 k, ForgeSecp256k1.P memory q) internal returns (uint256) {
-        return x ^ ForgeSecp256k1.toPoint(ForgeSecp256k1.mul(k, q)).x;
+    function ecdh(uint256 x, uint256 k, ForgeSecp256k1.P memory q, address recipient, address sender)
+        internal
+        returns (uint256)
+    {
+        return x ^ kdf(ForgeSecp256k1.toPoint(ForgeSecp256k1.mul(k, q)).x, recipient, sender);
+    }
+
+    /**
+     * @dev Derives an encryption pad from an ECDH shared secret, bound to the recipient and sender so that copied
+     *      encryption public keys do not share a pad. This is a simple KDF for testing only, a suitable KDF function
+     *      must be chosen for actual implementations.
+     */
+    function kdf(uint256 x, address recipient, address sender) internal pure returns (uint256) {
+        return uint256(keccak256(abi.encodePacked("ecdh", x, recipient, sender)));
     }
 }
