@@ -37,6 +37,11 @@ jobs:
             just-target: test-integration-validator-deep-reorg
             log-artifact: validator-integration-deep-reorg-logs
 
+          - name: validator-7702
+            just-target: test-integration-validator-7702
+            just-args: ""
+            log-artifact: validator-integration-7702-logs
+
     steps:
       - uses: actions/checkout@v5
         with:
