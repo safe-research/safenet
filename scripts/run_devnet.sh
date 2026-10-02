@@ -380,6 +380,9 @@ for validator in "${VALIDATORS[@]}"; do
         echo
         echo "[index]"
         echo "block_time = $((block_time * 1000))"
+        # Anvil mines blocks locally, so there is no propagation to wait for.
+        echo "block_propagation_delay = 0"
+        echo "block_retry_delays = []"
     } > "$config_dir/${name}.toml"
 done
 
@@ -418,6 +421,9 @@ for sentinel in "${SENTINELS[@]}"; do
         echo
         echo "[index]"
         echo "block_time = $((block_time * 1000))"
+        # Anvil mines blocks locally, so there is no propagation to wait for.
+        echo "block_propagation_delay = 0"
+        echo "block_retry_delays = []"
     } > "$config_dir/${name}.toml"
 done
 
