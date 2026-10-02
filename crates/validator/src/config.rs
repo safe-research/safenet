@@ -276,7 +276,10 @@ mod tests {
             "validator=debug,info"
         );
         assert_eq!(config.driver.index.blocks.max_reorg_depth, 12);
-        assert_eq!(config.driver.transactions.max_in_flight_transactions, 4);
+        assert_eq!(
+            config.driver.transactions.mode.max_in_flight_transactions(),
+            4
+        );
     }
 
     #[test]

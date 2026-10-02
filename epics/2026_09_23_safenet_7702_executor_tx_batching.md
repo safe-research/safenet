@@ -13,7 +13,7 @@ This epic lets the transaction queue send a service's queued transactions as `IS
 This design supersedes the `feat/batex_*` branches. Two of their phases are kept (the contract and most of the config); everything from their Phase 3 onward is replaced:
 
 1. **Contract** — take `fix/batex_1` unchanged (rename to `Safenet7702Executor`, calldata-pointer gas optimization, the best-effort `InsufficientGas` guard), then add a `value` to each `Call` and an `ISafenet7702Executor` interface. The services depend on this interface, not on the concrete contract.
-2. **Config** — take `feat/batex_2`'s TOML keys, but group `executor` and `max_batch_gas` into one `Option<ExecutorConfig>`, deserialized through a private flat `RawConfig`, so that `max_batch_gas` without `executor` is a config error. Configuring an executor limits the queue to one transaction in flight.
+2. **Config** — take `feat/batex_2`'s TOML keys, but replace `max_in_flight_transactions` with a `SubmissionMode` enum, either `Direct { max_in_flight_transactions }` or `Batched { executor, max_batch_gas }`, deserialized through a private flat `RawConfig`, so that mixing keys from both modes is a config error. Configuring an executor limits the queue to one transaction in flight.
 3. **Storage** — split the transaction storage into the queued `transactions` and a `nonces` table holding one row per allocated nonce, that is, per onchain transaction. Several queued transactions can be allocated to one nonce. A nonce row can carry an authorization, which reserves the following nonce. If a transaction's nonce is consumed without its authorization's nonce, the storage recovers with a cancellation transaction.
 4. **Unsigned transactions** — replace `TxEip1559` inside the `tx` module with a queue-owned `UnsignedTransaction`. The `Signer` then builds and signs either a `TxEip1559` or a `TxEip7702` (with a self-signed authorization at `nonce + 1`).
 5. **Batching** — replace the nonce cache with an `eth_getProof`-backed account cache (`nonce` and `code_hash`). Add the batch encoder and the EIP-7702 delegation code hash helper. Then wire them into `TransactionQueue::submit_pending`: when an executor is configured, allocate the longest prefix of queued transactions that fits in `max_batch_gas` as one batch. Attach an authorization whenever the account's code hash differs from the one wanted: the executor's delegation designator when an executor is configured, and empty code when none is (an authorization to `address(0)`, which removes a leftover delegation). While the account is delegated, keep one transaction in flight. Histogram metrics show how many calls batches carry and how much gas they use.
@@ -130,7 +130,7 @@ Expiry does not split batches. `queued` only returns transactions that have not 
 - **Leave the delegation in place when the executor is removed.** The account stays delegated, and the mempool keeps capping it at one pending transaction, so `max_in_flight_transactions` would be silently ignored. It would also leave the account's behavior depending on an executor the operator no longer configures. Rejected: the queue undelegates the account.
 - **Unbatched single transactions** (send a batch of one as the original transaction). This saves the executor overhead for lone actions. Rejected per the section above.
 - **`eth_getCode` next to `eth_getTransactionCount`** instead of `eth_getProof`. `eth_getCode` is universally supported, but this takes two requests and two failure modes for what `eth_getProof` returns in one. Rejected. The RPC node must support `eth_getProof` for recent blocks (see Assumptions).
-- **`#[serde(flatten)] Option<ExecutorConfig>`.** Verified: serde's flattened `Option` turns any error in the inner struct into `None`. So `max_batch_gas = 3000000` without `executor` parses as "batching disabled", and so does a malformed `executor = 1`. `flatten` also does not combine reliably with `deny_unknown_fields`. Rejected in favor of `try_from` a flat `RawConfig` (see Tech Specs).
+- **A `#[serde(flatten)]` optional executor struct.** Verified: serde's flattened `Option` turns any error in the inner struct into `None`. So `max_batch_gas = 3000000` without `executor` parses as "batching disabled", and so does a malformed `executor = 1`. `flatten` also does not combine reliably with `deny_unknown_fields`. Rejected in favor of `try_from` a flat `RawConfig` (see Tech Specs).
 
 ---
 
@@ -169,41 +169,42 @@ The interface's natspec is the contract the Safenet services rely on, so any exe
 
 ### Config
 
-`tx::Config` and a new `ExecutorConfig` move to a new `crates/core/src/tx/config.rs` module, re-exported as `pub use self::config::{Config, ExecutorConfig}` from `tx`. `Config` gains one grouped field:
+`tx::Config` moves to a new `crates/core/src/tx/config.rs` module, re-exported with a new `SubmissionMode` as `pub use self::config::{Config, SubmissionMode}` from `tx`. `max_in_flight_transactions` moves into the `SubmissionMode` it applies to:
 
 ```rust
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(try_from = "RawConfig")]
 pub struct Config {
-    pub max_in_flight_transactions: usize,
+    pub mode: SubmissionMode,
     pub blocks_before_resubmit: u64,
     pub priority_fee_cap_percentage: Option<f64>,
-    /// EIP-7702 batching through an `ISafenet7702Executor`. `None` submits
-    /// one transaction per queued transaction.
-    pub executor: Option<ExecutorConfig>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExecutorConfig {
-    /// The `ISafenet7702Executor` the signer account delegates to.
-    pub address: Address,
-    /// The maximum gas a single batch may consume (default 2_000_000). A
-    /// transaction that does not fit on its own gets a one-call batch, so `0`
-    /// sends every transaction through the executor without batching.
-    pub max_batch_gas: u64,
+pub enum SubmissionMode {
+    /// Each queued transaction is submitted as its own transaction.
+    Direct { max_in_flight_transactions: usize },
+    /// Queued transactions are batched into self-calls to an
+    /// `ISafenet7702Executor`, with one transaction in flight at a time.
+    Batched { executor: Address, max_batch_gas: u64 },
+}
+
+impl SubmissionMode {
+    /// `max_in_flight_transactions` for `Direct`, 1 for `Batched`.
+    pub fn max_in_flight_transactions(&self) -> usize;
 }
 ```
 
 `Config` gets its `Deserialize` through `#[serde(try_from = "RawConfig")]`. `RawConfig` is private and mirrors the flat TOML table: `#[serde(default, deny_unknown_fields)]`, the existing fields with `max_in_flight_transactions` as an `Option<usize>`, plus `executor: Option<Address>` and `max_batch_gas: Option<u64>`. Its `Default` is derived from `Config::default()` so the defaults live in one place. `TryFrom<RawConfig> for Config` applies the grouping rules:
 
-- no `executor`: `executor` is `None`, and `max_in_flight_transactions` takes its value or the default of 16;
+- no `executor` and no `max_batch_gas`: `Direct`, with `max_in_flight_transactions` taking its value or the default of 16;
 - `max_batch_gas` without `executor` is an error: "`max_batch_gas` requires `executor`";
 - `max_in_flight_transactions` with `executor` is an error: "`max_in_flight_transactions` cannot be combined with `executor`";
-- `executor` alone or with `max_batch_gas`: `executor` is `Some(ExecutorConfig { address, max_batch_gas: gas.unwrap_or(2_000_000) })` and `max_in_flight_transactions` is 1.
+- `executor` alone or with `max_batch_gas`: `Batched { executor, max_batch_gas: gas.unwrap_or(2_000_000) }`.
 
-Setting the in-flight limit to 1 in the config means a configured executor needs no special case: `submit_pending` already respects `max_in_flight_transactions`. The only in-flight rule the queue applies itself is for an account that is still delegated when no executor is configured (see the Architecture Decision). Rejecting an explicit value, rather than silently ignoring it, follows the same rule as `max_batch_gas` without `executor`. Because `RawConfig` is a plain flat struct with no `flatten`, `deny_unknown_fields` keeps working, and a malformed `executor` value is an ordinary type error instead of silently disabling batching.
+A `Batched` mode's in-flight limit of 1 means a configured executor needs no special case: `submit_pending` already respects `max_in_flight_transactions()`. The only in-flight rule the queue applies itself is for an account that is still delegated when no executor is configured (see the Architecture Decision). Rejecting an explicit value, rather than silently ignoring it, follows the same rule as `max_batch_gas` without `executor`. Because `RawConfig` is a plain flat struct with no `flatten`, `deny_unknown_fields` keeps working, and a malformed `executor` value is an ordinary type error instead of silently disabling batching.
 
-The TOML keys are the same as in `feat/batex_2`: `executor` and `max_batch_gas` in the existing `[transactions]` table, documented in both sample TOMLs. The sample comments are reworded for this design. `feat/batex_2`'s text describes a startup delegation transaction and calls `max_batch_gas` "ignored unless `executor` is set", and neither is true here:
+The TOML keys are the same as in `feat/batex_2`: `executor` and `max_batch_gas` in the existing `[transactions]` table, documented in both sample TOMLs next to a newly documented `max_in_flight_transactions`. The sample comments are reworded for this design. `feat/batex_2`'s text describes a startup delegation transaction and calls `max_batch_gas` "ignored unless `executor` is set", and neither is true here:
 
 ```toml
 # Optional: the `ISafenet7702Executor` this service's signer account delegates
@@ -225,15 +226,14 @@ The TOML keys are the same as in `feat/batex_2`: `executor` and `max_batch_gas` 
 # max_batch_gas = 2000000
 ```
 
-The new `config` module has no test module of its own. The cases are covered by extending the existing config tests in `crates/validator/src/config.rs` and `crates/sentinel/src/config.rs`:
+The new `config` module has its own unit tests, and the services' config tests are not extended:
 
-- both keys set (in-flight limit 1);
-- `executor` only (default gas);
-- neither key (disabled, in-flight limit as configured or defaulted);
+- `executor` with and without `max_batch_gas` (`Batched`, default gas);
+- neither key (`Direct`, in-flight limit as configured or defaulted);
 - `max_batch_gas` alone (rejected);
 - `max_in_flight_transactions` with `executor` (rejected);
 - a malformed `executor` (rejected);
-- an unknown key in `[transactions]` (still rejected).
+- an unknown key (still rejected).
 
 ### Storage schema
 
@@ -399,27 +399,24 @@ async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
     let limit = match account.is_delegated() {
         // Mempools accept one pending transaction from a delegated account.
         true => 1,
-        false => self.config.max_in_flight_transactions,
+        false => self.config.mode.max_in_flight_transactions(),
     };
     let in_flight = self.storage.count_in_flight().await?;
     for _ in in_flight..limit {
         let account = self.account().await?;
         let status = Status { nonce: account.nonce, block };
-        let (ids, mut transaction) = match &self.config.executor {
-            None => {
+        let (ids, mut transaction, wanted) = match self.config.mode {
+            SubmissionMode::Direct { .. } => {
                 let Some((id, transaction)) = self.storage.queued(block, 1).await?.pop() else { break };
-                (vec![id], transaction)
+                (vec![id], transaction, Authorization { address: Address::ZERO })
             }
-            Some(executor) => {
-                let queued = self.storage.queued(block, executor.max_batch_gas / 5_000 + 1).await?;
+            SubmissionMode::Batched { executor, max_batch_gas } => {
+                let queued = self.storage.queued(block, max_batch_gas / 5_000 + 1).await?;
                 if queued.is_empty() { break }
                 let (ids, transactions) = /* unzip */;
-                let (taken, batch) = executor::batch(self.signer.address(), &transactions, executor.max_batch_gas);
-                (ids[..taken].to_vec(), batch)
+                let (taken, batch) = executor::batch(self.signer.address(), &transactions, max_batch_gas);
+                (ids[..taken].to_vec(), batch, Authorization { address: executor })
             }
-        };
-        let wanted = Authorization {
-            address: self.config.executor.as_ref().map_or(Address::ZERO, |executor| executor.address),
         };
         let authorization = (account.code_hash != wanted.code_hash()).then_some(wanted);
         if authorization.is_some() { transaction.gas += 25_000 }
@@ -506,9 +503,9 @@ Pure move: `Config` and its `Default` go from `tx/mod.rs` to a new `tx/config.rs
 
 ### Phase 2b — `executor` / `max_batch_gas` config
 
-Add `ExecutorConfig`, `Config::executor`, the private `RawConfig` and its `TryFrom` (including the in-flight limit of 1 and the rejected combinations), and switch `Config` to `#[serde(try_from = "RawConfig")]`. Re-export `ExecutorConfig`. Add the sample TOML keys with the comments above. Extend both services' config tests with the cases above. Config only: nothing reads `executor` yet.
+Add `SubmissionMode`, replace `Config::max_in_flight_transactions` with `Config::mode`, add the private `RawConfig` and its `TryFrom` (including the in-flight limit of 1 and the rejected combinations), and switch `Config` to `#[serde(try_from = "RawConfig")]`. Re-export `SubmissionMode`. Add the sample TOML keys with the comments above. Add the config module's unit tests with the cases above. Config only: nothing reads `executor` yet.
 
-**Files:** `crates/core/src/tx/config.rs`, `crates/core/src/tx/mod.rs`, `crates/validator/src/config.rs`, `crates/validator/validator.sample.toml`, `crates/sentinel/src/config.rs`, `crates/sentinel/sentinel.sample.toml`.
+**Files:** `crates/core/src/tx/config.rs`, `crates/core/src/tx/mod.rs`, `crates/validator/src/config.rs` (the existing in-flight assertion), `crates/validator/validator.sample.toml`, `crates/sentinel/sentinel.sample.toml`.
 
 ### Phase 3a — `nonces` table and final schema
 
