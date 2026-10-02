@@ -207,9 +207,12 @@ pub fn generate_secret_shares(
                         .get(&peer)
                         .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
                     let signing_share = package.signing_share().to_scalar().to_bytes().into();
-                    Ok(secrets
-                        .encryption_key
-                        .ecdh(encryption_public_key, signing_share))
+                    Ok(secrets.encryption_key.ecdh(
+                        encryption_public_key,
+                        secret_package.identifier(),
+                        &peer,
+                        signing_share,
+                    ))
                 })
                 .collect::<Result<Vec<_>, frost_secp256k1::Error>>()?;
             let share = marshal::solidity_secret_share(&verifying_share, &encrypted_shares);
@@ -376,9 +379,12 @@ pub fn verify_encrypted_secret_share(
                     .shares
                     .get(index)
                     .ok_or(frost_core::Error::IncorrectNumberOfShares)?;
-                let secret_share = sharing_state
-                    .encryption_key
-                    .ecdh(encryption_public_key, *encrypted_share);
+                let secret_share = sharing_state.encryption_key.ecdh(
+                    encryption_public_key,
+                    &identifier,
+                    sharing_state.secret_package.identifier(),
+                    *encrypted_share,
+                );
 
                 Ok((commitment, secret_share))
             })
