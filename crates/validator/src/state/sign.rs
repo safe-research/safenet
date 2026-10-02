@@ -103,7 +103,9 @@ impl Transition {
                     }));
                 }
             },
-            (None, Some(SigningState::WaitingForRequest { .. })) => {
+            (None, Some(SigningState::WaitingForRequest { group_id, .. }))
+                if group_id == event.gid =>
+            {
                 tracing::warn!(
                     message = %event.message,
                     signature_id = %event.sid,
