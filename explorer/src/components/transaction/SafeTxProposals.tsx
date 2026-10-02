@@ -99,6 +99,16 @@ function SafeTxProposalVoting({ oracle, proposal }: { oracle: Address; proposal:
 	);
 }
 
+// Why a proposal will not be attested, for the proposals that never are; null for any other.
+function noAttestationReason({ arbitration, status }: TransactionProposalWithStatus): string | null {
+	if (arbitration !== null) {
+		return arbitration.outcome === null
+			? "Sentinels disagreed, this transaction is under review by the Security Council."
+			: "Sentinels disagreed, so this transaction went to arbitration. It will not be attested.";
+	}
+	return status === "DENIED" ? "Sentinels denied this transaction. It will not be attested." : null;
+}
+
 function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWithStatus; number: number }) {
 	const disputed = proposal.arbitration !== null;
 	// A disputed or denied proposal is never attested, so its signing progress is not loaded: it
@@ -133,10 +143,8 @@ function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWit
 							<InlineBlockInfo block={proposal.attestedAt.block} />{" "}
 							<InlineExplorerTxLink txHash={proposal.attestedAt.tx}>Explorer Tx</InlineExplorerTxLink>
 						</>
-					) : disputed ? (
-						"Never attested, because the transaction entered arbitration"
 					) : (
-						"-"
+						(noAttestationReason(proposal) ?? "-")
 					)}
 				</p>
 			</div>

@@ -196,14 +196,17 @@ describe("SafeTxProposals", () => {
 			expect(rowText("Attested:")).toBe("Attested:-");
 		});
 
-		it.each<[string, Arbitration["outcome"]]>([
-			["a pending dispute", null],
-			["a ruled dispute", { kind: "ruled", secure: true, context: "", at: ruledAt }],
-			["an out-of-scope dispute", { kind: "outOfScope", context: "", at: ruledAt }],
-			["a timed-out dispute", { kind: "timedOut", at: ruledAt }],
-		])("explains that %s is never attested", (_, outcome) => {
+		const UNDER_REVIEW = "Sentinels disagreed, this transaction is under review by the Security Council.";
+		const ARBITRATED = "Sentinels disagreed, so this transaction went to arbitration. It will not be attested.";
+
+		it.each<[string, Arbitration["outcome"], string]>([
+			["a pending dispute", null, UNDER_REVIEW],
+			["a ruled dispute", { kind: "ruled", secure: true, context: "", at: ruledAt }, ARBITRATED],
+			["an out-of-scope dispute", { kind: "outOfScope", context: "", at: ruledAt }, ARBITRATED],
+			["a timed-out dispute", { kind: "timedOut", at: ruledAt }, ARBITRATED],
+		])("explains why %s is not attested", (_, outcome, text) => {
 			renderArbitration(makeArbitration(outcome));
-			expect(rowText("Attested:")).toBe("Attested:Never attested, because the transaction entered arbitration");
+			expect(rowText("Attested:")).toBe(`Attested:${text}`);
 		});
 
 		it("does not load the signing progress of a disputed proposal", () => {
@@ -221,7 +224,7 @@ describe("SafeTxProposals", () => {
 			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
 			expect(useAttestationStatus).not.toHaveBeenCalled();
 			expect(SafeTxAttestationStatus).not.toHaveBeenCalled();
-			expect(rowText("Attested:")).toBe("Attested:-");
+			expect(rowText("Attested:")).toBe("Attested:Sentinels denied this transaction. It will not be attested.");
 		});
 
 		it("loads the signing progress of a proposal without an arbitration", () => {
