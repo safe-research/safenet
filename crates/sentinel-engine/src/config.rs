@@ -20,6 +20,7 @@ pub enum Error {
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// The RPC endpoint used by checks that query onchain state.
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub rpc: Url,
     /// The address on which the transaction-checking API listens.
     #[serde(default = "default_bind_address")]

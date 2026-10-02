@@ -21,11 +21,13 @@ pub enum Error {
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// The RPC endpoint used to initialize the chain provider.
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub rpc: Url,
     /// The signer used to sign and submit transactions onchain.
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub signer: Signer,
     /// The database URL backing persistent state and transaction storage.
-    #[serde(with = "safenet_core::serialization::from_str")]
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub database: SqliteConnectOptions,
     /// Configuration specific to the validator service and its consensus
     /// participation.

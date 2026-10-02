@@ -6,6 +6,11 @@
 # `src/config.rs` for the full schema, and `../../docs/sentinel-handbook.md`
 # for an operator's guide to running a sentinel.
 
+# The `rpc`, `signer` and `database` values below may reference environment
+# variables as `${NAME}` (use `$$` for a literal `$`), so that secrets such as
+# the private key or an RPC API key need not be stored in this file, e.g.
+# `signer = "${SIGNER_PRIVATE_KEY}"`.
+
 # The chain RPC endpoint.
 rpc = "https://rpc.gnosischain.com"
 

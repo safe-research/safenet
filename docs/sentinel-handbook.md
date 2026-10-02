@@ -60,6 +60,8 @@ The exact amount varies by chain and by how many requests a sentinel votes on, s
 
 Configure the sentinel by writing a TOML configuration file — see [`crates/sentinel/src/config.rs`](../crates/sentinel/src/config.rs) for the full schema, and copy [`sentinel.sample.toml`](../crates/sentinel/sentinel.sample.toml) as a worked example to start from. Its mandatory `sentinel.engine` URL is a base URL; the sentinel appends the versioned security-check path itself.
 
+The `rpc`, `signer` and `database` settings may reference environment variables as `${NAME}` (use `$$` for a literal `$`), so that secrets such as the sentinel private key or an RPC API key can be injected at startup instead of being stored in the configuration file — for example `signer = "${SIGNER_PRIVATE_KEY}"`. Substitution applies only to these settings; a referenced variable that is not set fails startup.
+
 ```sh
 cp crates/sentinel/sentinel.sample.toml sentinel.toml
 $EDITOR sentinel.toml
