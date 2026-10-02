@@ -13,16 +13,17 @@ pub mod signer;
 mod storage;
 pub mod types;
 
-pub use self::{
-    config::{Config, SubmissionMode},
-    signer::Signer,
-    types::Transaction,
-};
 use self::{
+    bundle::Bundler,
     fees::cap_priority_fee,
     signer::SigningError,
     storage::{Status, Submission, TransactionStorage},
     types::AllocatedTransaction,
+};
+pub use self::{
+    config::{Config, SubmissionMode},
+    signer::Signer,
+    types::Transaction,
 };
 use crate::{index::BlockStatus, provider::Provider};
 use alloy::{
@@ -185,7 +186,7 @@ impl TransactionQueue {
             let nonce = self.nonce().await?;
             let Some(transaction) = self
                 .storage
-                .next_transaction(Status { nonce, block })
+                .next_transaction(Status { nonce, block }, Bundler::direct(None))
                 .await?
             else {
                 break;
