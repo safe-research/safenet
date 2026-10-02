@@ -44,3 +44,8 @@ pub(super) const fn malformed_scalar() -> frost_secp256k1::Error {
 pub(super) const fn malformed_element() -> frost_secp256k1::Error {
     frost_secp256k1::Error::GroupError(frost_secp256k1::GroupError::MalformedElement)
 }
+
+/// An error indicating an unexpected identity group element (point).
+pub(super) const fn invalid_identity_element() -> frost_secp256k1::Error {
+    frost_secp256k1::Error::GroupError(frost_secp256k1::GroupError::InvalidIdentityElement)
+}

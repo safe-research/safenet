@@ -102,6 +102,9 @@ pub fn solidity_signature(signature: &frost_secp256k1::Signature) -> bindings::S
 
 /// Converts an ABI [`KeyGenCommitment`](bindings::KeyGenCommitment) back to the
 /// peer's encryption public key and DKG round 1 package.
+///
+/// Identity coefficient commitments are rejected, matching FROST's own
+/// coefficient commitment deserialization.
 pub fn frost_commitment(
     commitment: &bindings::KeyGenCommitment,
 ) -> Result<(EncryptionPublicKey, dkg::round1::Package), frost_secp256k1::Error> {
@@ -112,6 +115,9 @@ pub fn frost_commitment(
             .iter()
             .map(|coefficient| {
                 let coefficient = frost_point(coefficient)?;
+                if coefficient.is_identity().into() {
+                    return Err(error::invalid_identity_element());
+                }
                 Ok(frost_core::keys::CoefficientCommitment::new(coefficient))
             })
             .collect::<Result<_, frost_secp256k1::Error>>()?,
