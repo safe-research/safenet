@@ -171,6 +171,12 @@ impl TransactionQueue {
                     nonce,
                 })
                 .await?;
+            if self.storage.recover_authorization_gap(nonce).await? {
+                tracing::warn!(
+                    nonce,
+                    "authorization nonce unused onchain, sending a cancellation in its place"
+                );
+            }
             self.resubmit_stale(status.latest).await?;
             self.submit_pending(status.latest).await?;
         }
@@ -696,5 +702,54 @@ mod tests {
         let transaction = in_flight(&queue).await;
         assert_eq!(transaction.max_fee_per_gas, Some(255));
         assert_eq!(transaction.max_priority_fee_per_gas, Some(13));
+    }
+
+    #[tokio::test]
+    async fn recovers_an_unused_authorization_nonce_with_a_full_budget() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.config.mode = SubmissionMode::Direct {
+            max_in_flight_transactions: 1,
+        };
+
+        // Nonce 0 carries an authorization that takes nonce 1, which fills the
+        // in-flight budget, and another transaction is waiting behind it.
+        queue.storage.enqueue([(tx("0x01"), None)]).await.unwrap();
+        queue
+            .storage
+            .next_transaction(
+                Status { nonce: 0, block: 0 },
+                Bundler::direct(Some(types::Authorization {
+                    address: Address::repeat_byte(0x77),
+                })),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        queue.queue([(tx("0x02"), None)]).await.unwrap();
+
+        // Nonce 0 is consumed without its authorization, so the authorization's
+        // nonce is cancelled and submitted, even though the cancellation takes
+        // up the whole in-flight budget.
+        asserter.push_success(&U64::from(1)); // signer transaction count
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let cancellation = in_flight(&queue).await;
+        assert_eq!(cancellation.nonce, 1);
+        assert_eq!(cancellation.transaction, Transaction::default());
+        assert_eq!(cancellation.max_fee_per_gas, Some(210));
+
+        // Once it lands, the waiting transaction is submitted at the next nonce.
+        asserter.push_success(&U64::from(2)); // signer transaction count
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let next = in_flight(&queue).await;
+        assert_eq!((next.nonce, next.transaction), (2, tx("0x02")));
     }
 }
