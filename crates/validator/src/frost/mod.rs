@@ -255,4 +255,26 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn rejects_identity_coefficient_commitments() {
+        let mut rng = rand::thread_rng();
+        let participant = address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
+        let commitment = keygen::setup(&mut rng, participant, 3, 2)
+            .unwrap()
+            .commitment();
+
+        // FROST cannot serialize identity coefficient commitments, so they must
+        // be rejected at any position, and not only the constant term (whose
+        // proof of knowledge cannot be verified).
+        for i in 0..commitment.c.len() {
+            let mut commitment = commitment.clone();
+            commitment.c[i] = crate::bindings::Point::default();
+            let err = keygen::verify_commitment(participant, &commitment).unwrap_err();
+            assert!(
+                matches!(err, error::Error::Participant { culprit, .. } if culprit == participant),
+                "coefficient {i}: {err:?}"
+            );
+        }
+    }
 }
