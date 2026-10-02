@@ -3,6 +3,7 @@ pragma solidity ^0.8.30;
 
 import {Test} from "@forge-std/Test.sol";
 import {Safenet7702Executor} from "@/Safenet7702Executor.sol";
+import {ISafenet7702Executor} from "@/interfaces/ISafenet7702Executor.sol";
 
 // Minimal call target used to observe forwarded calls, the gas they receive, and failures.
 contract MockTarget {
@@ -73,7 +74,7 @@ contract Safenet7702ExecutorTest is Test {
     function _call(address to, uint256 gasLimit, bytes memory data)
         internal
         pure
-        returns (Safenet7702Executor.Call memory)
+        returns (ISafenet7702Executor.Call memory)
     {
         return _call(to, 0, gasLimit, data);
     }
@@ -81,13 +82,13 @@ contract Safenet7702ExecutorTest is Test {
     function _call(address to, uint256 value, uint256 gasLimit, bytes memory data)
         internal
         pure
-        returns (Safenet7702Executor.Call memory)
+        returns (ISafenet7702Executor.Call memory)
     {
-        return Safenet7702Executor.Call({to: to, value: value, gasLimit: gasLimit, data: data});
+        return ISafenet7702Executor.Call({to: to, value: value, gasLimit: gasLimit, data: data});
     }
 
     function test_Execute_ForwardsToPerCallTargets() public {
-        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](3);
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](3);
         calls[0] = _call(address(targetA), AMPLE_GAS, abi.encodeCall(MockTarget.record, (11)));
         calls[1] = _call(address(targetB), AMPLE_GAS, abi.encodeCall(MockTarget.record, (22)));
         calls[2] = _call(address(targetA), AMPLE_GAS, abi.encodeCall(MockTarget.record, (33)));
@@ -108,7 +109,7 @@ contract Safenet7702ExecutorTest is Test {
     // without the optimizer and without viaIR (see foundry.toml), which is also what gets deployed, so the
     // number reflects production bytecode and is sensitive to the loop body's locals and sub-expressions.
     function test_Execute_GasCost_PinnedForFixedBatch() public {
-        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](4);
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](4);
         calls[0] = _call(address(targetA), AMPLE_GAS, abi.encodeCall(MockTarget.record, (1)));
         calls[1] = _call(address(targetB), AMPLE_GAS, abi.encodeCall(MockTarget.record, (2)));
         calls[2] = _call(address(targetA), AMPLE_GAS, abi.encodeCall(MockTarget.record, (3)));
@@ -128,7 +129,7 @@ contract Safenet7702ExecutorTest is Test {
     function test_Execute_AppliesPerCallGasLimit() public {
         uint256 gasLimit = 50_000;
 
-        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](1);
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](1);
         calls[0] = _call(address(targetA), gasLimit, abi.encodeCall(MockTarget.probeGas, ()));
 
         vm.prank(eoa);
@@ -147,7 +148,7 @@ contract Safenet7702ExecutorTest is Test {
     // That also breaks gas estimation: `eth_estimateGas` searches for the lowest gas limit at which the
     // transaction succeeds, which is exactly such a limit.
     function test_Execute_InsufficientGas_Reverts() public {
-        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](1);
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](1);
         calls[0] = _call(address(targetA), AMPLE_GAS, abi.encodeCall(MockTarget.record, (11)));
 
         // Far less than the call's own AMPLE_GAS limit asks for.
@@ -163,7 +164,7 @@ contract Safenet7702ExecutorTest is Test {
     // The guard names the call it could not fund, and reverting rolls back the calls already made, so a gas
     // shortfall can never leave a batch partially applied.
     function test_Execute_InsufficientGas_RollsBackEarlierCalls() public {
-        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](2);
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](2);
         calls[0] = _call(address(targetA), 350_000, abi.encodeCall(MockTarget.burnGas, (300_000)));
         calls[1] = _call(address(targetA), 600_000, abi.encodeCall(MockTarget.record, (22)));
 
@@ -178,7 +179,7 @@ contract Safenet7702ExecutorTest is Test {
     }
 
     function test_Execute_NotSelf_Reverts() public {
-        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](1);
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](1);
         calls[0] = _call(address(targetA), AMPLE_GAS, abi.encodeCall(MockTarget.record, (1)));
 
         // A caller other than the delegated EOA itself must be rejected.
@@ -188,7 +189,7 @@ contract Safenet7702ExecutorTest is Test {
     }
 
     function test_Execute_ContinuesPastFailure_EmitsCallFailed() public {
-        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](3);
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](3);
         calls[0] = _call(address(targetA), AMPLE_GAS, abi.encodeCall(MockTarget.record, (11)));
         calls[1] = _call(address(targetA), AMPLE_GAS, abi.encodeCall(MockTarget.boom, ()));
         calls[2] = _call(address(targetA), AMPLE_GAS, abi.encodeCall(MockTarget.record, (33)));
@@ -209,7 +210,7 @@ contract Safenet7702ExecutorTest is Test {
     function test_Execute_ForwardsValueFromAccountBalance() public {
         vm.deal(eoa, 1 ether);
 
-        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](2);
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](2);
         calls[0] = _call(address(targetA), 0.25 ether, AMPLE_GAS, abi.encodeCall(MockTarget.deposit, ()));
         calls[1] = _call(address(targetB), AMPLE_GAS, abi.encodeCall(MockTarget.record, (22)));
 
@@ -231,7 +232,7 @@ contract Safenet7702ExecutorTest is Test {
     function test_Execute_UnaffordableValue_ContinuesPastFailure() public {
         vm.deal(eoa, 1 ether);
 
-        Safenet7702Executor.Call[] memory calls = new Safenet7702Executor.Call[](2);
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](2);
         calls[0] = _call(address(targetA), 2 ether, AMPLE_GAS, abi.encodeCall(MockTarget.deposit, ()));
         calls[1] = _call(address(targetB), AMPLE_GAS, abi.encodeCall(MockTarget.record, (22)));
 
