@@ -283,7 +283,7 @@ impl Transition {
                 next_epoch,
                 group,
                 participation,
-                mut public_keys,
+                mut shared,
                 mut shares,
                 complaints,
                 deadline,
@@ -300,8 +300,8 @@ impl Transition {
                     event.participant,
                     &event.share,
                 ) {
-                    Ok((public_key, encrypted_shares)) => {
-                        public_keys.insert(event.participant, public_key);
+                    Ok(encrypted_shares) => {
+                        shared.insert(event.participant);
                         Some(encrypted_shares)
                     }
                     Err(err) => {
@@ -348,7 +348,7 @@ impl Transition {
                     }
                 }
 
-                if public_keys.len() as u16 != count {
+                if shared.len() as u16 != count {
                     // We are still missing shares from some participants, so
                     // stay in the same collecting state.
                     return (
@@ -357,7 +357,7 @@ impl Transition {
                                 next_epoch,
                                 group,
                                 participation,
-                                public_keys,
+                                shared,
                                 shares,
                                 complaints,
                                 deadline,
@@ -1047,12 +1047,12 @@ impl Transition {
             RolloverState::CollectingShares {
                 next_epoch,
                 group,
-                public_keys,
+                shared,
                 deadline: Some(deadline),
                 ..
             } if block >= *deadline => {
                 // There are participants that did not submit secret shares
-                // onchain. Note that we use the `public_keys` map to determine
+                // onchain. Note that we use the `shared` set to determine
                 // which participants are missing and not `shares`: this is
                 // because `shares` contains verified shares, which may be
                 // added later through the complaint flow.
@@ -1061,10 +1061,10 @@ impl Transition {
                     group_id = %group.id(),
                     block,
                     deadline,
-                    shared = ?public_keys.keys().copied().collect::<BTreeSet<_>>(),
+                    ?shared,
                     "key generation share collection timed out"
                 );
-                let excluded = group.exclude_all_others(public_keys.keys());
+                let excluded = group.exclude_all_others(shared.iter());
                 Some((*next_epoch, excluded))
             }
             RolloverState::CollectingConfirmations {
@@ -1280,7 +1280,7 @@ impl Transition {
                 next_epoch,
                 group,
                 participation,
-                public_keys: BTreeMap::new(),
+                shared: BTreeSet::new(),
                 shares: BTreeMap::new(),
                 complaints: BTreeMap::new(),
                 deadline,
