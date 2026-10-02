@@ -888,24 +888,23 @@ mod tests {
 
     /// Allocates `tx("0x5afe01")` at nonce 5, carrying an authorization that
     /// takes nonce 6.
-    async fn authorized_storage() -> (TransactionStorage, Authorization) {
+    async fn authorized_storage() -> (TransactionStorage, AllocatedTransaction) {
         let storage = storage().await;
-        let authorization = Authorization { address: EXECUTOR };
         storage.enqueue([(tx("0x5afe01"), None)]).await.unwrap();
-        storage
+        let allocated = storage
             .next_transaction(
                 Status { nonce: 5, block: 0 },
-                Bundler::direct(Some(authorization)),
+                Bundler::direct(Some(Authorization { address: EXECUTOR })),
             )
             .await
             .unwrap()
             .unwrap();
-        (storage, authorization)
+        (storage, allocated)
     }
 
     #[tokio::test]
     async fn recovers_an_unused_authorization_nonce_once() {
-        let (storage, authorization) = authorized_storage().await;
+        let (storage, allocated) = authorized_storage().await;
 
         // The authorization's nonce becomes a cancellation that is due for
         // submission, and the transaction before it keeps its authorization.
@@ -913,13 +912,7 @@ mod tests {
         assert_eq!(
             storage.stale_submissions(None).await.unwrap(),
             [
-                AllocatedTransaction {
-                    nonce: 5,
-                    transaction: tx("0x5afe01"),
-                    authorization: Some(authorization),
-                    max_fee_per_gas: None,
-                    max_priority_fee_per_gas: None,
-                },
+                allocated,
                 AllocatedTransaction {
                     nonce: 6,
                     transaction: Transaction::default(),

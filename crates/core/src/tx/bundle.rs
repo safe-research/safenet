@@ -6,6 +6,7 @@
 
 use crate::tx::types::{AllocatedTransaction, Authorization, Transaction};
 use alloy::{
+    eips::eip7702::constants::PER_EMPTY_ACCOUNT_COST,
     primitives::{Address, U256},
     sol,
     sol_types::SolCall as _,
@@ -142,9 +143,10 @@ impl Bundler {
     }
 
     /// Finishes the bundle as the transaction allocated to `nonce`, or `None`
-    /// if no transaction was added to it.
+    /// if no transaction was added to it. The transaction's gas includes the
+    /// cost of its authorization, which does not count towards `max_batch_gas`.
     pub fn finish(self, nonce: u64) -> Option<AllocatedTransaction> {
-        let transaction = match self.inner {
+        let mut transaction = match self.inner {
             Inner::Direct(transaction) => transaction?,
             Inner::Batched {
                 account,
@@ -165,6 +167,11 @@ impl Bundler {
                 }
             }
         };
+        // An authorization is charged as if the account were empty, and
+        // partially refunded otherwise.
+        if self.authorization.is_some() {
+            transaction.gas = transaction.gas.saturating_add(PER_EMPTY_ACCOUNT_COST);
+        }
         Some(AllocatedTransaction {
             nonce,
             transaction,
@@ -271,6 +278,22 @@ mod tests {
             let allocated = bundler.finish(5).unwrap();
             assert_eq!(allocated.authorization, Some(authorization));
         }
+    }
+
+    #[test]
+    fn bundles_pay_for_their_authorization() {
+        let authorization = Authorization { address: TARGET };
+
+        let mut bundler = Bundler::direct(Some(authorization));
+        assert!(bundler.push(tx("0x5afe01", 50_000)));
+        assert_eq!(bundler.finish(5).unwrap().transaction.gas, 75_000);
+
+        // The authorization does not count towards the batch gas limit.
+        let limit = batch_gas(&[tx("0x5afe01", 50_000)]);
+        let mut bundler = Bundler::batched(ACCOUNT, limit, Some(authorization));
+        assert!(bundler.push(tx("0x5afe01", 50_000)));
+        assert!(!bundler.push(tx("0x5afe02", 1_000)));
+        assert_eq!(bundler.finish(5).unwrap().transaction.gas, limit + 25_000);
     }
 
     #[test]
