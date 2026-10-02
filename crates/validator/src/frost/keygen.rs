@@ -4,7 +4,7 @@
 use super::{
     ecdh::{self, EncryptionKey},
     error::{Culprit as _, Error},
-    marshal, participants,
+    marshal, participants, serialization,
 };
 use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::{Address, U256};
@@ -72,6 +72,7 @@ where
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedCommitment {
     encryption_public_key: EncryptionPublicKey,
+    #[serde(with = "serialization::round1_package")]
     package: round1::Package,
 }
 
@@ -109,6 +110,7 @@ pub fn verify_commitment(
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GroupCommitments {
     commitments: BTreeMap<Address, VerifiedCommitment>,
+    #[serde(with = "serialization::vss_commitment")]
     group_commitment: keys::VerifiableSecretSharingCommitment,
     verifying_key: VerifyingKey,
 }
@@ -249,15 +251,6 @@ fn group_commitment(
     )
 }
 
-/// A verified public key share.
-///
-/// Public key shares are verified against the commitments made by the
-/// participant at the start of the keygen ceremony.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PublicKeyShare {
-    verifying_share: keys::VerifyingShare,
-}
-
 /// A participant's encrypted key shares, in canonical publishing order.
 pub struct EncryptedSecretShares {
     shares: Vec<[u8; 32]>,
@@ -274,13 +267,13 @@ pub fn verify_secret_share(
     group_commitments: &GroupCommitments,
     participant: Address,
     share: &bindings::KeyGenSecretShare,
-) -> Result<(PublicKeyShare, EncryptedSecretShares), Error> {
+) -> Result<EncryptedSecretShares, Error> {
     if !group_commitments.commitments.contains_key(&participant) {
         return Err(frost_secp256k1::Error::UnknownIdentifier).err_unexpected();
     }
 
     let identifier = participants::identifier(participant);
-    let public_key = marshal::frost_point(&share.y)
+    marshal::frost_point(&share.y)
         .and_then(|y| {
             let verifying_share = keys::VerifyingShare::from_commitment(
                 identifier,
@@ -290,7 +283,7 @@ pub fn verify_secret_share(
                 return Err(frost_secp256k1::Error::MalformedVerifyingKey);
             }
 
-            Ok(PublicKeyShare { verifying_share })
+            Ok(())
         })
         .err_with_culprit(participant)?;
 
@@ -301,7 +294,7 @@ pub fn verify_secret_share(
         shares: share.f.iter().map(U256::to_be_bytes).collect(),
     };
 
-    Ok((public_key, encrypted_shares))
+    Ok(encrypted_shares)
 }
 
 /// A validated signing share from a participant.
