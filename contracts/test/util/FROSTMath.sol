@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
+import {Vm} from "@forge-std/Vm.sol";
 import {Math} from "@oz/utils/math/Math.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
 library FROSTMath {
+    using ForgeSecp256k1 for ForgeSecp256k1.P;
+
+    Vm private constant _VM = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
+
     function evalPolynomial(uint256[] memory a, address participant) internal view returns (uint256 r) {
         r = a[0];
         uint256 x = FROST.identifier(participant);
@@ -51,6 +56,13 @@ library FROSTMath {
     }
 
     function ecdh(uint256 x, uint256 k, ForgeSecp256k1.P memory q) internal returns (uint256) {
-        return x ^ ForgeSecp256k1.toPoint(ForgeSecp256k1.mul(k, q)).x;
+        return x ^ ForgeSecp256k1.mul(k, q).toPoint().x;
+    }
+
+    function proofOfKnowledge(address participant, uint256 a0) internal returns (Secp256k1.Point memory r, uint256 mu) {
+        uint256 k = _VM.randomUint(1, Secp256k1.N - 1);
+        r = ForgeSecp256k1.g(k).toPoint();
+        uint256 c = FROST.keyGenChallenge(participant, ForgeSecp256k1.g(a0).toPoint(), r);
+        mu = addmod(k, mulmod(a0, c, Secp256k1.N), Secp256k1.N);
     }
 }

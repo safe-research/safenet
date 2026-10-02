@@ -366,7 +366,8 @@ contract FROSTCoordinator {
      * @param poap The Merkle proof of participation.
      * @param commitment The key generation commitment.
      * @return committed True if all commitments are received and the phase completes.
-     * @dev This corresponds to Round 1 of the FROST KeyGen algorithm.
+     * @dev This corresponds to Round 1 of the FROST KeyGen algorithm. The commitment's proof of knowledge is verified,
+     *      so that every participant knows the discrete logarithm of its contribution to the group public key.
      */
     function keyGenCommit(FROSTGroupId.T gid, bytes32[] calldata poap, KeyGenCommitment calldata commitment)
         public
@@ -382,6 +383,7 @@ contract FROSTCoordinator {
         }
         Secp256k1.requireNonZero(commitment.q);
         require(commitment.c.length == state.threshold, InvalidGroupCommitment());
+        FROST.verifyProofOfKnowledge(msg.sender, commitment.c[0], commitment.r, commitment.mu);
         group.participants.register(msg.sender, poap);
         group.state = state;
         group.key = Secp256k1.add(group.key, commitment.c[0]);

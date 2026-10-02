@@ -69,11 +69,7 @@ contract FROSTCoordinatorTest is Test {
         FROSTCoordinator.KeyGenCommitment[] memory commitments = new FROSTCoordinator.KeyGenCommitment[](COUNT);
         for (uint256 i = 0; i < COUNT; i++) {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[i];
-
-            uint256 k = vm.randomUint(1, Secp256k1.N - 1);
-            commitment.r = ForgeSecp256k1.g(k).toPoint();
-            uint256 c = FROST.keyGenChallenge(participants.addr(i), ForgeSecp256k1.g(a[i][0]).toPoint(), commitment.r);
-            commitment.mu = addmod(k, mulmod(a[i][0], c, Secp256k1.N), Secp256k1.N);
+            (commitment.r, commitment.mu) = FROSTMath.proofOfKnowledge(participants.addr(i), a[i][0]);
         }
 
         // Round 1.3
@@ -224,6 +220,30 @@ contract FROSTCoordinatorTest is Test {
             assertEq(groupPublicKey.x, groupAccount.publicKeyX);
             assertEq(groupPublicKey.y, groupAccount.publicKeyY);
         }
+    }
+
+    function test_KeyGenCommit_RevertsWithoutProofOfKnowledge() public {
+        // A participant must not be able to commit to a public key share it
+        // does not know the discrete logarithm of, otherwise it could create a
+        // group with a key that no one has access to (such as an existing
+        // group's key).
+        (FROSTGroupId.T existing,,) = _trustedKeyGen(bytes32(0));
+        FROSTGroupId.T gid = coordinator.keyGen(participants.root(), COUNT, THRESHOLD, bytes32(uint256(1)));
+
+        (address participant, bytes32[] memory poap) = participants.proof(0);
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        commitment.q = ForgeSecp256k1.g(1).toPoint();
+        commitment.c = new Secp256k1.Point[](THRESHOLD);
+        for (uint256 j = 1; j < THRESHOLD; j++) {
+            commitment.c[j] = ForgeSecp256k1.g(vm.randomUint(1, Secp256k1.N - 1)).toPoint();
+        }
+        commitment.c[0] = coordinator.groupKey(existing);
+        commitment.r = ForgeSecp256k1.g(vm.randomUint(1, Secp256k1.N - 1)).toPoint();
+        commitment.mu = vm.randomUint(0, Secp256k1.N - 1);
+
+        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
+        vm.prank(participant);
+        coordinator.keyGenCommit(gid, poap, commitment);
     }
 
     function test_Sign() public {
@@ -383,11 +403,14 @@ contract FROSTCoordinatorTest is Test {
         commitment.q = ForgeSecp256k1.g(1).toPoint();
         // In our trusted key gen setup, we pretend like the first participant
         // has the full polynomial for deriving all the shares, and all other
-        // participants do not add anything.
+        // participants only add a constant term of `1` (which is required in
+        // order to provide a proof of knowledge for their commitment).
         commitment.c = new Secp256k1.Point[](THRESHOLD);
+        commitment.c[0] = ForgeSecp256k1.g(1).toPoint();
         for (uint256 i = 1; i < COUNT; i++) {
             bytes32 root = participants.root();
             (address participant, bytes32[] memory poap) = participants.proof(i);
+            (commitment.r, commitment.mu) = FROSTMath.proofOfKnowledge(participant, 1);
             vm.prank(participant);
             coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, poap, commitment);
         }
@@ -397,9 +420,14 @@ contract FROSTCoordinatorTest is Test {
             }
             bytes32 root = participants.root();
             (address participant, bytes32[] memory poap) = participants.proof(0);
+            (commitment.r, commitment.mu) = FROSTMath.proofOfKnowledge(participant, a[0]);
             vm.prank(participant);
             (gid,) = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, poap, commitment);
         }
+
+        // The group polynomial is the first participant's polynomial plus all
+        // of the `1` contributions from the remaining `COUNT - 1` participants.
+        a[0] = addmod(a[0], COUNT - 1, Secp256k1.N);
 
         // We don't actually need to encrypt and broadcast secret shares, the
         // trusted dealer computes the private keys for each participant.
