@@ -90,15 +90,15 @@ contract FROSTCoordinator {
     /**
      * @notice Commitment data for key generation.
      * @custom:param q The participant's public encryption key used to encrypt secret shares.
+     * @custom:param pop The proof of possession of the encryption key `q`.
      * @custom:param c The vector of public commitments.
-     * @custom:param r The public nonce.
-     * @custom:param mu The proof of knowledge scalar.
+     * @custom:param pok The proof of knowledge of the discrete logarithm of `c[0]`.
      */
     struct KeyGenCommitment {
         Secp256k1.Point q;
+        FROST.Signature pop;
         Secp256k1.Point[] c;
-        Secp256k1.Point r;
-        uint256 mu;
+        FROST.Signature pok;
     }
 
     /**
@@ -367,7 +367,9 @@ contract FROSTCoordinator {
      * @param commitment The key generation commitment.
      * @return committed True if all commitments are received and the phase completes.
      * @dev This corresponds to Round 1 of the FROST KeyGen algorithm. The commitment's proof of knowledge is verified,
-     *      so that every participant knows the discrete logarithm of its contribution to the group public key.
+     *      so that every participant knows the discrete logarithm of its contribution to the group public key. The
+     *      proof of possession of the encryption key is also verified, so that a participant cannot reuse another
+     *      participant's encryption key (or a key related to it) in order to decrypt secret shares intended for them.
      */
     function keyGenCommit(FROSTGroupId.T gid, bytes32[] calldata poap, KeyGenCommitment calldata commitment)
         public
@@ -381,9 +383,9 @@ contract FROSTCoordinator {
             state.status = GroupStatus.SHARING;
             state.pending = state.count;
         }
-        Secp256k1.requireNonZero(commitment.q);
         require(commitment.c.length == state.threshold, InvalidGroupCommitment());
-        FROST.verifyProofOfKnowledge(msg.sender, commitment.c[0], commitment.r, commitment.mu);
+        FROST.verifyProofOfKnowledge(msg.sender, commitment.c[0], commitment.pok);
+        FROST.verifyProofOfKnowledge(msg.sender, commitment.q, commitment.pop);
         group.participants.register(msg.sender, poap);
         group.state = state;
         group.key = Secp256k1.add(group.key, commitment.c[0]);

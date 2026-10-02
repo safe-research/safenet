@@ -2,7 +2,7 @@
 //! rounds with address-derived identifiers and ECDH-encrypted secret shares.
 
 use super::{
-    ecdh::EncryptionKey,
+    ecdh::{self, EncryptionKey},
     error::{Culprit as _, Error},
     marshal, participants,
 };
@@ -27,6 +27,7 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Secrets {
     encryption_key: EncryptionKey,
+    encryption_package: ecdh::Package,
     secret_package: round1::SecretPackage,
     proof_of_knowledge: Signature,
 }
@@ -39,7 +40,7 @@ impl Secrets {
             self.secret_package.commitment().clone(),
             self.proof_of_knowledge,
         );
-        marshal::solidity_commitment(&self.encryption_key.public_key(), &round1_package)
+        marshal::solidity_commitment(&self.encryption_package, &round1_package)
     }
 }
 
@@ -52,12 +53,16 @@ where
 {
     let identifier = participants::identifier(me);
     let encryption_key = EncryptionKey::generate(&mut *rng);
+    let encryption_package = encryption_key
+        .package(identifier, &mut *rng)
+        .err_unexpected()?;
     let (secret_package, package) =
         dkg::part1(identifier, count, threshold, &mut *rng).err_unexpected()?;
     let proof_of_knowledge = *package.proof_of_knowledge();
 
     Ok(Secrets {
         encryption_key,
+        encryption_package,
         secret_package,
         proof_of_knowledge,
     })
@@ -71,7 +76,7 @@ pub struct VerifiedCommitment {
 }
 
 /// Verifies a participant's public commitment by decoding its values and
-/// checking its proof of knowledge.
+/// checking its proofs of possession and knowledge.
 ///
 /// These are applied to _both_ `me`, the validator itself, and all peers that
 /// publish key generation commitments onchain; unlike [`generate_secret_shares`]
@@ -85,7 +90,8 @@ pub fn verify_commitment(
     // unexpected FROST error.
     let identifier = participants::identifier(participant);
     marshal::frost_commitment(commitment)
-        .and_then(|(encryption_public_key, package)| {
+        .and_then(|(encryption_package, package)| {
+            let encryption_public_key = encryption_package.verified_public_key(identifier)?;
             frost_core::keys::dkg::verify_proof_of_knowledge(
                 identifier,
                 package.commitment(),

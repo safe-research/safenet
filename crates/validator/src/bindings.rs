@@ -24,7 +24,7 @@ sol! {
     /// A FROST group signature (`FROST.Signature`): the group commitment point
     /// `r` and the scalar component `z`. Onchain attestations and completed
     /// signatures share this shape.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq)]
     struct Signature {
         Point r;
         uint256 z;
@@ -57,14 +57,14 @@ sol! {
     }
 
     /// DKG commitment published in `keyGenAndCommit` / `keyGenCommit`: the
-    /// public encryption key `q`, the commitment vector `c`, the proof-of-
-    /// knowledge nonce `r` and its scalar `mu`.
+    /// public encryption key `q`, the proof of possession `pop` of `q`, the
+    /// commitment vector `c` and the proof of knowledge `pok` of `c[0]`.
     #[derive(Debug, Default, PartialEq, Eq)]
     struct KeyGenCommitment {
         Point q;
+        Signature pop;
         Point[] c;
-        Point r;
-        uint256 mu;
+        Signature pok;
     }
 
     /// DKG secret share published in `keyGenSecretShare`: the participant public
