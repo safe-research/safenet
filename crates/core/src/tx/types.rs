@@ -3,8 +3,8 @@
 use crate::tx::fees;
 use alloy::{
     consensus::constants::KECCAK_EMPTY,
-    eips::eip1559::Eip1559Estimation,
-    primitives::{Address, B256, Bytes, U256},
+    eips::{eip1559::Eip1559Estimation, eip7702::constants::EIP7702_DELEGATION_DESIGNATOR},
+    primitives::{Address, B256, Bytes, U256, keccak256},
 };
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +44,21 @@ pub struct Authorization {
     /// The delegate the signer account authorizes, or `Address::ZERO` to
     /// remove the account's delegation.
     pub address: Address,
+}
+
+impl Authorization {
+    /// The code hash of the signer account once the authorization is applied:
+    /// `keccak256(0xef0100 ‖ address)`, or [`KECCAK_EMPTY`] for
+    /// `Address::ZERO`.
+    pub fn code_hash(&self) -> B256 {
+        if self.address.is_zero() {
+            return KECCAK_EMPTY;
+        }
+        let mut code = [0; 23];
+        code[..3].copy_from_slice(&EIP7702_DELEGATION_DESIGNATOR);
+        code[3..].copy_from_slice(self.address.as_slice());
+        keccak256(code)
+    }
 }
 
 /// The onchain state of the signer account.

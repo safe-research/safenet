@@ -360,7 +360,7 @@ mod tests {
     use super::*;
     use alloy::{
         consensus::constants::KECCAK_EMPTY,
-        primitives::{Address, B256, address, keccak256},
+        primitives::{Address, B256, address, b256, keccak256},
         rpc::{
             json_rpc::ErrorPayload,
             types::{EIP1186AccountProofResponse, FeeHistory},
@@ -434,6 +434,25 @@ mod tests {
                 TransportError::err_resp(ErrorPayload::internal_error_message(message.into()));
             assert!(is_transaction_underpriced(&err));
         }
+    }
+
+    #[test]
+    fn computes_the_code_hash_of_an_authorized_account() {
+        // The code hash Anvil reports for an account delegated to this
+        // address.
+        let delegation = types::Authorization {
+            address: address!("0x4242424242424242424242424242424242424242"),
+        };
+        assert_eq!(
+            delegation.code_hash(),
+            b256!("0x46579a8344a531fa82a2118d3f30fa1fb3eb78c81068bb86d2a4dc702a810a9a"),
+        );
+
+        // Authorizing the zero address removes the delegation.
+        let undelegation = types::Authorization {
+            address: Address::ZERO,
+        };
+        assert_eq!(undelegation.code_hash(), KECCAK_EMPTY);
     }
 
     #[tokio::test]
