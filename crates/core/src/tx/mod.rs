@@ -6,25 +6,25 @@
 //! local [`signer`], and resubmitting with bumped fees when a transaction is
 //! stuck.
 
+mod config;
 mod fees;
 pub mod signer;
 mod storage;
 pub mod types;
 
+pub use self::{config::Config, signer::Signer, types::Transaction};
 use self::{
     fees::cap_priority_fee,
     signer::SigningError,
     storage::{Status, Submission, TransactionStorage},
     types::AllocatedTransaction,
 };
-pub use self::{signer::Signer, types::Transaction};
 use crate::{index::BlockStatus, provider::Provider};
 use alloy::{
     eips::{BlockId, eip1559::Eip1559Estimation},
     providers::Provider as _,
     transports::TransportError,
 };
-use serde::Deserialize;
 use sqlx::sqlite::SqlitePool;
 
 /// Error produced by the [`TransactionQueue`].
@@ -62,33 +62,6 @@ pub(crate) fn lift_intermittent_error<T>(
         Ok(ok) => Ok(Ok(ok)),
         Err(err) if err.is_intermittent() => Ok(Err(err)),
         Err(err) => Err(err),
-    }
-}
-
-/// Transaction queue configuration.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(default, deny_unknown_fields)]
-pub struct Config {
-    /// The maximum number of transactions that may be in flight (submitted
-    /// onchain but not yet executed) at any one time. The queue only submits new
-    /// transactions while it is below this limit.
-    pub max_in_flight_transactions: usize,
-    /// How many blocks a submitted transaction may go unexecuted before it is
-    /// resubmitted with a bumped fee.
-    pub blocks_before_resubmit: u64,
-    /// Caps the priority fee of estimated fees to at most this percentage of the
-    /// total max fee per gas, lowering the priority fee (and max fee) when an
-    /// estimate exceeds it. `None` applies no cap.
-    pub priority_fee_cap_percentage: Option<f64>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            max_in_flight_transactions: 16,
-            blocks_before_resubmit: 2,
-            priority_fee_cap_percentage: None,
-        }
     }
 }
 
