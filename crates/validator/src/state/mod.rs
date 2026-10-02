@@ -293,6 +293,13 @@ enum SigningState {
         responsible: Option<Address>,
         /// The packet being signed.
         packet: Packet,
+        /// Whether the packet's oracle already approved it, in which case the
+        /// signing round does not wait for an oracle result again. This is
+        /// the case when restarting a signing ceremony, as the oracle result
+        /// is only ever emitted once. Packets without an oracle never wait for
+        /// one, regardless of this flag.
+        #[serde(default)]
+        oracle_approved: bool,
         /// The group members expected to take part in signing.
         signers: BTreeSet<Address>,
         /// The block by which the signing round must complete.
