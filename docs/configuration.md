@@ -38,7 +38,9 @@ Genesis Group Id: `0xf3d78298339ca6b6f2885e1157089bc86ac55520544a838400000000000
 
 ### Environment Variables
 
-> [!NOTE] These environment variables configure the legacy TypeScript [Beta validator](https://github.com/safe-research/safenet/tree/beta/validator) that originally ran the Beta Network above, not the current [Rust validator](../crates/validator) (`crates/validator`, configured via a TOML `--config-file` — see `crates/validator/src/config.rs`). The Beta validator's onchain state has diverged from the current repo (e.g. it predates `SentinelOracleV2`/the oracle-backed consensus flow) and is not compatible with it, so this section is left as a historical record rather than updated to match the Rust validator's configuration surface.
+> [!NOTE]
+>
+> These environment variables configure the legacy TypeScript [Beta validator](https://github.com/safe-research/safenet/tree/beta/validator) that originally ran the Beta Network above, not the current [Rust validator](../crates/validator) (`crates/validator`, configured via a TOML `--config-file` — see `crates/validator/src/config.rs`). The Beta validator's onchain state has diverged from the current repo (e.g. it predates `SentinelOracleV2`/the oracle-backed consensus flow) and is not compatible with it, so this section is left as a historical record rather than updated to match the Rust validator's configuration surface.
 
 ```bash
 LOG_LEVEL=notice
