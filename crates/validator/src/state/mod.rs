@@ -503,6 +503,8 @@ impl StateTransition<State> for Transition {
                     proof,
                 } => self.handle_nonce_commitments(state, signature_id, message, nonces, proof),
                 Resume::Nonce { message, nonces } => self.handle_nonces(state, message, nonces),
+                // Signing does not request per-ceremony nonces yet.
+                Resume::NonceCommitmentsNEW { .. } | Resume::NonceNEW { .. } => (state, Vec::new()),
             },
         }
     }
