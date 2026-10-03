@@ -127,17 +127,20 @@ pub enum SecretKind {
     Keygen,
     /// Nonce chunks, each holding many nonces.
     Nonces,
+    /// Signing nonce pairs, one per signing ceremony.
+    NoncesNEW,
 }
 
 impl SecretKind {
     fn variants() -> impl Iterator<Item = Self> {
-        [Self::Keygen, Self::Nonces].into_iter()
+        [Self::Keygen, Self::Nonces, Self::NoncesNEW].into_iter()
     }
 
     fn label(&self) -> &'static str {
         match self {
             Self::Keygen => "keygen",
             Self::Nonces => "nonces",
+            Self::NoncesNEW => "nonces_new",
         }
     }
 }
