@@ -52,13 +52,17 @@ metrics_address = "0.0.0.0:3555"
 
 Each sentinel must be provisioned with a `secp256k1` private key. This key is used to authenticate the sentinel onchain for participation in Safenet Testnet. It must be funded with sufficient gas for the EVM transactions required for onchain commit/reveal communication, and with enough of the fee token to put up bonds on the requests it votes on.
 
-> [!TIP] The sentinel currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for running the sentinel, and fund it only with the amount needed for gas and bonds. In the future, we plan to support KMS systems for more secure setups.
+> [!TIP]
+>
+> The sentinel currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for running the sentinel, and fund it only with the amount needed for gas and bonds. In the future, we plan to support KMS systems for more secure setups.
 
 ##### Gas Costs
 
 The exact amount varies by chain and by how many requests a sentinel votes on, since gas is spent on `commit`/`reveal`/`finalize`/`claim` calls (plus an ERC-20 `approve` for the bond token) rather than on a fixed per-epoch schedule like the validator's. The actual cost of that gas depends on network congestion.
 
-> [!TIP] On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/sentinel/sentinel.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
+> [!TIP]
+>
+> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/sentinel/sentinel.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
 
 > [!TIP] To reduce gas costs and improve throughput, the sentinel can batch its transactions through an EIP-7702 executor implementing `ISafenet7702Executor`, such as [`Safenet7702Executor`](../contracts/src/Safenet7702Executor.sol). Set `executor` (and optionally `max_batch_gas`) in the `[transactions]` table: every transaction is then sent as a self-call to the executor, batching all actions queued while the previous transaction was pending, so many actions can get onchain in a single transaction. The sentinel's first transaction also delegates its account to the executor. EIP-7702 mempools accept only one pending transaction from a delegated account, so the sentinel keeps a single transaction in flight while its account is delegated. Removing `executor` does not undelegate the account immediately: the sentinel's next transaction removes the delegation, and until it executes, only one transaction is in flight.
 

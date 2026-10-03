@@ -35,7 +35,9 @@ The consensus contract is responsible for tracking the current epoch, as well as
 
 The coordinator contract is responsible for coordinating and verifying the various cryptographic protocols required by the Safenet consensus contract.
 
-> [!NOTE] `FROSTCoordinator` acts as a **coordination message bus**, not a decision-making system. On-chain events sequence validator actions and provide a globally ordered communication log, but they do not constitute ceremony outcomes. The authoritative result of any signing ceremony is the FROST Schnorr signature itself — a cryptographic proof independently verifiable by anyone with the group public key and the signed message. This design keeps the coordinator as a pure message bus and avoids liveness issues that would arise from state-changing coordination signals under chain reorgs.
+> [!NOTE]
+>
+> `FROSTCoordinator` acts as a **coordination message bus**, not a decision-making system. On-chain events sequence validator actions and provide a globally ordered communication log, but they do not constitute ceremony outcomes. The authoritative result of any signing ceremony is the FROST Schnorr signature itself — a cryptographic proof independently verifiable by anyone with the group public key and the signed message. This design keeps the coordinator as a pure message bus and avoids liveness issues that would arise from state-changing coordination signals under chain reorgs.
 
 ## FROST
 
@@ -53,27 +55,32 @@ FROST requires a key generation phase to set up _signing key shares_ for each pa
 
 FROST signing ceremonies produce Schnorr signatures for the group key with a selection of participants. The selection does not need to include all participants and only needs to be larger than the group threshold. Safenet's FROST implementation closely follows RFC 9591[^rfc9591], with some changes to accommodate for the onchain communication channel and the use of derived participant identifiers:
 
-- Nonces are precomputed and committed to in chunks onchain before the signing ceremony starts. This is required in order to prevent Wagner's generalized birthday attack. The commitment to a chunk is done as a Merkle root, where individual nonce pairs are revealed per signing ceremony with a Merkle proof (to ensure the nonce pair matches what was originally committed to in the chunk). The chunk size was to be a power of 2 and is set to 1024, its exact value was chosen by "vibes" such that it is small enough that it can be comfortably computed in the time between two blocks, but large enough that chunks don't need to be committed too often onchain.
+- Each participant generates a fresh nonce pair for every signing ceremony it takes part in, and commits to it onchain once the signing ceremony has started. Nothing onchain stops a participant from committing more than once for the same signing ceremony, so validators only consider each participant's first nonce commitment, which is the same for all of them thanks to the blockchain's ordering of transactions. Committing nonces after the message is known does not enable Wagner's generalized birthday attack on concurrent signing ceremonies: each participant's binding factor `ρ_i` ties its signature share to the message and to the nonce commitments of every selected participant. It only requires that each nonce pair is fresh and used for at most one signature share (see [Nonces and Reorgs](#nonces-and-reorgs)).
 - Signature shares are aggregated onchain, allowing for the final Schnorr signature to be known - and verifiable - onchain. In order to block dishonest participants from influencing the signature aggregation, shares are collected and grouped by a _selection root_: a Merkle root representing the participant selection with their publicly computable participant signature commitment share `R_i` and Lagrange coefficient `l_i`. Since all honest participants use the same selection, and can compute the same selection root, they will all contribute to the same aggregate signature. Dishonest participants cannot incorrectly influence the aggregate signature as their provided signature shares are verified onchain. Additionally, dishonest participants cannot DoS the signature ceremony process indefinitely, as the honest validators will simply exclude a validator that acts dishonestly from the selection and they cannot generate a Merkle proof that they are part of a selection root from which they are excluded.
-- Signing ceremonies are started onchain and allocated a unique sequence number, taking advantage of the blockchain's absolute ordering of transactions. This ensures that a committed nonce can be used for one, and only one, signing ceremony, thus preventing nonce reuse which can leak signing key shares.
+- Signing ceremonies are started onchain and allocated a unique sequence number, taking advantage of the blockchain's absolute ordering of transactions. A signing ceremony's signature ID is derived from its group and sequence number, and validators generate one nonce pair per signature ID. This ensures that a committed nonce can be used for one, and only one, signing ceremony, thus preventing nonce reuse which can leak signing key shares.
 - Participant identifiers are derived from each participant's address, rather than sequential integers as specified in RFC 9591[^rfc9591]. This approach is inspired by the [Zcash Foundation FROST implementation](https://github.com/ZcashFoundation/frost/blob/3ffc19d8f473d5bc4e07ed41bc884bdb42d6c29f/frost-core/src/identifier.rs#L50-L62) and binds identifiers to each participant's onchain identity, ensuring that they are unique and uniformly distributed without requiring any prior coordination or ordering among participants.
 
 #### Nonces and Reorgs
 
-In case of a reorg, it is possible that a signing ceremony is linked to a **different message** than what was originally seen. In order to prevent nonce reuse for multiple messages, the validators will delete from memory and storage the nonce as soon as it is used. Consider the following reorg edge case:
+Validators store their nonce pair for a signing ceremony before committing to it, and delete its secret as soon as it is used to compute a signature share. Reorgs never roll this storage back, so a nonce pair produces at most one signature share:
+
+- If a reorg happens before a validator computed its signature share, the validator commits the same stored nonce pair again and uses it once.
+- If a reorg happens after a validator computed its signature share, the nonce secret is already deleted, so the validator neither commits nonces nor signs for that signature ID again, whether or not its nonce commitment was also reorged out. If the signature share was reorged out, the signing ceremony times out and is restarted under a new signature ID, without a nonce ever being reused.
+
+In case of a deeper reorg, it is possible that a signing ceremony is linked to a **different message** than what was originally seen. Consider the following reorg edge case:
 
 1. A signature sequence number `s` is allocated to a message `m` on block `b`
-2. Validators reveal nonce commitments for the signing ceremony with sequence number `s`
-3. Validator(s) `V` reveal a signature share for the signing ceremony `s`
+2. Validators commit nonces for the signing ceremony with sequence number `s`
+3. Validator(s) `V` compute a signature share for the signing ceremony `s`
 4. There is a reorg which uncles block `b`
 5. The signature sequence number `s` is allocated to a **different message `m'`**
 
-The set of validators `V` can no longer reveal a new signature share from step 3, even if that transaction was not included onchain, as it would reuse the nonces whose commitments were revealed in step 2 and leak the validator's signing key share. In this case, either:
+The set of validators `V` can no longer compute a new signature share for the signing ceremony `s`, even if the transaction from step 3 was not included onchain, as it would reuse the nonces committed in step 2 and leak the validator's signing key share. In this case, either:
 
 - The set `V` is small enough that the remaining validators can restart the signing ceremony and successfully produce a group signature with a smaller selection
 - The set `V` is too large and the signing ceremony will not be restarted, resulting in a dropped signature even if it were valid
 
-This implies that the onchain FROST coordination is sensitive to reorgs and requires Safenet to be deployed on a chain that does not experience deep reorgs. Shallow reorgs of 1 block are not an issue, as only nonces that were used for revealed signature shares are an issue, which happens naturally in the second block after the signature request is initiated.
+This implies that the onchain FROST coordination is sensitive to reorgs and requires Safenet to be deployed on a chain that does not experience deep reorgs. Shallow reorgs of 1 block are not an issue, as validators only compute signature shares once every selected participant's nonce commitment is onchain, which happens at the earliest in the block after the one that started the signing ceremony.
 
 ### Parameters
 
@@ -143,13 +150,17 @@ The main purpose of Safenet is to attest to Safe transactions. Attestations are 
 
 Because FROST signatures only require a threshold of participants to be involved, Safenet is resilient to intermittent outages and/or malicious behavior of less than half of the validators participating in an epoch. In case a validator is not available or acts maliciously, it is removed from the selection of participants for a given transaction attestation so that the signing ceremony can be restarted and the transaction ultimately attested.
 
-> [!IMPORTANT] In the event of a severe outage in which half or more of the participating validators in an epoch are down, Safe transactions cannot be attested.
+> [!IMPORTANT]
+>
+> In the event of a severe outage in which half or more of the participating validators in an epoch are down, Safe transactions cannot be attested.
 
 #### Epoch Rollover Attestations
 
 Epoch rollover attestations work in the exact same way as transaction attestations, with just a different signing message. The epoch rollover attestation guarantees that the participants of the current epoch agree to the new FROST group that will become in charge of the following epoch.
 
-> [!IMPORTANT] Like with Safe transaction attestations, in case of a severe outage, epoch rollover attestations will not be possible. This will prevent new epochs from starting, and cause the consensus to stay stuck in an old epoch. While in the older epoch, Safenet can continue to produce Safe transaction attestations, and will automatically recover once sufficient validators come online.
+> [!IMPORTANT]
+>
+> Like with Safe transaction attestations, in case of a severe outage, epoch rollover attestations will not be possible. This will prevent new epochs from starting, and cause the consensus to stay stuck in an old epoch. While in the older epoch, Safenet can continue to produce Safe transaction attestations, and will automatically recover once sufficient validators come online.
 
 #### State Diagram
 
@@ -171,10 +182,10 @@ stateDiagram-v2
 	request --> commit_nonces : Sign()
 	request --> failure : timeout
 
-	commit_nonces --> commit_nonces : SignRevealedNonces(completed=false)
-	commit_nonces --> share : SignRevealedNonces(completed=true)
-	commit_nonces --> share : timeout<br>len(revealed) >= threshold
-	commit_nonces --> skipped : timeout<br>len(revealed) < threshold
+	commit_nonces --> commit_nonces : SignCommittedNonces(completed=false)
+	commit_nonces --> share : SignCommittedNonces(completed=true)
+	commit_nonces --> share : timeout<br>len(committed) >= threshold
+	commit_nonces --> skipped : timeout<br>len(committed) < threshold
 
 	share --> share : SignShared()
 	share --> attest : SignCompleted()
