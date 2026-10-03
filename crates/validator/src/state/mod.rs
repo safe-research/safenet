@@ -316,8 +316,6 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// This validator's nonce selected for the signing round.
-        nonce: NonceIndex,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
@@ -325,8 +323,8 @@ enum SigningState {
         /// The block by which the oracle result must land.
         deadline: u64,
     },
-    /// This validator has revealed its nonce commitment and is waiting for
-    /// its peers to reveal theirs.
+    /// This validator has committed its nonces and is waiting for its peers
+    /// to commit theirs.
     CollectNonceCommitments {
         /// The key share for participating in the signing ceremony.
         key_share: Arc<KeyShare>,
@@ -334,9 +332,7 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// This validator's nonce selected for the signing round.
-        nonce: NonceIndex,
-        /// Verified revealed nonce commitments received from peers so far.
+        /// Verified nonce commitments received from peers so far.
         revealed: BTreeMap<Address, RevealedNonces>,
         /// The packet being signed.
         packet: Packet,
@@ -345,11 +341,11 @@ enum SigningState {
         /// The block by which the commitment round must complete.
         deadline: u64,
     },
-    /// Every signer's nonce commitment has been revealed (or the commitment
-    /// round timed out and the signers that did reveal continue without the
+    /// Every signer's nonce commitment has been collected (or the commitment
+    /// round timed out and the signers that did commit continue without the
     /// others) and this validator's own signature share is being produced;
-    /// waiting for the [`Effect::UseNonce`] effect to complete before it can
-    /// be published.
+    /// waiting for the [`Effect::UseNonceNEW`] effect to complete before it
+    /// can be published.
     CollectSigningShares {
         /// The key share for participating in the signing ceremony.
         key_share: Arc<KeyShare>,
@@ -357,7 +353,7 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// Verified revealed nonce commitments received from peers so far.
+        /// Verified nonce commitments received from peers so far.
         revealed: BTreeMap<Address, RevealedNonces>,
         /// The signing selections.
         selections: BTreeMap<MerkleRoot, SigningSelection>,
@@ -503,8 +499,13 @@ impl StateTransition<State> for Transition {
                     proof,
                 } => self.handle_nonce_commitments(state, signature_id, message, nonces, proof),
                 Resume::Nonce { message, nonces } => self.handle_nonces(state, message, nonces),
-                // Signing does not request per-ceremony nonces yet.
-                Resume::NonceCommitmentsNEW { .. } | Resume::NonceNEW { .. } => (state, Vec::new()),
+                Resume::NonceCommitmentsNEW {
+                    signature_id,
+                    nonces,
+                } => self.handle_nonce_commitments_new(state, signature_id, nonces),
+                Resume::NonceNEW { message, nonces } => {
+                    self.handle_nonces_new(state, message, nonces)
+                }
             },
         }
     }

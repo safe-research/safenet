@@ -67,10 +67,6 @@ pub enum Action {
     },
     /// An action to commit this validator's freshly generated nonces for a
     /// signing round.
-    #[expect(
-        dead_code,
-        reason = "used once signing nonces are committed per ceremony"
-    )]
     CommitNonces {
         signature_id: B256,
         nonces: bindings::SignNonces,
