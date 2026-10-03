@@ -25,6 +25,7 @@ pub const SEQUENCE_CHUNK_SIZE: u64 = 1024;
 
 /// Decodes a global nonce `sequence` number into its `(chunk, offset)`
 /// coordinates within that chunk.
+#[expect(dead_code, reason = "removed together with nonce preprocessing")]
 pub fn decode_sequence(sequence: u64) -> (u64, u64) {
     (
         sequence / SEQUENCE_CHUNK_SIZE,

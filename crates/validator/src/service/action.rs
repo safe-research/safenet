@@ -53,12 +53,14 @@ pub enum Action {
     },
     /// An action to perform the preprocessing step and register a freshly
     /// sampled nonce tree's commitments.
+    #[expect(dead_code, reason = "removed together with nonce preprocessing")]
     Preprocess {
         group_id: B256,
         nonces_commitment: B256,
     },
     /// An action to reveal this validator's nonce commitment for a signing
     /// round.
+    #[expect(dead_code, reason = "removed together with nonce preprocessing")]
     RevealNonceCommitments {
         signature_id: B256,
         nonces: bindings::SignNonces,
