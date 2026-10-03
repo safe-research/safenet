@@ -56,8 +56,8 @@ impl Nonces {
 
     /// The secret FROST signing nonce pair, consumed when producing a signature
     /// share.
-    pub(super) fn signing_nonces(&self) -> &round1::SigningNonces {
-        &self.signing_nonces
+    pub(super) fn signing_nonces(self) -> round1::SigningNonces {
+        self.signing_nonces
     }
 }
 
