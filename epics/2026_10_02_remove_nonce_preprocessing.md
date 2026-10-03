@@ -129,7 +129,7 @@ Removing `Group.nonces` changes the coordinator's storage layout. The coordinato
 **Secret store** (`secrets/store.rs`):
 
 - A new table `signing_nonces(signature_id PRIMARY KEY, group_id, address, nonces NULL, delete_at_block)` is created with `CREATE TABLE IF NOT EXISTS`. The group ID comes from the signature ID, and `nonces` is `NULL` once the secret has been used.
-- `store_signing_nonces(group, me, signature_id, nonces) -> Option<SigningNonces>`: `INSERT … ON CONFLICT DO NOTHING`, then returns the stored pair, or `None` if its secret was already used.
+- `store_signing_nonces(group, signature_id, me, nonces) -> Option<SigningNonces>`: `INSERT … ON CONFLICT DO NOTHING`, then returns the stored pair, or `None` if its secret was already used.
 - `take_signing_nonces(signature_id) -> Option<SigningNonces>`: atomically returns the secret and sets `nonces` to `NULL`, keeping the row.
 - Pruning reuses the existing mechanism:
   - `schedule_absent_groups` also schedules `signing_nonces` rows for groups missing from `RetainedGroups.nonces`.
