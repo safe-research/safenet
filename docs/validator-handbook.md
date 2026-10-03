@@ -54,7 +54,9 @@ metrics_address = "0.0.0.0:3555"
 
 Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet Testnet. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication.
 
-> [!TIP] The validator currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for validating, and fund it only with the amount needed for gas. In the future, we plan to support KMS systems for more secure setups.
+> [!TIP]
+>
+> The validator currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for validating, and fund it only with the amount needed for gas. In the future, we plan to support KMS systems for more secure setups.
 
 ##### Gas Costs
 
@@ -62,7 +64,9 @@ The exact amount varies by chain, but you can expect the account to consume roug
 
 Safenet Testnet’s onchain components are planned for deployment on Gnosis Chain. In a six-month sample window (Aug 25, 2025 – Feb 25, 2026), the average base fee per gas was approximately 0.042 Gwei, translating to just under $0.05 per day in gas costs. However, daily average base fee per gas reached as high as 3.4 Gwei. Based on these figures, validators should expect to need roughly $10 in tokens to cover gas costs over a comparable six-month period; treat this as a rough, dated estimate rather than a current guarantee, and recheck prevailing Gnosis Chain gas prices before funding a validator. It is recommended to overfund the validator to account for base gas fee variability.
 
-> [!TIP] On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/validator/validator.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
+> [!TIP]
+>
+> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/validator/validator.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
 
 #### Consensus Secrets
 
@@ -70,11 +74,13 @@ While participating in consensus, validators generate short-term secrets require
 
 - Secret coefficients used for distributed key generation once per epoch
 - A secret signing share used for attesting Safe transactions once per epoch
-- Secret nonce pairs that are used in signing ceremonies producing Safe transaction attestations once per signing sequence chunk (i.e. once every 1024 signatures)
+- A secret nonce pair for each signing ceremony producing Safe transaction attestations
 
 Loss of these secrets would prevent the validator from participating in consensus until new ones are computed, and it would forgo protocol rewards during that period. Ensure this information survives restarts. In the current implementation, the validator stores these secrets in an SQLite database on disk. Operators must ensure the file persists across restarts and is backed up in case of failure.
 
-> [!IMPORTANT] The secrets are stored in plaintext and are not encrypted in the SQLite database. **Treat the validator database file as containing secret keys**, and apply sufficient restrictions to prevent unauthorized access. **Never share this file with anyone, including the Safenet team for debugging**.
+> [!IMPORTANT]
+>
+> The secrets are stored in plaintext and are not encrypted in the SQLite database. **Treat the validator database file as containing secret keys**, and apply sufficient restrictions to prevent unauthorized access. **Never share this file with anyone, including the Safenet team for debugging**.
 
 ##### Secret Retention
 
@@ -83,13 +89,15 @@ Secrets are not deleted the moment they stop being needed. When the validator ob
 Two Prometheus metrics report this. `safenet_validator_secrets_total{kind}` is a gauge of what the database currently holds, counting secrets that are scheduled for deletion but not yet collected:
 
 - `{kind="keygen"}` counts DKG secret rows, one per group.
-- `{kind="nonces"}` counts nonce **chunks**, each holding 1024 nonces — not individual nonces.
+- `{kind="nonces"}` counts nonce pairs, one per signing ceremony. A nonce pair stays counted after it is used, until its group's secrets are deleted.
 
 It is read from the database at startup and tracked from there, so it describes the file on disk rather than what this run of the validator happens to have done. A level that climbs steadily is the signal that collection is not keeping up.
 
 `safenet_validator_housekeeping_total{result="success"|"failure"}` counts collection passes, one per new block. A pass that finds nothing due is a success. Sustained `failure` means the database is rejecting writes, in which case secrets accumulate rather than being lost.
 
-> [!NOTE] Deadlines are ordered by block number, which does not distinguish between chain branches. After a deep rollback, or a restart that replays past the point where a group was dropped, a deadline recorded on an earlier branch can come due before the validator re-registers the group. The validator then treats the secret like any other that is missing: the signing ceremony that needed it is skipped, and the group times it out or retries it. Deleted secrets are not recreated — a fresh DKG secret cannot reproduce an existing commitment, and a nonce cannot be regenerated once its chunk is gone — so this can cost participation in a ceremony. It cannot cost correctness: a nonce is never reused, whether or not it survives.
+> [!NOTE]
+>
+> Deadlines are ordered by block number, which does not distinguish between chain branches. After a deep rollback, or a restart that replays past the point where a group was dropped, a deadline recorded on an earlier branch can come due before the validator re-registers the group. The validator then treats the secret like any other that is missing: the signing ceremony that needed it is skipped, and the group times it out or retries it. Deleted secrets cannot be recovered — a fresh DKG secret cannot reproduce an existing commitment, and a fresh nonce pair does not match a nonce commitment already published for its signing ceremony — so this can cost participation in a ceremony. It cannot cost correctness: a nonce is never reused, whether or not it survives.
 
 ## Running
 
