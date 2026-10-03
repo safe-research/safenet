@@ -374,7 +374,8 @@ impl Transition {
             return (state, Vec::new());
         };
 
-        let result = match frost::sign::signature_share(key_share, *nonces, revealed, &message) {
+        let nonces = (*nonces).into();
+        let result = match frost::sign::signature_share(key_share, nonces, revealed, &message) {
             Ok(result) => result,
             Err(err) => {
                 tracing::warn!(

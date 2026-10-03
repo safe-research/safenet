@@ -13,8 +13,61 @@ use crate::{bindings, merkle::MerkleTree};
 use alloy::primitives::{Address, B256, U256, keccak256};
 use frost_secp256k1::{Secp256K1Sha256, SigningPackage, round1, round2};
 use k256::elliptic_curve::PrimeField as _;
+use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    fmt::{self, Debug, Formatter},
+};
+
+/// A secret FROST signing nonce pair for a single signing ceremony.
+///
+/// A nonce pair must be used for at most one signature share; producing a
+/// signature share consumes it.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct SigningNonces(round1::SigningNonces);
+
+impl SigningNonces {
+    /// Generates a fresh signing nonce pair for `key_share`.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "used once signing nonces are generated per ceremony"
+        )
+    )]
+    pub fn generate<R>(key_share: &KeyShare, rng: &mut R) -> Self
+    where
+        R: CryptoRng + RngCore,
+    {
+        let signing_share = key_share.as_key_package().signing_share();
+        Self(round1::SigningNonces::new(signing_share, rng))
+    }
+
+    /// The public nonce commitments to publish onchain.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "used once signing nonces are committed per ceremony"
+        )
+    )]
+    pub fn commitments(&self) -> bindings::SignNonces {
+        marshal::solidity_sign_nonces(self.0.commitments())
+    }
+}
+
+impl Debug for SigningNonces {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("SigningNonces").field(&"<redacted>").finish()
+    }
+}
+
+impl From<Nonces> for SigningNonces {
+    fn from(value: Nonces) -> Self {
+        Self(value.signing_nonces())
+    }
+}
 
 /// A validated revealed nonce commitment from a signer.
 ///
@@ -59,7 +112,7 @@ pub struct SignatureShare {
 /// share for the specified key package.
 pub fn signature_share(
     key_share: &KeyShare,
-    nonces: Nonces,
+    nonces: SigningNonces,
     revealed: &BTreeMap<Address, RevealedNonces>,
     message: &B256,
 ) -> Result<SignatureShare, Error> {
@@ -79,7 +132,7 @@ pub fn signature_share(
     // means that any error here is the fault of the caller (for example, by
     // mixing revealed nonces, signing nonces or key packages from different
     // signing ceremonies). There is, therefore, no culprit.
-    round2::sign(&signing_package, nonces.signing_nonces(), key_package)
+    round2::sign(&signing_package, &nonces.0, key_package)
         .and_then(|signature_share| {
             // Each signer's commitment share and Lagrange coefficient are
             // public, so every participant reconstructs the identical signer

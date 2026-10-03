@@ -119,27 +119,14 @@ mod tests {
         let message = keccak256("Hello, Safenet!");
         let signers = [participants[0], participants[2]];
 
-        // Every signer preprocesses a nonce chunk, reveals its first nonce and
-        // verifies each signer's revealed commitment.
+        // Every signer generates a fresh nonce pair for the ceremony, commits
+        // to it and verifies each signer's committed nonces.
         let mut secret_nonces = BTreeMap::new();
         let mut revealed_nonces = BTreeMap::new();
         for signer in signers {
-            let key_share = &key_shares[&signer];
-            let chunk = preprocess::NonceChunk::with_size(1, key_share, &mut rng).unwrap();
-            let nonces = chunk.nonces.into_iter().next().unwrap();
-            let (sign_nonces, proof) = nonces.reveal();
-
-            // Verify the Merkle proof as is done on the smart contract. This
-            // is not expected to be enforced by the clients, but added here for
-            // testing.
-            assert!(
-                chunk
-                    .commitment
-                    .verify(preprocess::nonces_leaf(0, &sign_nonces), proof)
-            );
-
+            let nonces = sign::SigningNonces::generate(&key_shares[&signer], &mut rng);
+            revealed_nonces.insert(signer, nonces.commitments());
             secret_nonces.insert(signer, nonces);
-            revealed_nonces.insert(signer, sign_nonces);
         }
 
         // Each signer independently produces its signature share.
