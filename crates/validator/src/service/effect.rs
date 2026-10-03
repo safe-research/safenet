@@ -281,12 +281,13 @@ impl EffectHandler<Effect, Resume> for Handler {
         // back to is deleted here.
         let result = match self.secrets.prune_scheduled_secrets(status.safe).await {
             Ok(pruned) => {
-                if pruned.keygen > 0 || pruned.nonces > 0 {
+                if pruned.keygen > 0 || pruned.nonces > 0 || pruned.signing_nonces > 0 {
                     tracing::debug!(
                         block = status.latest,
                         safe = status.safe,
                         keygen = pruned.keygen,
                         nonces = pruned.nonces,
+                        signing_nonces = pruned.signing_nonces,
                         "pruned scheduled group secrets"
                     );
                 }
