@@ -132,7 +132,7 @@ Removing `Group.nonces` changes the coordinator's storage layout. The coordinato
 - `store_signing_nonces(group, signature_id, me, nonces) -> Option<SigningNonces>`: `INSERT … ON CONFLICT DO NOTHING`, then returns the stored pair, or `None` if its secret was already used.
 - `take_signing_nonces(signature_id) -> Option<SigningNonces>`: atomically returns the secret and sets `nonces` to `NULL`, keeping the row.
 - Pruning reuses the existing mechanism:
-  - `schedule_absent_groups` also schedules `signing_nonces` rows for groups missing from `RetainedGroups.nonces`.
+  - `schedule_absent_groups` also schedules `signing_nonces` rows for groups whose nonces a reconciliation does not retain.
   - `prune_scheduled_secrets` deletes rows whose `delete_at_block <= safe`.
 - Metrics: a new `SecretKind::NoncesNEW` counts individual pairs. It is renamed to `Nonces` in Phase 11, once the chunk-counting kind is gone.
 
@@ -160,7 +160,7 @@ Matching `EffectKind` metric labels are added for both effects.
 - `NonceState::observe` is still called (its result is ignored) so the still-running preprocessing keeps pruning its chunk map until it is removed in Phase 8.
 - The signing state snapshot format changes, so signing ceremonies in flight during the upgrade are lost. This is acceptable because Safenet is unreleased.
 
-**Removed** (Phases 8, 9a and 9b):
+**Removed** (Phases 8, 9 and 10):
 
 - `state/preprocess.rs`: top-up, `NonceTree`, `Preprocess` handling, `NonceState` and `NonceIndex`. Group reconciliation stays.
 - `Epoch.nonces`.
@@ -171,7 +171,7 @@ Matching `EffectKind` metric labels are added for both effects.
 - From the secret store: the `nonces_chunks` and `nonces` tables and the chunk APIs.
 - `frost/preprocess.rs`.
 - The `rayon` and `rand_chacha` dependencies.
-- `ReconcileGroupSecrets`' key shares: reconciliation only needs the retained group sets once there are no generators to start.
+- `ReconcileGroupSecrets`' key shares: once there are no generators to start, reconciliation only maps each retained group to the secrets it keeps (`RetainedSecrets::{Nonces, All}`).
 
 ### Explorer
 
@@ -193,11 +193,10 @@ Commit and PR titles use `[Direct Nonce <N>]: …`, and the cleanup uses `[Direc
 ```text
 1 (contract) ──────────────┐
                            ├─> 4 ─┐
-2 (frost) ──> 3 (store) ───┴──────┼─> 5 ─> 6 (switch) ─> 7 ─> 8 ─┬─> 9a ─> 9b ─> 11 ─┐
-                                  │                              └─> 10 ─────────────┴─> 12 ─> 13 ─> End
+2 (frost) ──> 3 (store) ───┴──────┴─> 5 ─> 6 (switch) ─> 7 ─> 8 ─> 9 ─> 10 ─> 11 ─> 12 ─> 13 ─> End
 ```
 
-Phases 1 and 2 can run in parallel, and so can phases 10 and 9a/9b.
+Phases 1 and 2 can run in parallel.
 
 ### Phase 0: This plan
 
@@ -238,26 +237,27 @@ This document, as its own PR.
 
 ### Phase 8: Remove preprocessing from the state machine
 
-`state/preprocess.rs`, `state/keygen.rs`, `state/sign.rs` and `state/mod.rs` only, so that the PR shows just the change in the state machine's behaviour. The state machine stops emitting the preprocessing effects and actions, drops its chunk state, and ignores the old resumes. The effects, actions, resumes, bindings and metric labels it no longer uses stay, with a temporary `#[expect(dead_code)]`, and are deleted in Phase 9a.
+`state/preprocess.rs`, `state/keygen.rs`, `state/sign.rs` and `state/mod.rs` only, so that the PR shows just the change in the state machine's behaviour. The state machine stops emitting the preprocessing effects and actions, drops its chunk state, and ignores the old resumes. The effects, actions, resumes, bindings and metric labels it no longer uses stay, with a temporary `#[expect(dead_code)]`, and are deleted in Phase 10.
 
-### Phase 9a: Remove the old effects, actions and nonce chunk generator
+### Phase 9: Group reconciliation without nonce generators
 
-These are mostly deletions:
+`state/preprocess.rs`, `service/effect.rs` (only the `ReconcileGroupSecrets` effect and its handler arm) and `secrets/store.rs` (`RetainedSecrets` replaces `RetainedGroups`). Reconciliation maps each retained group to the secrets it keeps (`RetainedSecrets::{Nonces, All}`) instead of an optional key share, and the handler no longer starts or stops nonce generators, so none run any more. The generator code stays, with a temporary `#[expect(dead_code)]`, until Phase 10.
 
+### Phase 10: Remove the dead preprocessing code
+
+One PR that deletes everything preprocessing left unused, in the contracts, the explorer and the validator. Apart from the signing NatSpec update, these are deletions only:
+
+- the contract removals listed for Phase 10 in the contract table;
+- the explorer's unused `Preprocess` ABI entry;
 - `service/action.rs` (`Preprocess` and `RevealNonceCommitments`);
-- `service/effect.rs` (the old effects and resumes and their handler arms, and the generator field; `ReconcileGroupSecrets` carries only the retained sets);
-- `state/mod.rs` (the ignored old resumes) and `state/preprocess.rs` (reconciliation without key shares);
+- `service/effect.rs` (the old effects and resumes, their handler arms, and the generator field);
+- `state/mod.rs` (the ignored old resumes);
 - `secrets/nonces.rs` (deleted) and `secrets/mod.rs`;
-- `metrics.rs`;
-- `bindings.rs` (`preprocess`, `signRevealNonces`, `Preprocess`).
-
-### Phase 9b: Remove chunk secrets and preprocessing primitives
-
-`secrets/store.rs` (the `nonces_chunks` and `nonces` tables, the chunk APIs, and their tests), `frost/preprocess.rs` (deleted), `frost/mod.rs`, `Cargo.toml` and `Cargo.lock` (`rayon` and `rand_chacha`).
-
-### Phase 10: Remove preprocessing from the contracts
-
-The contract removals listed for Phase 10 in the contract table, and the explorer's unused `Preprocess` ABI entry. Depends on Phase 8, and can run in parallel with Phases 9a and 9b.
+- `secrets/store.rs` (the `nonces_chunks` and `nonces` tables, the chunk APIs, and their tests);
+- `frost/preprocess.rs` (deleted) and `frost/mod.rs`;
+- `metrics.rs` (the old effect labels);
+- `bindings.rs` (`preprocess`, `signRevealNonces`, `Preprocess`);
+- `Cargo.toml` and `Cargo.lock` (`rayon` and `rand_chacha`).
 
 ### Phase 11: Rename the transitional validator names
 

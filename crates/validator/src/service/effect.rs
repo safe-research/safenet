@@ -9,12 +9,12 @@ use crate::{
         sign::SigningNonces,
     },
     metrics::{self, EffectKind, Outcome},
-    secrets::{SecretStore, nonces::NonceGenerator, store::RetainedGroups},
+    secrets::{SecretStore, nonces::NonceGenerator, store::RetainedSecrets},
 };
 use alloy::primitives::{Address, B256};
 use safenet_core::{effects::EffectHandler, index::BlockStatus};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     error::Error,
     fmt::{self, Display, Formatter},
     sync::Arc,
@@ -69,14 +69,12 @@ pub enum Effect {
     /// `signature_id`. Once the nonces are taken, they are burned and can no
     /// longer be used.
     UseNonceNEW { message: B256, signature_id: B256 },
-    /// Reconcile the process-local and persisted secrets with the groups
-    /// retained by the state machine as of `block`, scheduling all secret
-    /// material belonging to other groups for deletion. A key share starts or
-    /// retains a nonce generator; `None` retains the group's DKG secrets
-    /// without running one.
+    /// Reconcile the persisted secrets with the groups retained by the state
+    /// machine as of `block`, scheduling all secret material belonging to
+    /// other groups for deletion.
     ReconcileGroupSecrets {
         block: u64,
-        groups: BTreeMap<B256, Option<Arc<KeyShare>>>,
+        groups: BTreeMap<B256, RetainedSecrets>,
     },
 }
 
@@ -266,59 +264,16 @@ impl Handler {
                 })
                 .unwrap_or(Resume::Noop)),
             Effect::ReconcileGroupSecrets { block, groups } => {
-                // We only need to keep keygen secrets for groups that are still
-                // in DKG and do not yet have a key share.
-                // The process-local nonce generator, however, can only run for
-                // groups that currently have a key share to generate with.
-                let (keygen, nonces) = groups.into_iter().fold(
-                    (BTreeSet::new(), BTreeMap::new()),
-                    |(mut keygen, mut nonces), (group_id, key_share)| {
-                        if let Some(key_share) = key_share {
-                            nonces.insert(group_id, key_share);
-                        } else {
-                            keygen.insert(group_id);
-                        }
-                        (keygen, nonces)
-                    },
-                );
-
-                // Retaining nonces for all groups tracked in the secret store
-                // (with and without secret share) is a work around for the
-                // issue that a reorg can roll a group's key share back to
-                // `None` after nonces were already generated for it (e.g. a
-                // restart replaying past the block where the key share was
-                // confirmed), and those nonces must survive until the group
-                // either re-confirms its key share or is dropped entirely.
-                let retained = RetainedGroups {
-                    nonces: keygen
-                        .iter()
-                        .copied()
-                        .chain(nonces.keys().copied())
-                        .collect(),
-                    keygen,
-                };
-
-                // Hold the generator lock across scheduling so that the
-                // persisted schedules and the process-local generators are
-                // reconciled in the same order as each other.
-                let mut generator = self.nonce_generator.lock().await;
                 if !self
                     .secrets
-                    .schedule_group_secrets_deletion(block, &retained)
+                    .schedule_group_secrets_deletion(block, &groups)
                     .await?
                 {
                     // A reconciliation older than the last accepted one no
-                    // longer describes the groups being tracked, so leave both
-                    // the schedules and the generators as they are.
+                    // longer describes the groups being tracked, so leave the
+                    // schedules as they are.
                     tracing::debug!(block, "ignoring outdated group secret reconciliation");
-                    return Ok(Resume::Noop);
                 }
-
-                generator.retain(|group_id| nonces.contains_key(group_id));
-                for (group_id, key_share) in nonces {
-                    generator.start(group_id, key_share)?;
-                }
-
                 Ok(Resume::Noop)
             }
         }

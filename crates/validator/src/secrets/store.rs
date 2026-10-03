@@ -62,7 +62,10 @@ use sqlx::{
     QueryBuilder, Sqlite,
     sqlite::{SqliteConnection, SqlitePool},
 };
-use std::{collections::BTreeSet, num::TryFromIntError};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    num::TryFromIntError,
+};
 
 /// Error produced by the [`SecretStore`].
 #[derive(Debug, thiserror::Error)]
@@ -84,18 +87,18 @@ impl From<TryFromIntError> for Error {
     }
 }
 
-/// The groups whose secrets a reconciliation keeps, by kind of secret.
+/// The secrets a reconciliation keeps for a group.
 ///
-/// Secrets of any other group are scheduled for deletion. The two sets differ
-/// because a group can still need its persisted nonces after its DKG secrets
-/// have served their purpose.
-#[derive(Debug, Default)]
-pub struct RetainedGroups {
-    /// Groups whose DKG polynomial secrets are kept.
-    pub keygen: BTreeSet<B256>,
-    /// Groups whose nonce chunks, and the nonces under them, as well as
-    /// signing nonces are kept.
-    pub nonces: BTreeSet<B256>,
+/// Secrets of any group a reconciliation does not retain are scheduled for
+/// deletion.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RetainedSecrets {
+    /// Only the group's nonces are kept (nonce chunks, the nonces under them,
+    /// and signing nonces), as its DKG secrets have served their purpose.
+    Nonces,
+    /// All of the group's secrets are kept, including its DKG polynomial
+    /// secrets.
+    All,
 }
 
 /// The secrets a collection removed, by kind of secret.
@@ -399,8 +402,9 @@ impl SecretStore {
             .map_err(Error::from)
     }
 
-    /// Schedules the secrets of every group outside `retained` for deletion
-    /// after `block`, and cancels the deletion scheduled for the groups in it.
+    /// Schedules the secrets of every group that `retained` does not keep for
+    /// deletion after `block`, and cancels the deletion scheduled for the
+    /// secrets it does keep.
     ///
     /// Reconciliations are ordered by the block they were computed for: a
     /// request below the last accepted one describes groups that have since
@@ -417,9 +421,15 @@ impl SecretStore {
     pub async fn schedule_group_secrets_deletion(
         &self,
         block: u64,
-        retained: &RetainedGroups,
+        retained: &BTreeMap<B256, RetainedSecrets>,
     ) -> Result<bool, Error> {
         let block = i64::try_from(block)?;
+        let keygen = retained
+            .iter()
+            .filter(|(_, secrets)| **secrets == RetainedSecrets::All)
+            .map(|(group, _)| *group)
+            .collect();
+        let nonces = retained.keys().copied().collect();
 
         // The ordering decision is a conditional write inside the transaction
         // that applies it, so that concurrent reconciliations are ordered by
@@ -443,9 +453,9 @@ impl SecretStore {
 
         // The tables and the block marker move together: a failure here rolls
         // the marker back as well, so the same block can be reconciled again.
-        schedule_absent_groups(&mut tx, "keygen_secrets", block, &retained.keygen).await?;
-        schedule_absent_groups(&mut tx, "nonces_chunks", block, &retained.nonces).await?;
-        schedule_absent_groups(&mut tx, "signing_nonces", block, &retained.nonces).await?;
+        schedule_absent_groups(&mut tx, "keygen_secrets", block, &keygen).await?;
+        schedule_absent_groups(&mut tx, "nonces_chunks", block, &nonces).await?;
+        schedule_absent_groups(&mut tx, "signing_nonces", block, &nonces).await?;
         tx.commit().await?;
 
         Ok(true)
@@ -645,13 +655,12 @@ mod tests {
             .unwrap()
     }
 
-    /// Retains `groups` for both kinds of secret.
-    fn retained(groups: impl IntoIterator<Item = B256>) -> RetainedGroups {
-        let groups = groups.into_iter().collect::<BTreeSet<_>>();
-        RetainedGroups {
-            keygen: groups.clone(),
-            nonces: groups,
-        }
+    /// Retains all secrets of `groups`.
+    fn retained(groups: impl IntoIterator<Item = B256>) -> BTreeMap<B256, RetainedSecrets> {
+        groups
+            .into_iter()
+            .map(|group| (group, RetainedSecrets::All))
+            .collect()
     }
 
     #[tokio::test]
@@ -710,7 +719,7 @@ mod tests {
         // still without resampling its secrets.
         assert!(
             store
-                .schedule_group_secrets_deletion(1, &RetainedGroups::default())
+                .schedule_group_secrets_deletion(1, &BTreeMap::new())
                 .await
                 .unwrap()
         );
@@ -799,10 +808,7 @@ mod tests {
             store
                 .schedule_group_secrets_deletion(
                     5,
-                    &RetainedGroups {
-                        keygen: BTreeSet::new(),
-                        nonces: BTreeSet::from([GROUP]),
-                    },
+                    &BTreeMap::from([(GROUP, RetainedSecrets::Nonces)]),
                 )
                 .await
                 .unwrap()
@@ -838,7 +844,7 @@ mod tests {
         // where it is.
         assert!(
             !store
-                .schedule_group_secrets_deletion(9, &RetainedGroups::default())
+                .schedule_group_secrets_deletion(9, &BTreeMap::new())
                 .await
                 .unwrap()
         );
@@ -851,7 +857,7 @@ mod tests {
         // every secret in both tables.
         assert!(
             store
-                .schedule_group_secrets_deletion(10, &RetainedGroups::default())
+                .schedule_group_secrets_deletion(10, &BTreeMap::new())
                 .await
                 .unwrap()
         );
@@ -889,7 +895,7 @@ mod tests {
         .unwrap();
         assert!(
             store
-                .schedule_group_secrets_deletion(4, &RetainedGroups::default())
+                .schedule_group_secrets_deletion(4, &BTreeMap::new())
                 .await
                 .is_err()
         );
@@ -905,7 +911,7 @@ mod tests {
             .unwrap();
         assert!(
             store
-                .schedule_group_secrets_deletion(4, &RetainedGroups::default())
+                .schedule_group_secrets_deletion(4, &BTreeMap::new())
                 .await
                 .unwrap()
         );
@@ -1004,7 +1010,7 @@ mod tests {
             .unwrap();
         assert!(
             store
-                .schedule_group_secrets_deletion(1, &RetainedGroups::default())
+                .schedule_group_secrets_deletion(1, &BTreeMap::new())
                 .await
                 .unwrap()
         );
@@ -1052,7 +1058,7 @@ mod tests {
             .unwrap();
         assert!(
             store
-                .schedule_group_secrets_deletion(1, &RetainedGroups::default())
+                .schedule_group_secrets_deletion(1, &BTreeMap::new())
                 .await
                 .unwrap()
         );
