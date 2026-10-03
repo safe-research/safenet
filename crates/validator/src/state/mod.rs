@@ -61,27 +61,6 @@ struct Epoch {
     group: Group,
     /// This validator's key share.
     key_share: Arc<KeyShare>,
-    /// This validator's canonical nonce-tree assignments for the epoch.
-    nonces: NonceState,
-}
-
-/// Canonical nonce state for one participating epoch.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct NonceState {
-    /// The next signing sequence expected for the group.
-    next_sequence: u64,
-    /// Canonical nonce roots by sequence chunk. `None` reserves a chunk while
-    /// its locally generated root is waiting to be registered onchain.
-    chunks: BTreeMap<u64, Option<B256>>,
-}
-
-/// The durable-store coordinates of a nonce selected by canonical state.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-struct NonceIndex {
-    /// The nonce tree's Merkle root.
-    root: B256,
-    /// The nonce's offset within the tree.
-    offset: u64,
 }
 
 /// The epoch-rollover / DKG state machine. Each active variant carries the
@@ -427,9 +406,6 @@ impl StateTransition<State> for Transition {
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplaintResponded(
                     event,
                 )) => self.handle_key_gen_complaint_responded(state, log.block, &event),
-                Event::Coordinator(Coordinator::CoordinatorEvents::Preprocess(event)) => {
-                    self.handle_preprocess(state, &event)
-                }
                 Event::Coordinator(Coordinator::CoordinatorEvents::Sign(event)) => {
                     self.handle_sign(state, log.block, &event)
                 }
@@ -461,7 +437,6 @@ impl StateTransition<State> for Transition {
                 let (state, rollover_commands) = self.handle_rollover_new_block(state, block);
                 let (state, keygen_timeout_commands) = self.handle_key_gen_timeouts(state, block);
                 let (state, signing_timeout_commands) = self.handle_signing_timeouts(state, block);
-                let (state, nonce_topup_commands) = self.handle_nonce_topup(state);
                 let (state, reconciliation_commands) =
                     self.handle_group_reconciliation(state, block);
                 (
@@ -470,28 +445,21 @@ impl StateTransition<State> for Transition {
                         rollover_commands,
                         keygen_timeout_commands,
                         signing_timeout_commands,
-                        nonce_topup_commands,
                         reconciliation_commands,
                     ]
                     .concat(),
                 )
             }
             Message::Resume(result) => match result {
-                Resume::Noop => (state, Vec::new()),
+                // The preprocessing effects producing these resumes are no
+                // longer emitted.
+                Resume::Noop
+                | Resume::NonceTree { .. }
+                | Resume::NonceCommitments { .. }
+                | Resume::Nonce { .. } => (state, Vec::new()),
                 Resume::Setup { group_id, secrets } => {
                     self.handle_key_gen_setup(state, group_id, secrets)
                 }
-                Resume::NonceTree {
-                    group_id,
-                    commitment,
-                } => self.handle_nonce_tree(state, group_id, commitment),
-                Resume::NonceCommitments {
-                    signature_id,
-                    message,
-                    nonces,
-                    proof,
-                } => self.handle_nonce_commitments(state, signature_id, message, nonces, proof),
-                Resume::Nonce { message, nonces } => self.handle_nonces(state, message, nonces),
                 Resume::NonceCommitmentsNEW {
                     signature_id,
                     nonces,
