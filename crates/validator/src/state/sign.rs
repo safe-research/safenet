@@ -115,7 +115,7 @@ impl Transition {
     /// Publishes this validator's nonce commitments once the
     /// [`Effect::GenerateNonces`] effect has produced them, entering
     /// [`SigningState::CollectNonceCommitments`]'s collection round.
-    pub(super) fn handle_nonce_commitments_new(
+    pub(super) fn handle_nonce_commitments(
         &self,
         state: State,
         signature_id: B256,
@@ -227,7 +227,7 @@ impl Transition {
     /// Tracks a peer's nonce commitment. Only a signer's first commitment for
     /// the ceremony counts, and later ones are ignored. Once every expected
     /// signer has committed, enters [`SigningState::CollectSigningShares`] and
-    /// dispatches the [`Effect::UseNonceNEW`] effect to burn this validator's
+    /// dispatches the [`Effect::UseNonce`] effect to burn this validator's
     /// own nonces and produce a signature share from the now-complete set of
     /// commitments.
     pub(super) fn handle_sign_revealed_nonces(
@@ -320,7 +320,7 @@ impl Transition {
 
                 (
                     state,
-                    vec![Command::Effect(Effect::UseNonceNEW {
+                    vec![Command::Effect(Effect::UseNonce {
                         message,
                         signature_id,
                     })],
@@ -335,11 +335,11 @@ impl Transition {
     }
 
     /// Publishes this validator's signature share once the
-    /// [`Effect::UseNonceNEW`] effect has produced its nonces, attaching the
+    /// [`Effect::UseNonce`] effect has produced its nonces, attaching the
     /// packet's completion callback (`stageEpoch`/`attestTransaction`) so the
     /// group's completed signature carries out its onchain effect
     /// automatically.
-    pub(super) fn handle_nonces_new(
+    pub(super) fn handle_nonces(
         &self,
         state: State,
         message: B256,
