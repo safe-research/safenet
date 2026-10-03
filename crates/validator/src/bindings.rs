@@ -75,7 +75,7 @@ sol! {
         uint256[] f;
     }
 
-    /// A revealed FROST nonce commitment pair (hiding `d`, binding `e`).
+    /// A FROST nonce commitment pair (hiding `d`, binding `e`).
     #[derive(Debug, Default, PartialEq, Eq)]
     struct SignNonces {
         Point d;
@@ -203,7 +203,7 @@ sol! {
             bytes32 sid,
             uint64 sequence
         );
-        event SignRevealedNonces(bytes32 indexed sid, address participant, SignNonces nonces);
+        event SignCommittedNonces(bytes32 indexed sid, address participant, SignNonces nonces);
         event SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z);
         event SignCompleted(bytes32 indexed sid, bytes32 indexed selectionRoot, Signature signature);
 

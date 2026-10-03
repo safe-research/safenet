@@ -158,7 +158,7 @@ export const loadLatestAttestationStatus = async ({
 				status.lastUpdate = log.blockNumber;
 			}
 			switch (log.eventName) {
-				case "SignRevealedNonces": {
+				case "SignCommittedNonces": {
 					status.committed.push({
 						address: log.args.participant,
 						block: log.blockNumber,

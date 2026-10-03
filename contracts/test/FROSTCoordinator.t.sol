@@ -258,7 +258,7 @@ contract FROSTCoordinatorTest is Test {
             n.e = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[h]));
             FROSTCoordinator.SignNonces memory nn = FROSTCoordinator.SignNonces({d: n.d.toPoint(), e: n.e.toPoint()});
             vm.expectEmit();
-            emit FROSTCoordinator.SignRevealedNonces(sid, participants.addr(h), nn);
+            emit FROSTCoordinator.SignCommittedNonces(sid, participants.addr(h), nn);
             vm.prank(participants.addr(h));
             coordinator.signCommitNonces(sid, nn);
         }

@@ -226,12 +226,12 @@ contract FROSTCoordinator {
     );
 
     /**
-     * @notice Emitted when a participant reveals nonces for signing.
+     * @notice Emitted when a participant commits nonces for signing.
      * @param sid The signature ID.
      * @param participant The participant address.
-     * @param nonces The revealed nonces.
+     * @param nonces The committed nonces.
      */
-    event SignRevealedNonces(FROSTSignatureId.T indexed sid, address participant, SignNonces nonces);
+    event SignCommittedNonces(FROSTSignatureId.T indexed sid, address participant, SignNonces nonces);
 
     /**
      * @notice Emitted when a participant submits a signature share.
@@ -532,7 +532,7 @@ contract FROSTCoordinator {
         group.participants.verify(msg.sender);
         Secp256k1.requireNonZero(nonces.d);
         Secp256k1.requireNonZero(nonces.e);
-        emit SignRevealedNonces(sid, msg.sender, nonces);
+        emit SignCommittedNonces(sid, msg.sender, nonces);
     }
 
     /**

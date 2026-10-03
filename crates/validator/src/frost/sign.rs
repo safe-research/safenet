@@ -48,30 +48,26 @@ impl Debug for SigningNonces {
     }
 }
 
-/// A validated revealed nonce commitment from a signer.
+/// A signer's validated nonce commitments.
 ///
-/// Revealing happens onchain (`signRevealNonces`), so a peer's `d`/`e` points
-/// have already been merkle-checked against their preprocessing commitment;
-/// this additionally attributes malformed or identity point to a misbehaving
-/// participant.
+/// Committing happens onchain (`signCommitNonces`), which only accepts points
+/// on the curve from the group's participants; this additionally attributes
+/// malformed or identity point to a misbehaving participant.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct RevealedNonces {
+pub struct CommittedNonces {
     commitments: round1::SigningCommitments,
 }
 
-/// Verifies a signer's revealed nonce commitments.
+/// Verifies a signer's nonce commitments.
 ///
 /// This just verifies that the nonce commitments are valid values (i.e. they
-/// are non-identity points on the secp256k1 curve). We do not verify the
-/// inclusion proof that the nonces were part of a nonces chunk commitment
-/// submitted during the preprocessing phase (this is verified by the FROST
-/// coordinator contract onchain).
-pub fn verify_revealed_nonces(
+/// are non-identity points on the secp256k1 curve).
+pub fn verify_committed_nonces(
     participant: Address,
     nonces: &bindings::SignNonces,
-) -> Result<RevealedNonces, Error> {
+) -> Result<CommittedNonces, Error> {
     let commitments = marshal::frost_signing_commitments(nonces).err_with_culprit(participant)?;
-    Ok(RevealedNonces { commitments })
+    Ok(CommittedNonces { commitments })
 }
 
 /// The onchain artifacts of a single participant's `signShare` submission.
@@ -86,30 +82,30 @@ pub struct SignatureShare {
 
 /// Produces a signature share to be submitted onchain.
 ///
-/// Builds the signer-set selection from every signer's verified revealed nonce
+/// Builds the signer-set selection from every signer's verified nonce
 /// commitments then consumes the secret signing nonce to produce a signature
 /// share for the specified key package.
 pub fn signature_share(
     key_share: &KeyShare,
     nonces: SigningNonces,
-    revealed: &BTreeMap<Address, RevealedNonces>,
+    committed: &BTreeMap<Address, CommittedNonces>,
     message: &B256,
 ) -> Result<SignatureShare, Error> {
     let key_package = key_share.as_key_package();
     let group_public_key = key_package.verifying_key();
 
-    let commitments = revealed
+    let commitments = committed
         .iter()
-        .map(|(address, revealed)| {
+        .map(|(address, committed)| {
             let identifier = participants::identifier(*address);
-            (identifier, revealed.commitments)
+            (identifier, committed.commitments)
         })
         .collect();
     let signing_package = SigningPackage::new(commitments, message.as_slice());
 
-    // The signing package is built from pre-verified revealed nonces. This
+    // The signing package is built from pre-verified committed nonces. This
     // means that any error here is the fault of the caller (for example, by
-    // mixing revealed nonces, signing nonces or key packages from different
+    // mixing committed nonces, signing nonces or key packages from different
     // signing ceremonies). There is, therefore, no culprit.
     round2::sign(&signing_package, &nonces.0, key_package)
         .and_then(|signature_share| {
@@ -120,17 +116,17 @@ pub fn signature_share(
             // ascending order on its keys.
             let binding_factors =
                 frost_core::compute_binding_factor_list(&signing_package, group_public_key, &[])?;
-            let signers = revealed
+            let signers = committed
                 .iter()
-                .map(|(address, revealed)| {
+                .map(|(address, committed)| {
                     let identifier = participants::identifier(*address);
                     let binding_factor = binding_factors
                         .get(&identifier)
                         .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;
                     let interpolating_value =
                         frost_core::derive_interpolating_value(&identifier, &signing_package)?;
-                    let commitment_share = revealed.commitments.hiding().value()
-                        + revealed.commitments.binding().value()
+                    let commitment_share = committed.commitments.hiding().value()
+                        + committed.commitments.binding().value()
                             * binding_factor_to_scalar(binding_factor);
 
                     let r = marshal::solidity_point(&commitment_share);
