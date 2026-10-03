@@ -65,6 +65,17 @@ pub enum Action {
         proof: Vec<B256>,
         expires_at: u64,
     },
+    /// An action to commit this validator's freshly generated nonces for a
+    /// signing round.
+    #[expect(
+        dead_code,
+        reason = "used once signing nonces are committed per ceremony"
+    )]
+    CommitNonces {
+        signature_id: B256,
+        nonces: bindings::SignNonces,
+        expires_at: u64,
+    },
     /// An action to publish this validator's signature share, along with the
     /// callback invoked once the group's signature completes.
     SignShare {
@@ -270,6 +281,24 @@ impl ActionEncoder<Action> for Encoder {
                     .abi_encode()
                     .into(),
                     gas: 250_000,
+                },
+                Some(expires_at),
+            ),
+            Action::CommitNonces {
+                signature_id,
+                nonces,
+                expires_at,
+            } => (
+                Transaction {
+                    to: self.coordinator,
+                    value: U256::ZERO,
+                    data: Coordinator::signCommitNoncesCall {
+                        sid: signature_id,
+                        nonces,
+                    }
+                    .abi_encode()
+                    .into(),
+                    gas: 100_000,
                 },
                 Some(expires_at),
             ),
