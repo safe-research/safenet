@@ -15,11 +15,6 @@
 //! - **DKG secrets** are reused (not resampled) when already present, so a
 //!   reorged-and-re-included commitment stays consistent with the shares the
 //!   validator can still produce. They are retired once the keygen resolves.
-//! - **Nonces** are handed out exactly once and are *removed* immediately when
-//!   taken, in order to prevent accidental reuse. That deletion is permanent
-//!   and nothing below ever restores it. Unused nonces persist so a re-included
-//!   `preprocess` commitment can still be signed against, and are retired when
-//!   the owning group is.
 //! - **Signing nonces** are generated per signing ceremony, keyed by signature
 //!   ID, and the first pair stored for a ceremony is the only one it ever gets.
 //!   Taking a pair clears its secret but keeps the row, so a ceremony whose
@@ -46,12 +41,7 @@
 //! other that is missing rather than being recreated.
 
 use crate::{
-    bindings,
-    frost::{
-        keygen::Secrets,
-        preprocess::{NonceChunk, Nonces},
-        sign::SigningNonces,
-    },
+    frost::{keygen::Secrets, sign::SigningNonces},
     metrics::{self, SecretKind},
 };
 use alloy::{
@@ -93,8 +83,8 @@ impl From<TryFromIntError> for Error {
 /// deletion.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RetainedSecrets {
-    /// Only the group's nonces are kept (nonce chunks, the nonces under them,
-    /// and signing nonces), as its DKG secrets have served their purpose.
+    /// Only the group's signing nonces are kept, as its DKG secrets have served
+    /// their purpose.
     Nonces,
     /// All of the group's secrets are kept, including its DKG polynomial
     /// secrets.
@@ -106,8 +96,6 @@ pub enum RetainedSecrets {
 pub struct Pruned {
     /// DKG polynomial secret rows removed.
     pub keygen: u64,
-    /// Nonce chunk rows removed, not counting the nonces cascaded with them.
-    pub nonces: u64,
     /// Signing nonce rows removed, including those whose secret was used.
     pub signing_nonces: u64,
 }
@@ -137,22 +125,6 @@ impl SecretStore {
                  PRIMARY KEY (group_id, address)
              );
 
-             CREATE TABLE IF NOT EXISTS nonces_chunks (
-                 root            TEXT NOT NULL,
-                 group_id        TEXT NOT NULL,
-                 address         TEXT NOT NULL,
-                 delete_at_block INTEGER,
-                 PRIMARY KEY (root)
-             );
-
-             CREATE TABLE IF NOT EXISTS nonces (
-                 root  TEXT    NOT NULL,
-                 offs  INTEGER NOT NULL,
-                 nonce TEXT    NOT NULL,
-                 PRIMARY KEY (root, offs),
-                 FOREIGN KEY (root) REFERENCES nonces_chunks (root) ON DELETE CASCADE
-             );
-
              CREATE TABLE IF NOT EXISTS signing_nonces (
                  signature_id    TEXT NOT NULL,
                  group_id        TEXT NOT NULL,
@@ -167,9 +139,6 @@ impl SecretStore {
                  block INTEGER NOT NULL
              );
 
-             CREATE INDEX IF NOT EXISTS idx_nonces_chunks_group
-                 ON nonces_chunks (group_id);
-
              CREATE INDEX IF NOT EXISTS idx_signing_nonces_group
                  ON signing_nonces (group_id);",
         )
@@ -179,15 +148,13 @@ impl SecretStore {
         // Seed the secret gauges from the rows already on disk; every mutation
         // below keeps them in step from here on, so nothing else may add or
         // remove rows in these tables.
-        let (keygen, nonces, signing_nonces) = sqlx::query_as::<_, (i64, i64, i64)>(
+        let (keygen, signing_nonces) = sqlx::query_as::<_, (i64, i64)>(
             "SELECT (SELECT COUNT(*) FROM keygen_secrets),
-                    (SELECT COUNT(*) FROM nonces_chunks),
                     (SELECT COUNT(*) FROM signing_nonces)",
         )
         .fetch_one(&pool)
         .await?;
         metrics::secrets_total(SecretKind::Keygen).set(keygen as f64);
-        metrics::secrets_total(SecretKind::Nonces).set(nonces as f64);
         metrics::secrets_total(SecretKind::NoncesNEW).set(signing_nonces as f64);
 
         Ok(Self { pool })
@@ -237,88 +204,6 @@ impl SecretStore {
         metrics::secrets_total(SecretKind::Keygen).increment(inserted);
 
         Ok(stored)
-    }
-
-    /// Persists the freshly generated preprocessing `chunk`, tagged with its
-    /// owning `group` and participant, and echoes back its Merkle root.
-    pub async fn register_nonces_chunk(
-        &self,
-        group: B256,
-        me: Address,
-        chunk: NonceChunk,
-    ) -> Result<B256, Error> {
-        let root = chunk.commitment.0;
-
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO nonces_chunks (root, group_id, address) VALUES (?, ?, ?)")
-            .bind(key(root))
-            .bind(key(group))
-            .bind(key(me))
-            .execute(&mut *tx)
-            .await?;
-        for (offset, nonce) in chunk.nonces.into_iter().enumerate() {
-            sqlx::query("INSERT INTO nonces (root, offs, nonce) VALUES (?, ?, ?)")
-                .bind(key(root))
-                .bind(i64::try_from(offset)?)
-                .bind(serde_json::to_string(&nonce)?)
-                .execute(&mut *tx)
-                .await?;
-        }
-        tx.commit().await?;
-        metrics::secrets_total(SecretKind::Nonces).increment(1);
-
-        Ok(root)
-    }
-
-    /// Returns the public reveal of the nonce at `(root, offset)` without
-    /// removing it, or `None` when no such nonce is stored.
-    ///
-    /// Only [`Nonces::reveal`] information (the onchain commitments and merkle
-    /// proof) is returned, never the secret nonce itself. Because this is a
-    /// non-consuming read of public data, a state transition may call it
-    /// repeatedly - for example to re-emit a nonce reveal after a reorg -
-    /// without risking nonce reuse.
-    pub async fn nonces_reveal(
-        &self,
-        root: B256,
-        offset: u64,
-    ) -> Result<Option<(bindings::SignNonces, Vec<B256>)>, Error> {
-        Ok(sqlx::query_scalar::<_, String>(
-            "SELECT nonce FROM nonces
-             WHERE root = ? AND offs = ?",
-        )
-        .bind(key(root))
-        .bind(i64::try_from(offset)?)
-        .fetch_optional(&self.pool)
-        .await?
-        .map(|nonce| serde_json::from_str::<Nonces>(&nonce))
-        .transpose()?
-        .map(|nonce| {
-            let (nonces, proof) = nonce.reveal();
-            (nonces, proof.to_vec())
-        }))
-    }
-
-    /// Removes and returns the nonce at `(root, offset)`.
-    ///
-    /// The nonce is **deleted** from the store, so a subsequent call (for
-    /// example a replay after a reorg) returns `None` and the transition
-    /// gracefully no-ops instead of reusing the nonce. Deletion is permanent
-    /// and not undone by a reorg; the returned nonce lives on only in the
-    /// snapshot state, which a reorg is free to roll back.
-    pub async fn take_nonce(&self, root: B256, offset: u64) -> Result<Option<Nonces>, Error> {
-        sqlx::query_scalar::<_, String>(
-            "DELETE FROM nonces
-             WHERE root = ? AND offs = ?
-             RETURNING nonce",
-        )
-        .bind(key(root))
-        .bind(i64::try_from(offset)?)
-        .fetch_optional(&self.pool)
-        .await?
-        .map(|nonce| serde_json::from_str(&nonce))
-        .transpose()
-        .map_err(Error::from)
     }
 
     /// Persists the signing `nonces` `me` generated for the signing ceremony
@@ -454,7 +339,6 @@ impl SecretStore {
         // The tables and the block marker move together: a failure here rolls
         // the marker back as well, so the same block can be reconciled again.
         schedule_absent_groups(&mut tx, "keygen_secrets", block, &keygen).await?;
-        schedule_absent_groups(&mut tx, "nonces_chunks", block, &nonces).await?;
         schedule_absent_groups(&mut tx, "signing_nonces", block, &nonces).await?;
         tx.commit().await?;
 
@@ -464,10 +348,8 @@ impl SecretStore {
     /// Deletes the secrets whose deletion block `safe` has reached, and reports
     /// how many rows of each kind were removed.
     ///
-    /// Deleting a nonce chunk cascades to the nonces under it, which the
-    /// reported counts do not include. Secrets with no deletion block, and
-    /// those whose block is still above `safe`, are left alone, as is the last
-    /// accepted reconciliation block.
+    /// Secrets with no deletion block, and those whose block is still above
+    /// `safe`, are left alone, as is the last accepted reconciliation block.
     ///
     /// Idempotent.
     pub async fn prune_scheduled_secrets(&self, safe: u64) -> Result<Pruned, Error> {
@@ -479,11 +361,6 @@ impl SecretStore {
             .execute(&mut *tx)
             .await?
             .rows_affected();
-        let nonces = sqlx::query("DELETE FROM nonces_chunks WHERE delete_at_block <= ?")
-            .bind(safe)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected();
         let signing_nonces = sqlx::query("DELETE FROM signing_nonces WHERE delete_at_block <= ?")
             .bind(safe)
             .execute(&mut *tx)
@@ -491,12 +368,10 @@ impl SecretStore {
             .rows_affected();
         tx.commit().await?;
         metrics::secrets_total(SecretKind::Keygen).decrement(keygen as f64);
-        metrics::secrets_total(SecretKind::Nonces).decrement(nonces as f64);
         metrics::secrets_total(SecretKind::NoncesNEW).decrement(signing_nonces as f64);
 
         Ok(Pruned {
             keygen,
-            nonces,
             signing_nonces,
         })
     }
@@ -537,7 +412,7 @@ async fn schedule_absent_groups(
     Ok(())
 }
 
-/// Encodes a fixed-byte value (group id, nonce root, signature id or address)
+/// Encodes a fixed-byte value (group id, signature id or address)
 /// as its lowercase hex text key, deterministic across calls.
 fn key(value: impl ToHexExt) -> String {
     value.encode_hex()
@@ -546,7 +421,7 @@ fn key(value: impl ToHexExt) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::frost::{keygen, preprocess::NonceChunk, sign::SigningNonces};
+    use crate::frost::{keygen, sign::SigningNonces};
     use alloy::primitives::address;
 
     const GROUP: B256 = B256::repeat_byte(0xa1);
@@ -559,10 +434,6 @@ mod tests {
 
     fn keygen_secrets() -> keygen::Secrets {
         keygen::setup(&mut rand::thread_rng(), ME, 3, 2).unwrap()
-    }
-
-    fn nonce_chunk(size: u64) -> NonceChunk {
-        NonceChunk::with_size(size, &keygen::KeyShare::dummy(), &mut rand::thread_rng()).unwrap()
     }
 
     fn signing_nonces() -> SigningNonces {
@@ -587,15 +458,6 @@ mod tests {
         .unwrap()
     }
 
-    async fn count_root_nonces(store: &SecretStore, root: B256) -> u64 {
-        let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM nonces WHERE root = ?")
-            .bind(key(root))
-            .fetch_one(&store.pool)
-            .await
-            .unwrap();
-        u64::try_from(count).unwrap()
-    }
-
     /// The block at which `group`'s DKG secrets are due for deletion, or `None`
     /// when none is scheduled.
     async fn keygen_delete_at_block(store: &SecretStore, group: B256) -> Option<i64> {
@@ -604,18 +466,6 @@ mod tests {
         )
         .bind(key(group))
         .bind(key(ME))
-        .fetch_one(&store.pool)
-        .await
-        .unwrap()
-    }
-
-    /// The block at which the nonce chunk at `root` is due for deletion, or
-    /// `None` when none is scheduled.
-    async fn chunk_delete_at_block(store: &SecretStore, root: B256) -> Option<i64> {
-        sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT delete_at_block FROM nonces_chunks WHERE root = ?",
-        )
-        .bind(key(root))
         .fetch_one(&store.pool)
         .await
         .unwrap()
@@ -793,10 +643,6 @@ mod tests {
             .store_keygen_secrets(GROUP, ME, keygen_secrets())
             .await
             .unwrap();
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
-            .await
-            .unwrap();
         store
             .store_signing_nonces(GROUP, signature_id(1), ME, signing_nonces())
             .await
@@ -815,7 +661,6 @@ mod tests {
         );
 
         assert_eq!(keygen_delete_at_block(&store, GROUP).await, Some(5));
-        assert_eq!(chunk_delete_at_block(&store, root).await, None);
         assert_eq!(
             signing_nonces_delete_at_block(&store, signature_id(1)).await,
             None
@@ -829,8 +674,8 @@ mod tests {
             .store_keygen_secrets(GROUP, ME, keygen_secrets())
             .await
             .unwrap();
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
+        store
+            .store_signing_nonces(GROUP, signature_id(1), ME, signing_nonces())
             .await
             .unwrap();
         assert!(
@@ -849,7 +694,10 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(keygen_delete_at_block(&store, GROUP).await, None);
-        assert_eq!(chunk_delete_at_block(&store, root).await, None);
+        assert_eq!(
+            signing_nonces_delete_at_block(&store, signature_id(1)).await,
+            None
+        );
         assert_eq!(reconciliation_block(&store).await, Some(10));
 
         // One at the same height still applies, so a second reconciliation for
@@ -862,7 +710,10 @@ mod tests {
                 .unwrap()
         );
         assert_eq!(keygen_delete_at_block(&store, GROUP).await, Some(10));
-        assert_eq!(chunk_delete_at_block(&store, root).await, Some(10));
+        assert_eq!(
+            signing_nonces_delete_at_block(&store, signature_id(1)).await,
+            Some(10)
+        );
         assert_eq!(reconciliation_block(&store).await, Some(10));
     }
 
@@ -873,8 +724,8 @@ mod tests {
             .store_keygen_secrets(GROUP, ME, keygen_secrets())
             .await
             .unwrap();
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
+        store
+            .store_signing_nonces(GROUP, signature_id(1), ME, signing_nonces())
             .await
             .unwrap();
         assert!(
@@ -887,7 +738,7 @@ mod tests {
         // Fail the second table's update, once the marker and the first table
         // have already been written within the transaction.
         sqlx::query(
-            "CREATE TRIGGER fail_nonces_chunks BEFORE UPDATE ON nonces_chunks
+            "CREATE TRIGGER fail_signing_nonces BEFORE UPDATE ON signing_nonces
              BEGIN SELECT RAISE(ABORT, 'injected failure'); END",
         )
         .execute(&store.pool)
@@ -902,10 +753,13 @@ mod tests {
 
         assert_eq!(reconciliation_block(&store).await, Some(3));
         assert_eq!(keygen_delete_at_block(&store, GROUP).await, None);
-        assert_eq!(chunk_delete_at_block(&store, root).await, None);
+        assert_eq!(
+            signing_nonces_delete_at_block(&store, signature_id(1)).await,
+            None
+        );
 
         // Having changed nothing, the same block can be reconciled again.
-        sqlx::query("DROP TRIGGER fail_nonces_chunks")
+        sqlx::query("DROP TRIGGER fail_signing_nonces")
             .execute(&store.pool)
             .await
             .unwrap();
@@ -917,7 +771,10 @@ mod tests {
         );
         assert_eq!(reconciliation_block(&store).await, Some(4));
         assert_eq!(keygen_delete_at_block(&store, GROUP).await, Some(4));
-        assert_eq!(chunk_delete_at_block(&store, root).await, Some(4));
+        assert_eq!(
+            signing_nonces_delete_at_block(&store, signature_id(1)).await,
+            Some(4)
+        );
     }
 
     #[tokio::test]
@@ -930,10 +787,6 @@ mod tests {
                 .await
                 .unwrap();
         }
-        let scheduled = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
-            .await
-            .unwrap();
         for id in [signature_id(1), signature_id(2)] {
             store
                 .store_signing_nonces(GROUP, id, ME, signing_nonces())
@@ -953,11 +806,7 @@ mod tests {
                 .await
                 .unwrap()
         );
-        // Registered after the reconciliation, so nothing is scheduled for it.
-        let unscheduled = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
-            .await
-            .unwrap();
+        // Stored after the reconciliation, so nothing is scheduled for it.
         store
             .store_signing_nonces(GROUP, signature_id(3), ME, signing_nonces())
             .await
@@ -976,14 +825,11 @@ mod tests {
             store.prune_scheduled_secrets(5).await.unwrap(),
             Pruned {
                 keygen: 1,
-                nonces: 1,
                 signing_nonces: 2,
             }
         );
         assert!(get_keygen_secrets(&store, GROUP).await.is_none());
         assert!(get_keygen_secrets(&store, other).await.is_some());
-        assert_eq!(count_root_nonces(&store, scheduled).await, 0);
-        assert_eq!(count_root_nonces(&store, unscheduled).await, 2);
         assert!(!has_signing_nonces_row(&store, signature_id(1)).await);
         assert!(!has_signing_nonces_row(&store, signature_id(2)).await);
         assert!(has_signing_nonces_row(&store, signature_id(3)).await);
@@ -1004,8 +850,8 @@ mod tests {
             .store_keygen_secrets(GROUP, ME, keygen_secrets())
             .await
             .unwrap();
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
+        store
+            .store_signing_nonces(GROUP, signature_id(1), ME, signing_nonces())
             .await
             .unwrap();
         assert!(
@@ -1015,10 +861,10 @@ mod tests {
                 .unwrap()
         );
 
-        // Fail the chunk deletion, once the DKG secrets have already been
+        // Fail the signing nonce deletion, once the DKG secrets have already been
         // deleted within the transaction.
         sqlx::query(
-            "CREATE TRIGGER fail_nonces_chunks BEFORE DELETE ON nonces_chunks
+            "CREATE TRIGGER fail_signing_nonces BEFORE DELETE ON signing_nonces
              BEGIN SELECT RAISE(ABORT, 'injected failure'); END",
         )
         .execute(&store.pool)
@@ -1027,10 +873,10 @@ mod tests {
         assert!(store.prune_scheduled_secrets(1).await.is_err());
 
         assert!(get_keygen_secrets(&store, GROUP).await.is_some());
-        assert_eq!(count_root_nonces(&store, root).await, 2);
+        assert!(has_signing_nonces_row(&store, signature_id(1)).await);
 
         // The collection is retried by the next block status, still scheduled.
-        sqlx::query("DROP TRIGGER fail_nonces_chunks")
+        sqlx::query("DROP TRIGGER fail_signing_nonces")
             .execute(&store.pool)
             .await
             .unwrap();
@@ -1038,20 +884,15 @@ mod tests {
             store.prune_scheduled_secrets(1).await.unwrap(),
             Pruned {
                 keygen: 1,
-                nonces: 1,
-                signing_nonces: 0,
+                signing_nonces: 1,
             }
         );
-        assert_eq!(count_root_nonces(&store, root).await, 0);
+        assert!(!has_signing_nonces_row(&store, signature_id(1)).await);
     }
 
     #[tokio::test]
-    async fn scheduled_nonces_stay_revealable_and_consumable() {
+    async fn scheduled_nonces_stay_consumable() {
         let store = store().await;
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(2))
-            .await
-            .unwrap();
         store
             .store_signing_nonces(GROUP, signature_id(1), ME, signing_nonces())
             .await
@@ -1064,9 +905,6 @@ mod tests {
         );
 
         // Scheduling is not deletion: the nonces are usable until collected.
-        assert_eq!(chunk_delete_at_block(&store, root).await, Some(1));
-        assert!(store.nonces_reveal(root, 0).await.unwrap().is_some());
-        assert!(store.take_nonce(root, 0).await.unwrap().is_some());
         assert_eq!(
             signing_nonces_delete_at_block(&store, signature_id(1)).await,
             Some(1)
@@ -1078,71 +916,6 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
-    }
-
-    #[tokio::test]
-    async fn nonce_chunks_are_stored() {
-        let store = store().await;
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(11))
-            .await
-            .unwrap();
-        let other = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(12))
-            .await
-            .unwrap();
-        assert_ne!(other, root);
-        assert_eq!(count_root_nonces(&store, root).await, 11);
-        assert_eq!(count_root_nonces(&store, other).await, 12);
-    }
-
-    #[tokio::test]
-    async fn nonces_reveal_is_non_consuming() {
-        let store = store().await;
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
-            .await
-            .unwrap();
-
-        assert!(store.nonces_reveal(root, 1).await.unwrap().is_some());
-        assert!(store.nonces_reveal(root, 1).await.unwrap().is_some());
-        assert_eq!(count_root_nonces(&store, root).await, 4);
-
-        assert!(store.nonces_reveal(root, 99).await.unwrap().is_none());
-        assert!(
-            store
-                .nonces_reveal(B256::repeat_byte(7), 1)
-                .await
-                .unwrap()
-                .is_none()
-        );
-    }
-
-    #[tokio::test]
-    async fn take_nonce_removes_it_permanently() {
-        let store = store().await;
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(4))
-            .await
-            .unwrap();
-
-        assert!(store.take_nonce(root, 2).await.unwrap().is_some());
-        assert!(store.take_nonce(root, 2).await.unwrap().is_none());
-        assert_eq!(count_root_nonces(&store, root).await, 3);
-
-        assert!(store.nonces_reveal(root, 0).await.unwrap().is_some());
-        assert!(store.take_nonce(root, 0).await.unwrap().is_some());
-        assert!(store.nonces_reveal(root, 0).await.unwrap().is_none());
-        assert_eq!(count_root_nonces(&store, root).await, 2);
-
-        assert!(
-            store
-                .take_nonce(B256::repeat_byte(7), 0)
-                .await
-                .unwrap()
-                .is_none()
-        );
-        assert_eq!(count_root_nonces(&store, root).await, 2);
     }
 
     #[tokio::test]
@@ -1246,11 +1019,6 @@ mod tests {
             .store_keygen_secrets(GROUP, ME, keygen_secrets())
             .await
             .unwrap();
-        let root = store
-            .register_nonces_chunk(GROUP, ME, nonce_chunk(3))
-            .await
-            .unwrap();
-        assert!(store.take_nonce(root, 0).await.unwrap().is_some());
         for id in [signature_id(1), signature_id(2)] {
             store
                 .store_signing_nonces(GROUP, id, ME, signing_nonces())
@@ -1271,9 +1039,6 @@ mod tests {
         let store = SecretStore::new(store.pool.clone()).await.unwrap();
 
         assert!(get_keygen_secrets(&store, GROUP).await.is_some());
-        assert_eq!(count_root_nonces(&store, root).await, 2);
-        // A consumed nonce is never restored.
-        assert!(store.nonces_reveal(root, 0).await.unwrap().is_none());
         assert!(
             store
                 .store_signing_nonces(GROUP, signature_id(1), ME, signing_nonces())

@@ -111,7 +111,7 @@ New code is added next to the old code, so names that would clash use a temporar
 | Phase | Change |
 | --- | --- |
 | 1 | Add `signCommitNonces` (spec above). `test_Sign` commits with it instead of preprocessing. A reduced `test_SignRevealNonces` keeps the old path covered until it is removed. New revert tests: no ceremony (`NotSigning`), non-participant (`InvalidParticipant`), point not on the curve (`NotOnCurve`). |
-| 10 | Remove `preprocess`, `signRevealNonces`, the `Preprocess` event, `Group.nonces`, `FROSTNonceCommitmentSet` and its test, `NoncesChunkMerkleTree`, `MerkleTreeBase._buildWithHeight` (only used by the nonce tree) and `test_SignRevealNonces`. Update the signing NatSpec, which mentions preprocessing and Wagner's attack. |
+| 10 | Remove `preprocess`, `signRevealNonces`, the `Preprocess` event, `Group.nonces`, `FROSTNonceCommitmentSet` and its test, `NoncesChunkMerkleTree`, `MerkleTreeBase._buildWithHeight` (only used by the nonce tree) and `test_SignRevealNonces`. The Wagner-attack rationale in `preprocess`' NatSpec moves to `signCommitNonces`', explained by the binding factor. |
 | 12 | Rename the event `SignRevealedNonces` to `SignCommittedNonces`. |
 
 Removing `Group.nonces` changes the coordinator's storage layout. The coordinator isn't upgradeable, and its ABI changes anyway, so networks redeploy it.
@@ -245,7 +245,7 @@ This document, as its own PR.
 
 ### Phase 10: Remove the dead preprocessing code
 
-One PR that deletes everything preprocessing left unused, in the contracts, the explorer and the validator. Apart from the signing NatSpec update, these are deletions only:
+One PR that deletes everything preprocessing left unused, in the contracts, the explorer and the validator. Apart from the `signCommitNonces` NatSpec update, these are deletions only:
 
 - the contract removals listed for Phase 10 in the contract table;
 - the explorer's unused `Preprocess` ABI entry;
@@ -253,11 +253,11 @@ One PR that deletes everything preprocessing left unused, in the contracts, the 
 - `service/effect.rs` (the old effects and resumes, their handler arms, and the generator field);
 - `state/mod.rs` (the ignored old resumes);
 - `secrets/nonces.rs` (deleted) and `secrets/mod.rs`;
-- `secrets/store.rs` (the `nonces_chunks` and `nonces` tables, the chunk APIs, and their tests);
+- `secrets/store.rs` (the `nonces_chunks` and `nonces` tables, the chunk APIs, and their tests; the reconciliation and collection tests that used chunks as their second table use signing nonces instead);
 - `frost/preprocess.rs` (deleted) and `frost/mod.rs`;
-- `metrics.rs` (the old effect labels);
+- `metrics.rs` (the old effect labels and the chunk-counting `SecretKind::Nonces`);
 - `bindings.rs` (`preprocess`, `signRevealNonces`, `Preprocess`);
-- `Cargo.toml` and `Cargo.lock` (`rayon` and `rand_chacha`).
+- the validator's and the workspace's `Cargo.toml`, and `Cargo.lock` (`rayon` and `rand_chacha`).
 
 ### Phase 11: Rename the transitional validator names
 
@@ -273,6 +273,7 @@ The contract event and its tests, `bindings.rs`, the state machine's event dispa
 - `docs/validator-handbook.md`: nonce secrets are now one per ceremony, and the `{kind="nonces"}` metric counts individual pairs.
 - `docs/glossary.md`: remove "Chunk", and redefine "Nonce Commitment".
 - The `crates/core/src/effects.rs` doc comment that mentions "pre-committed nonces".
+- The `frost/sign.rs` doc comments on `RevealedNonces` and `verify_revealed_nonces`, which still describe nonces merkle-checked by `signRevealNonces` against a preprocessing commitment.
 
 ### `[Direct Nonce End]`: Remove this plan
 

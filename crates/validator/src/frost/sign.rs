@@ -7,7 +7,6 @@ use super::{
     error::{Culprit as _, Error},
     keygen::KeyShare,
     marshal, participants,
-    preprocess::Nonces,
 };
 use crate::{bindings, merkle::MerkleTree};
 use alloy::primitives::{Address, B256, U256, keccak256};
@@ -46,12 +45,6 @@ impl SigningNonces {
 impl Debug for SigningNonces {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_tuple("SigningNonces").field(&"<redacted>").finish()
-    }
-}
-
-impl From<Nonces> for SigningNonces {
-    fn from(value: Nonces) -> Self {
-        Self(value.signing_nonces())
     }
 }
 
