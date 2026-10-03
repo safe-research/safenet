@@ -121,27 +121,27 @@ mod tests {
         // Every signer generates a fresh nonce pair for the ceremony, commits
         // to it and verifies each signer's committed nonces.
         let mut secret_nonces = BTreeMap::new();
-        let mut revealed_nonces = BTreeMap::new();
+        let mut committed_nonces = BTreeMap::new();
         for signer in signers {
             let nonces = sign::SigningNonces::generate(&key_shares[&signer], &mut rng);
-            revealed_nonces.insert(signer, nonces.commitments());
+            committed_nonces.insert(signer, nonces.commitments());
             secret_nonces.insert(signer, nonces);
         }
 
         // Each signer independently produces its signature share.
         let mut signatures = BTreeMap::new();
         for signer in signers {
-            let revealed = revealed_nonces
+            let committed = committed_nonces
                 .iter()
                 .map(|(participant, nonces)| {
-                    let commitment = sign::verify_revealed_nonces(*participant, nonces).unwrap();
+                    let commitment = sign::verify_committed_nonces(*participant, nonces).unwrap();
                     (*participant, commitment)
                 })
                 .collect();
             let signature = sign::signature_share(
                 &key_shares[&signer],
                 secret_nonces.remove(&signer).unwrap(),
-                &revealed,
+                &committed,
                 &message,
             )
             .unwrap();
@@ -173,7 +173,7 @@ mod tests {
         // Aggregate the shares to verify the constructed signature using only
         // data that is available onchain.
         {
-            let signing_commitments = revealed_nonces
+            let signing_commitments = committed_nonces
                 .iter()
                 .map(|(address, nonces)| {
                     (

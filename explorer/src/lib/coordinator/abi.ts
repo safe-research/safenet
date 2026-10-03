@@ -15,7 +15,7 @@ export const COORDINATOR_SIGNING_INITIATED_EVENT = parseAbiItem(
 
 export const COORDINATOR_SIGNING_PROGRESS_EVENTS = parseAbi([
 	"event SignCompleted(bytes32 indexed sid, bytes32 indexed selectionRoot, ((uint256 x, uint256 y) r, uint256 z) signature)",
-	"event SignRevealedNonces(bytes32 indexed sid, address participant, ((uint256 x, uint256 y) d, (uint256 x, uint256 y) e) nonces)",
+	"event SignCommittedNonces(bytes32 indexed sid, address participant, ((uint256 x, uint256 y) d, (uint256 x, uint256 y) e) nonces)",
 	"event SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z)",
 ]);
 
@@ -43,7 +43,7 @@ export const COORDINATOR_KEY_GEN_SELECTORS = [
 
 export const COORDINATOR_SIGNING_PROGRESS_SELECTORS = [
 	"SignCompleted" as const,
-	"SignRevealedNonces" as const,
+	"SignCommittedNonces" as const,
 	"SignShared" as const,
 ].map((eventName) =>
 	toEventSelector(

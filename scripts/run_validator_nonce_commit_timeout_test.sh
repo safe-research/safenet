@@ -190,7 +190,7 @@ signers_of() {
         '[.[] | select(.topics[1] == $sid) | .data[26:66] | ascii_downcase] | sort' <<< "$1"
 }
 COMMITTED=$(signers_of "$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
-    'SignRevealedNonces(bytes32,address,((uint256,uint256),(uint256,uint256)))')")
+    'SignCommittedNonces(bytes32,address,((uint256,uint256),(uint256,uint256)))')")
 SHARED=$(signers_of "$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
     'SignShared(bytes32,bytes32,address,uint256)')")
 if [ "$COMMITTED" != "$EXPECTED_SIGNERS" ] || [ "$SHARED" != "$EXPECTED_SIGNERS" ]; then

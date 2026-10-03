@@ -234,7 +234,7 @@ if [ "$(jq 'length' <<< "$SIGNING_REQUESTS")" -ne 2 ] || [ "$RESTARTED_SID" != "
 fi
 
 # Prints the sorted participants (lowercase, without `0x`) of the
-# `SignRevealedNonces` or `SignShared` logs in `$2` for the signature ID `$1`.
+# `SignCommittedNonces` or `SignShared` logs in `$2` for the signature ID `$1`.
 # `participant` is the first non-indexed word of both events, a padded address.
 participants_of() {
     jq -c --arg sid "$1" \
@@ -244,7 +244,7 @@ expected_participants() {
     printf '%s\n' "$@" | jq -nRc '[inputs | ascii_downcase | ltrimstr("0x")] | sort'
 }
 COMMITTED_LOGS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
-    'SignRevealedNonces(bytes32,address,((uint256,uint256),(uint256,uint256)))')
+    'SignCommittedNonces(bytes32,address,((uint256,uint256),(uint256,uint256)))')
 SHARED_LOGS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
     'SignShared(bytes32,bytes32,address,uint256)')
 

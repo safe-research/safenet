@@ -80,7 +80,7 @@ impl Transition {
                             key_share,
                             group_id: event.gid,
                             signature_id: event.sid,
-                            revealed: BTreeMap::new(),
+                            committed: BTreeMap::new(),
                             packet,
                             signers,
                             deadline,
@@ -184,7 +184,7 @@ impl Transition {
                         key_share,
                         group_id,
                         signature_id,
-                        revealed: BTreeMap::new(),
+                        committed: BTreeMap::new(),
                         packet,
                         signers,
                         deadline,
@@ -225,16 +225,16 @@ impl Transition {
     /// Tracks a peer's nonce commitment. Only a signer's first commitment for
     /// the ceremony counts, and later ones are ignored. Once every expected
     /// signer has committed, enters [`SigningState::CollectSigningShares`] and
-    /// dispatches the [`Effect::UseNonce`] effect to burn this validator's
+    /// dispatches the [`Effect::UseNonces`] effect to burn this validator's
     /// own nonces and produce a signature share from the now-complete set of
     /// commitments. If the round times out first, the signers that did commit
     /// continue without the others instead (see
     /// [`handle_signing_timeouts`](Self::handle_signing_timeouts)).
-    pub(super) fn handle_sign_revealed_nonces(
+    pub(super) fn handle_sign_committed_nonces(
         &self,
         mut state: State,
         block: u64,
-        event: &Coordinator::SignRevealedNonces,
+        event: &Coordinator::SignCommittedNonces,
     ) -> (State, Commands<State, Self>) {
         let Some(&message) = state.signature_id_to_message.get(&event.sid) else {
             return (state, Vec::new());
@@ -245,12 +245,12 @@ impl Transition {
                 key_share,
                 group_id,
                 signature_id,
-                mut revealed,
+                mut committed,
                 packet,
                 signers,
                 deadline,
             }) => {
-                match revealed.entry(event.participant) {
+                match committed.entry(event.participant) {
                     _ if !signers.contains(&event.participant) => {
                         tracing::warn!(
                             signature_id = %signature_id,
@@ -267,7 +267,7 @@ impl Transition {
                         );
                     }
                     Entry::Vacant(entry) => {
-                        match frost::sign::verify_revealed_nonces(event.participant, &event.nonces)
+                        match frost::sign::verify_committed_nonces(event.participant, &event.nonces)
                         {
                             Ok(nonces) => {
                                 entry.insert(nonces);
@@ -284,14 +284,14 @@ impl Transition {
                     }
                 }
 
-                if revealed.len() < signers.len() {
+                if committed.len() < signers.len() {
                     state.signing.insert(
                         message,
                         SigningState::CollectNonceCommitments {
                             key_share,
                             group_id,
                             signature_id,
-                            revealed,
+                            committed,
                             packet,
                             signers,
                             deadline,
@@ -307,7 +307,7 @@ impl Transition {
                         key_share,
                         group_id,
                         signature_id,
-                        revealed,
+                        committed,
                         selections: BTreeMap::new(),
                         packet,
                         signers,
@@ -317,7 +317,7 @@ impl Transition {
 
                 (
                     state,
-                    vec![Command::Effect(Effect::UseNonce {
+                    vec![Command::Effect(Effect::UseNonces {
                         message,
                         signature_id,
                     })],
@@ -332,7 +332,7 @@ impl Transition {
     }
 
     /// Publishes this validator's signature share once the
-    /// [`Effect::UseNonce`] effect has produced its nonces, attaching the
+    /// [`Effect::UseNonces`] effect has produced its nonces, attaching the
     /// packet's completion callback (`stageEpoch`/`attestTransaction`) so the
     /// group's completed signature carries out its onchain effect
     /// automatically.
@@ -345,7 +345,7 @@ impl Transition {
         let Some(SigningState::CollectSigningShares {
             key_share,
             signature_id,
-            revealed,
+            committed,
             packet,
             deadline,
             ..
@@ -354,7 +354,7 @@ impl Transition {
             return (state, Vec::new());
         };
 
-        let result = match frost::sign::signature_share(key_share, *nonces, revealed, &message) {
+        let result = match frost::sign::signature_share(key_share, *nonces, committed, &message) {
             Ok(result) => result,
             Err(err) => {
                 tracing::warn!(
@@ -567,18 +567,18 @@ impl Transition {
                 key_share,
                 group_id,
                 signature_id,
-                revealed,
+                committed,
                 packet,
                 deadline,
                 ..
             } if *deadline <= block => {
                 // Instead of restarting the signing ceremony, continue it with
-                // the signers that revealed their nonces before the deadline
-                // (any later reveals are ignored). Make sure that there are
+                // the signers that committed their nonces before the deadline
+                // (any later commitments are ignored). Make sure that there are
                 // sufficient signers left (at least a group threshold of them)
                 // and that we are part of the signing selection.
-                if revealed.len() < key_share.group_threshold() as usize
-                    || !revealed.contains_key(&self.account)
+                if committed.len() < key_share.group_threshold() as usize
+                    || !committed.contains_key(&self.account)
                 {
                     state.signature_id_to_message.remove(signature_id);
                     return false;
@@ -587,10 +587,10 @@ impl Transition {
                 tracing::info!(
                     %message,
                     %signature_id,
-                    signing_selection = ?revealed.keys().collect::<Vec<_>>(),
-                    "continuing signing ceremony with signers that revealed nonce commitments"
+                    signing_selection = ?committed.keys().collect::<Vec<_>>(),
+                    "continuing signing ceremony with signers that committed nonces"
                 );
-                commands.push(Command::Effect(Effect::UseNonce {
+                commands.push(Command::Effect(Effect::UseNonces {
                     message: *message,
                     signature_id: *signature_id,
                 }));
@@ -598,8 +598,8 @@ impl Transition {
                     key_share: key_share.clone(),
                     group_id: *group_id,
                     signature_id: *signature_id,
-                    signers: revealed.keys().copied().collect(),
-                    revealed: mem::take(revealed),
+                    signers: committed.keys().copied().collect(),
+                    committed: mem::take(committed),
                     selections: BTreeMap::new(),
                     packet: packet.clone(),
                     deadline: next_deadline,
