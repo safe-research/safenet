@@ -2,7 +2,7 @@ use super::{Packet, SigningState, State, Transition};
 use crate::{
     bindings::{self, Consensus, Coordinator, Oracle, SignNonces},
     consensus::{epoch::EpochId, hashing},
-    frost::{self, preprocess::Nonces, sign::SigningNonces},
+    frost::{self, sign::SigningNonces},
     merkle::MerkleRoot,
     service::{Action, Effect},
 };
@@ -25,17 +25,6 @@ impl Transition {
         event: &Coordinator::Sign,
     ) -> (State, Commands<State, Self>) {
         let mut commands = Vec::new();
-
-        // Preprocessing still runs, so keep its signing sequence up to date
-        // for it to prune its nonce chunks, even if signing no longer uses
-        // them.
-        if let Some(epoch) = state
-            .epochs
-            .values_mut()
-            .find(|epoch| epoch.group.id() == event.gid)
-        {
-            epoch.nonces.observe(event.sequence);
-        }
 
         match state.signing.remove(&event.message) {
             Some(SigningState::WaitingForRequest {
@@ -120,37 +109,6 @@ impl Transition {
         }
 
         (state, commands)
-    }
-
-    /// Publishes this validator's revealed nonce commitment once the
-    /// [`Effect::RevealNonceCommitments`] effect has produced it, entering
-    /// [`SigningState::CollectNonceCommitments`]'s collection round.
-    pub(super) fn handle_nonce_commitments(
-        &self,
-        state: State,
-        signature_id: B256,
-        message: B256,
-        nonces: SignNonces,
-        proof: Vec<B256>,
-    ) -> (State, Commands<State, Self>) {
-        let deadline = match state.signing.get(&message) {
-            Some(SigningState::CollectNonceCommitments {
-                signature_id: sid,
-                deadline,
-                ..
-            }) if *sid == signature_id => *deadline,
-            _ => return (state, Vec::new()),
-        };
-
-        (
-            state,
-            vec![Command::Action(Action::RevealNonceCommitments {
-                signature_id,
-                nonces,
-                proof,
-                expires_at: deadline,
-            })],
-        )
     }
 
     /// Publishes this validator's nonce commitments once the
@@ -371,59 +329,6 @@ impl Transition {
             }
             None => (state, Vec::new()),
         }
-    }
-
-    /// Publishes this validator's signature share once the
-    /// [`Effect::UseNonce`] effect has produced it, attaching the packet's
-    /// completion callback (`stageEpoch`/`attestTransaction`) so the
-    /// group's completed signature carries out its onchain effect
-    /// automatically.
-    pub(super) fn handle_nonces(
-        &self,
-        state: State,
-        message: B256,
-        nonces: Box<Nonces>,
-    ) -> (State, Commands<State, Self>) {
-        let Some(SigningState::CollectSigningShares {
-            key_share,
-            signature_id,
-            revealed,
-            packet,
-            deadline,
-            ..
-        }) = state.signing.get(&message)
-        else {
-            return (state, Vec::new());
-        };
-
-        let nonces = (*nonces).into();
-        let result = match frost::sign::signature_share(key_share, nonces, revealed, &message) {
-            Ok(result) => result,
-            Err(err) => {
-                tracing::warn!(
-                    %message,
-                    %signature_id,
-                    %err,
-                    "failed to compute signature shares for signing ceremony"
-                );
-                return (state, Vec::new());
-            }
-        };
-
-        let signature_id = *signature_id;
-        let callback = packet.attestation_callback(self.config.consensus);
-        let expires_at = *deadline;
-        (
-            state,
-            vec![Command::Action(Action::SignShare {
-                signature_id,
-                selection: result.selection,
-                share: result.share,
-                proof: result.proof,
-                callback,
-                expires_at,
-            })],
-        )
     }
 
     /// Publishes this validator's signature share once the

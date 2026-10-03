@@ -1,6 +1,6 @@
 use super::{
     ConfirmationDeadlines, Epoch, KeyGenCommitment, KeyGenConfirmation, KeyGenParticipation,
-    NonceState, Packet, RolloverState, SigningState, State, Transition,
+    Packet, RolloverState, SigningState, State, Transition,
 };
 use crate::{
     bindings::{Consensus, Coordinator},
@@ -468,11 +468,11 @@ impl Transition {
                 }
 
                 match next_epoch {
-                    // On genesis: retain the active key, start preprocessing,
-                    // and immediately begin key generation for the next epoch.
+                    // On genesis: retain the active key and immediately begin
+                    // key generation for the next epoch.
                     EpochId::Genesis => {
                         let next_epoch = epoch::next_number(block, self.config.blocks_per_epoch);
-                        let (state, finalize_commands) = self.finalize_key_gen(
+                        let state = self.finalize_key_gen(
                             State {
                                 rollover: RolloverState::EpochSkipped { next_epoch },
                                 ..state
@@ -491,19 +491,17 @@ impl Transition {
                                 excluded: BTreeSet::new(),
                             },
                         ) else {
-                            return (state, finalize_commands);
+                            return (state, Vec::new());
                         };
 
                         let deadline =
                             Some(block.saturating_add(self.config.key_gen_timeout.get()));
-                        let (state, keygen_commands) = self.start_key_gen(
+                        self.start_key_gen(
                             state,
                             EpochId::Number { number: next_epoch },
                             &participants,
                             deadline,
-                        );
-
-                        (state, [finalize_commands, keygen_commands].concat())
+                        )
                     }
                     EpochId::Number {
                         number: proposed_epoch,
@@ -571,8 +569,7 @@ impl Transition {
     /// clears the rollover signing session and moves
     /// [`RolloverState::SigningRollover`] to [`RolloverState::EpochStaged`],
     /// via [`Self::finalize_key_gen`] recording the new epoch and group in
-    /// `state.epochs` (if this validator is participating) and preprocessing
-    /// it by sampling and registering its nonce tree. Ports
+    /// `state.epochs` (if this validator is participating). Ports
     /// `consensus/epochStaged.ts`.
     ///
     /// `active_epoch` itself is not rolled forward here; that only happens
@@ -597,7 +594,7 @@ impl Transition {
                     signature_id = %event.signatureId,
                     "epoch staged"
                 );
-                let (state, keygen_commands) = self.finalize_key_gen(
+                let state = self.finalize_key_gen(
                     State {
                         rollover: RolloverState::EpochStaged { next_epoch },
                         ..state
@@ -606,10 +603,7 @@ impl Transition {
                     group,
                     key_share,
                 );
-                let (state, attested_commands) =
-                    self.handle_sign_attested(state, event.signatureId, message);
-
-                (state, [keygen_commands, attested_commands].concat())
+                self.handle_sign_attested(state, event.signatureId, message)
             }
             RolloverState::WaitingForGenesis => {
                 // We should have been waiting for genesis to start. In this,
@@ -1290,40 +1284,23 @@ impl Transition {
         )
     }
 
-    /// Finalizes keygen and triggers nonces preprocessing. Any remaining DKG
-    /// secrets are pruned by the next group reconciliation, since the group
-    /// now has a key share (or none, if not participating).
+    /// Finalizes keygen. Any remaining DKG secrets are pruned by the next group
+    /// reconciliation, since the group now has a key share (or none, if not
+    /// participating).
     fn finalize_key_gen(
         &self,
         mut state: State,
         epoch: EpochId,
         group: Group,
         key_share: Option<Arc<KeyShare>>,
-    ) -> (State, Commands<State, Self>) {
-        let group_id = group.id();
-
+    ) -> State {
         // If we are participating in the new group (in other words, we were
         // part of the DKG ceremony and key share), register the epoch in our
-        // participating epochs map and generate a nonces chunk.
-        let commands = if let Some(key_share) = key_share {
-            let mut nonces = NonceState::default();
-            let chunk = nonces.reserve_chunk();
-            debug_assert_eq!(chunk, Some(0));
-
-            state.epochs.insert(
-                epoch,
-                Epoch {
-                    group,
-                    key_share,
-                    nonces,
-                },
-            );
-            vec![Command::Effect(Effect::NonceTree { group_id })]
-        } else {
-            Vec::new()
-        };
-
-        (state, commands)
+        // participating epochs map.
+        if let Some(key_share) = key_share {
+            state.epochs.insert(epoch, Epoch { group, key_share });
+        }
+        state
     }
 
     /// Encodes commands for confirming a newly established secret key share,
@@ -1337,24 +1314,14 @@ impl Transition {
         deadlines: Option<&ConfirmationDeadlines>,
     ) -> Result<(KeyGenConfirmation, Commands<State, Self>), frost::error::Error> {
         let key_share = frost::keygen::finalize(sharing_state, shares)?;
-        let key_share = Arc::new(key_share);
 
         Ok((
-            KeyGenConfirmation::Confirmed(key_share.clone()),
-            vec![
-                Command::Action(Action::KeyGenConfirm {
-                    group_id: group.id(),
-                    callback: self.key_gen_confirmation_callback(epoch),
-                    expires_at: deadlines.map(|deadlines| deadlines.confirm),
-                }),
-                // Preemptively start nonce generation before any group
-                // reconciliation effect. This allows us to compute a nonce tree
-                // early to ensure we have one available for when we need it.
-                Command::Effect(Effect::StartNonceGeneration {
-                    group_id: group.id(),
-                    key_share,
-                }),
-            ],
+            KeyGenConfirmation::Confirmed(Arc::new(key_share)),
+            vec![Command::Action(Action::KeyGenConfirm {
+                group_id: group.id(),
+                callback: self.key_gen_confirmation_callback(epoch),
+                expires_at: deadlines.map(|deadlines| deadlines.confirm),
+            })],
         ))
     }
 

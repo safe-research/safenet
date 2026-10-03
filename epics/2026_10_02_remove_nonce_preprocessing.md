@@ -238,16 +238,18 @@ This document, as its own PR.
 
 ### Phase 8: Remove preprocessing from the state machine
 
+`state/preprocess.rs`, `state/keygen.rs`, `state/sign.rs` and `state/mod.rs` only, so that the PR shows just the change in the state machine's behaviour. The state machine stops emitting the preprocessing effects and actions, drops its chunk state, and ignores the old resumes. The effects, actions, resumes, bindings and metric labels it no longer uses stay, with a temporary `#[expect(dead_code)]`, and are deleted in Phase 9a.
+
+### Phase 9a: Remove the old effects, actions and nonce chunk generator
+
 These are mostly deletions:
 
-- `state/preprocess.rs`, `state/keygen.rs`, `state/sign.rs`, `state/mod.rs`;
-- `service/action.rs`, `service/effect.rs` (the old effects and resumes, and their handler arms);
+- `service/action.rs` (`Preprocess` and `RevealNonceCommitments`);
+- `service/effect.rs` (the old effects and resumes and their handler arms, and the generator field; `ReconcileGroupSecrets` carries only the retained sets);
+- `state/mod.rs` (the ignored old resumes) and `state/preprocess.rs` (reconciliation without key shares);
+- `secrets/nonces.rs` (deleted) and `secrets/mod.rs`;
 - `metrics.rs`;
 - `bindings.rs` (`preprocess`, `signRevealNonces`, `Preprocess`).
-
-### Phase 9a: Remove the nonce chunk generator
-
-`secrets/nonces.rs` (deleted), `secrets/mod.rs`, `service/effect.rs` (the generator field; `ReconcileGroupSecrets` carries only the retained sets), `state/preprocess.rs` (reconciliation without key shares) and `metrics.rs`.
 
 ### Phase 9b: Remove chunk secrets and preprocessing primitives
 
