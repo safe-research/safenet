@@ -63,6 +63,10 @@ impl NonceGenerator {
     ///
     /// Outstanding requests for the stopped groups fail with
     /// [`Error::Unavailable`].
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "removed together with nonce preprocessing")
+    )]
     pub fn retain(&mut self, mut keep: impl FnMut(&B256) -> bool) {
         self.groups.retain(|group_id, _| {
             let keep = keep(group_id);
