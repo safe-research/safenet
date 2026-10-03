@@ -564,6 +564,22 @@ contract FROSTCoordinator {
     }
 
     /**
+     * @notice Commits a nonce pair for a signing ceremony.
+     * @param sid The signature ID.
+     * @param nonces The nonce pair to commit.
+     * @dev In the first round of signing, each participant commits to a fresh nonce pair that it generated for this
+     *      ceremony. Nonce pairs must never be reused across signing ceremonies. Participants may commit more than once
+     *      for the same ceremony, so offchain consumers must only consider the first commitment from each participant.
+     */
+    function signCommitNonces(FROSTSignatureId.T sid, SignNonces calldata nonces) external {
+        (Group storage group,) = _signatureGroupAndMessage(sid);
+        group.participants.verify(msg.sender);
+        Secp256k1.requireNonZero(nonces.d);
+        Secp256k1.requireNonZero(nonces.e);
+        emit SignRevealedNonces(sid, msg.sender, nonces);
+    }
+
+    /**
      * @notice Broadcasts a signature share for a selection of participating signers.
      * @param sid The signature ID.
      * @param selection The signing selection data.

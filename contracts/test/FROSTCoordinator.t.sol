@@ -11,6 +11,7 @@ import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
+import {FROSTParticipantMap} from "@/libraries/FROSTParticipantMap.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
@@ -232,61 +233,43 @@ contract FROSTCoordinatorTest is Test {
 
         (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
 
-        // Round 1
-
-        // We setup a commit with **a single** pair of nonces in a Merkle tree
-        // full of 0s in order to speed up the test. In practice, we compute and
-        // commit to trees with 1024 nonce pairs.
-        bytes32[] memory nonceProof = new bytes32[](10);
-        Nonces[] memory nonces = new Nonces[](COUNT);
-        {
-            bytes32[] memory commitments = new bytes32[](COUNT);
-            for (uint256 i = 0; i < COUNT; i++) {
-                Nonces memory n = nonces[i];
-                uint256 d = FROST.nonce(bytes32(vm.randomUint()), s[i]);
-                n.d = ForgeSecp256k1.g(d);
-                uint256 e = FROST.nonce(bytes32(vm.randomUint()), s[i]);
-                n.e = ForgeSecp256k1.g(e);
-                // forge-lint: disable-next-line(asm-keccak256)
-                bytes32 leaf = keccak256(abi.encode(0, n.d.x(), n.d.y(), n.e.x(), n.e.y()));
-                commitments[i] = MerkleProof.processProof(nonceProof, leaf);
-            }
-            for (uint256 i = 0; i < COUNT; i++) {
-                vm.prank(participants.addr(i));
-                coordinator.preprocess(gid, commitments[i]);
-            }
-        }
-
-        // Round 2
-
-        // The complete list of participants is implicitely selects all honest
-        // all participants should cooperate. "honest" must be deterministic
-        // such that there is no ambiguity on the set for honest validators.
-        uint256[] memory honestParticipants = _honestParticipants();
-
-        // The signature aggregator (the coordinator contract) reveals the
-        // message to sign and the participants reveal their committed nonces
-        // from round 1.
+        // The signature aggregator (the coordinator contract) starts a signing
+        // ceremony for the message to sign.
         bytes32 message = keccak256("Hello, Safenet!");
 
         vm.expectEmit();
         emit FROSTCoordinator.Sign(address(this), gid, message, FROSTSignatureId.create(gid, 0), 0);
         FROSTSignatureId.T sid = coordinator.sign(gid, message);
 
+        // Round 1
+
+        // The complete list of participants is implicitely selects all honest
+        // all participants should cooperate. "honest" must be deterministic
+        // such that there is no ambiguity on the set for honest validators.
+        uint256[] memory honestParticipants = _honestParticipants();
+
+        // Each honest participant generates a fresh nonce pair for the signing
+        // ceremony and commits to it.
+        // <https://datatracker.ietf.org/doc/html/rfc9591#section-5.1>
+        Nonces[] memory nonces = new Nonces[](COUNT);
         for (uint256 i = 0; i < honestParticipants.length; i++) {
             uint256 h = honestParticipants[i];
             Nonces memory n = nonces[h];
+            n.d = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[h]));
+            n.e = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[h]));
             FROSTCoordinator.SignNonces memory nn = FROSTCoordinator.SignNonces({d: n.d.toPoint(), e: n.e.toPoint()});
             vm.expectEmit();
             emit FROSTCoordinator.SignRevealedNonces(sid, participants.addr(h), nn);
             vm.prank(participants.addr(h));
-            coordinator.signRevealNonces(sid, nn, nonceProof);
+            coordinator.signCommitNonces(sid, nn);
         }
+
+        // Round 2
 
         // The `sign` algorithm from RFC-9591. Note that the algorithms assume a
         // sorted list of participants. Note that at this point, all commitment
         // nonces are available from event data (assuming a block limit for
-        // participants to reveal their nonces before being declared "dishonest").
+        // participants to commit their nonces before being declared "dishonest").
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5.2>
         _sortByParticipantId(honestParticipants);
         address[] memory honestAddrs = new address[](honestParticipants.length);
@@ -359,6 +342,76 @@ contract FROSTCoordinatorTest is Test {
 
         FROST.Signature memory signature = coordinator.signatureValue(sid);
         FROST.verify(groupKey, signature, message);
+    }
+
+    function test_SignRevealNonces() public {
+        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
+        address participant = participants.addr(0);
+
+        // We setup a commit with **a single** pair of nonces in a Merkle tree
+        // full of 0s in order to speed up the test. In practice, we compute and
+        // commit to trees with 1024 nonce pairs.
+        bytes32[] memory nonceProof = new bytes32[](10);
+        FROSTCoordinator.SignNonces memory nonces = FROSTCoordinator.SignNonces({
+            d: ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[0])).toPoint(),
+            e: ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[0])).toPoint()
+        });
+        // forge-lint: disable-next-line(asm-keccak256)
+        bytes32 leaf = keccak256(abi.encode(0, nonces.d.x, nonces.d.y, nonces.e.x, nonces.e.y));
+        vm.prank(participant);
+        coordinator.preprocess(gid, MerkleProof.processProof(nonceProof, leaf));
+
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("Hello, Safenet!"));
+
+        vm.expectEmit();
+        emit FROSTCoordinator.SignRevealedNonces(sid, participant, nonces);
+        vm.prank(participant);
+        coordinator.signRevealNonces(sid, nonces, nonceProof);
+    }
+
+    function test_SignCommitNonces_RevertsWhenNotSigning() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = FROSTSignatureId.create(gid, 0);
+        address participant = participants.addr(0);
+        FROSTCoordinator.SignNonces memory nonces = _randomSignNonces();
+
+        vm.expectRevert(FROSTCoordinator.NotSigning.selector);
+        vm.prank(participant);
+        coordinator.signCommitNonces(sid, nonces);
+    }
+
+    function test_SignCommitNonces_RevertsForNonParticipant() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("Hello, Safenet!"));
+        FROSTCoordinator.SignNonces memory nonces = _randomSignNonces();
+
+        vm.expectRevert(FROSTParticipantMap.InvalidParticipant.selector);
+        vm.prank(address(0x5afe));
+        coordinator.signCommitNonces(sid, nonces);
+    }
+
+    function test_SignCommitNonces_RevertsOnInvalidNonces() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("Hello, Safenet!"));
+        address participant = participants.addr(0);
+        Secp256k1.Point memory zero = Secp256k1.Point({x: 0, y: 0});
+
+        FROSTCoordinator.SignNonces memory nonces = _randomSignNonces();
+        nonces.d = zero;
+        vm.expectRevert(Secp256k1.NotOnCurve.selector);
+        vm.prank(participant);
+        coordinator.signCommitNonces(sid, nonces);
+
+        nonces = _randomSignNonces();
+        nonces.e = zero;
+        vm.expectRevert(Secp256k1.NotOnCurve.selector);
+        vm.prank(participant);
+        coordinator.signCommitNonces(sid, nonces);
+    }
+
+    function _randomSignNonces() private returns (FROSTCoordinator.SignNonces memory nonces) {
+        nonces.d = ForgeSecp256k1.rand().toPoint();
+        nonces.e = ForgeSecp256k1.rand().toPoint();
     }
 
     function _randomSortedAddresses(uint16 count) private view returns (address[] memory result) {
