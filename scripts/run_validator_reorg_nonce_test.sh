@@ -118,7 +118,7 @@ propose_transaction() {
 # `(d, e)` points.
 validator_a_nonces() {
     fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
-        'SignRevealedNonces(bytes32,address,((uint256,uint256),(uint256,uint256)))' |
+        'SignCommittedNonces(bytes32,address,((uint256,uint256),(uint256,uint256)))' |
         jq --arg sid "$1" --arg addr "${PARTICIPANTS[0]#0x}" \
             '[.[] | select(.topics[1] == $sid) | select((.data[26:66] | ascii_downcase) == ($addr | ascii_downcase)) | .data[66:]]'
 }

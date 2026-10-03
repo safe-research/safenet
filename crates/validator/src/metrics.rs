@@ -50,7 +50,7 @@ pub enum EffectKind {
     /// Generate and persist this validator's nonces for a signing ceremony.
     GenerateNonces,
     /// Consume this validator's nonces for a signing ceremony.
-    UseNonce,
+    UseNonces,
     /// Reconcile stored group secrets with the state machine.
     ReconcileGroupSecrets,
 }
@@ -60,7 +60,7 @@ impl EffectKind {
         [
             Self::KeyGenSetup,
             Self::GenerateNonces,
-            Self::UseNonce,
+            Self::UseNonces,
             Self::ReconcileGroupSecrets,
         ]
         .into_iter()
@@ -70,7 +70,7 @@ impl EffectKind {
         match self {
             Self::KeyGenSetup => "key_gen_setup",
             Self::GenerateNonces => "generate_nonces",
-            Self::UseNonce => "use_nonce",
+            Self::UseNonces => "use_nonces",
             Self::ReconcileGroupSecrets => "reconcile_group_secrets",
         }
     }

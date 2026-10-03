@@ -40,7 +40,7 @@ pub enum Effect {
     /// Use this validator's own nonces for the signing ceremony
     /// `signature_id`. Once the nonces are taken, they are burned and can no
     /// longer be used.
-    UseNonce { message: B256, signature_id: B256 },
+    UseNonces { message: B256, signature_id: B256 },
     /// Reconcile the persisted secrets with the groups retained by the state
     /// machine as of `block`, scheduling all secret material belonging to
     /// other groups for deletion.
@@ -56,7 +56,7 @@ impl Effect {
         match self {
             Self::KeyGenSetup { .. } => EffectKind::KeyGenSetup,
             Self::GenerateNonces { .. } => EffectKind::GenerateNonces,
-            Self::UseNonce { .. } => EffectKind::UseNonce,
+            Self::UseNonces { .. } => EffectKind::UseNonces,
             Self::ReconcileGroupSecrets { .. } => EffectKind::ReconcileGroupSecrets,
         }
     }
@@ -79,8 +79,8 @@ pub enum Resume {
         signature_id: B256,
         nonces: bindings::SignNonces,
     },
-    /// Resume with the nonces burned by [`Effect::UseNonce`].
-    Nonce {
+    /// Resume with the nonces burned by [`Effect::UseNonces`].
+    Nonces {
         message: B256,
         nonces: Box<SigningNonces>,
     },
@@ -139,14 +139,14 @@ impl Handler {
                     })
                     .unwrap_or(Resume::Noop))
             }
-            Effect::UseNonce {
+            Effect::UseNonces {
                 message,
                 signature_id,
             } => Ok(self
                 .secrets
                 .take_signing_nonces(signature_id)
                 .await?
-                .map(|nonces| Resume::Nonce {
+                .map(|nonces| Resume::Nonces {
                     message,
                     nonces: Box::new(nonces),
                 })

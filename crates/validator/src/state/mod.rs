@@ -18,7 +18,7 @@ use crate::{
             GroupCommitments, KeyShare, PublicKeyShare, Secrets, SharingState, VerifiedCommitment,
             VerifiedShare,
         },
-        sign::RevealedNonces,
+        sign::CommittedNonces,
     },
     merkle::MerkleRoot,
     metrics::{self, TransitionKind},
@@ -305,7 +305,7 @@ enum SigningState {
         /// The signature id assigned to this signing round.
         signature_id: B256,
         /// Verified nonce commitments received from peers so far.
-        revealed: BTreeMap<Address, RevealedNonces>,
+        committed: BTreeMap<Address, CommittedNonces>,
         /// The last participant to commit valid nonces, if any.
         last_signer: Option<Address>,
         /// The packet being signed.
@@ -317,7 +317,7 @@ enum SigningState {
     },
     /// Every signer's nonce commitment has been collected and this
     /// validator's own signature share is being produced; waiting for the
-    /// [`Effect::UseNonce`] effect to complete before it can be published.
+    /// [`Effect::UseNonces`] effect to complete before it can be published.
     CollectSigningShares {
         /// The key share for participating in the signing ceremony.
         key_share: Arc<KeyShare>,
@@ -326,7 +326,7 @@ enum SigningState {
         /// The signature id assigned to this signing round.
         signature_id: B256,
         /// Verified nonce commitments received from peers so far.
-        revealed: BTreeMap<Address, RevealedNonces>,
+        committed: BTreeMap<Address, CommittedNonces>,
         /// The signing selections.
         selections: BTreeMap<MerkleRoot, SigningSelection>,
         /// The packet being signed.
@@ -409,8 +409,8 @@ impl StateTransition<State> for Transition {
                 Event::Coordinator(Coordinator::CoordinatorEvents::Sign(event)) => {
                     self.handle_sign(state, log.block, &event)
                 }
-                Event::Coordinator(Coordinator::CoordinatorEvents::SignRevealedNonces(event)) => {
-                    self.handle_sign_revealed_nonces(state, log.block, &event)
+                Event::Coordinator(Coordinator::CoordinatorEvents::SignCommittedNonces(event)) => {
+                    self.handle_sign_committed_nonces(state, log.block, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::SignShared(event)) => {
                     self.handle_sign_shared(state, &event)
@@ -459,7 +459,7 @@ impl StateTransition<State> for Transition {
                     signature_id,
                     nonces,
                 } => self.handle_nonce_commitments(state, signature_id, nonces),
-                Resume::Nonce { message, nonces } => self.handle_nonces(state, message, nonces),
+                Resume::Nonces { message, nonces } => self.handle_nonces(state, message, nonces),
             },
         }
     }

@@ -265,7 +265,9 @@ One PR that deletes everything preprocessing left unused, in the contracts, the 
 
 ### Phase 12: Rename `SignRevealedNonces` to `SignCommittedNonces`
 
-The contract event and its tests, `bindings.rs`, the state machine's event dispatch and handler names, and the explorer (`abi.ts`, `signing.ts`, `signing.test.ts` selector). One purpose, across all event consumers.
+The contract event and its tests, `bindings.rs`, the state machine's event dispatch and handler names, the reorg script's log filter (`run_validator_reorg_nonce_test.sh`), and the explorer (`abi.ts`, `signing.ts`, `signing.test.ts` selector). One purpose, across all event consumers.
+
+The validator's internal "revealed" names follow: `frost::sign::RevealedNonces` becomes `CommittedNonces`, `verify_revealed_nonces` becomes `verify_committed_nonces`, and `SigningState`'s `revealed` fields become `committed`. Their doc comments, which still describe nonces merkle-checked by `signRevealNonces`, are rewritten with them. Renaming the `SigningState` fields changes the signing state snapshot format, as in Phase 6. `Effect::UseNonce` and `Resume::Nonce`, the only singular names left in the flow, become `UseNonces` and `Nonces` (metric label `use_nonces`), matching `GenerateNonces`, `NonceCommitments`, `handle_nonces` and the `SigningNonces` pair they carry.
 
 ### Phase 13: Documentation
 
@@ -273,7 +275,6 @@ The contract event and its tests, `bindings.rs`, the state machine's event dispa
 - `docs/validator-handbook.md`: nonce secrets are now one per ceremony, and the `{kind="nonces"}` metric counts individual pairs.
 - `docs/glossary.md`: remove "Chunk", and redefine "Nonce Commitment".
 - The `crates/core/src/effects.rs` doc comment that mentions "pre-committed nonces".
-- The `frost/sign.rs` doc comments on `RevealedNonces` and `verify_revealed_nonces`, which still describe nonces merkle-checked by `signRevealNonces` against a preprocessing commitment.
 
 ### `[Direct Nonce End]`: Remove this plan
 
