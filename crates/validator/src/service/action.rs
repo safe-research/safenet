@@ -51,22 +51,6 @@ pub enum Action {
         secret_share: U256,
         expires_at: Option<u64>,
     },
-    /// An action to perform the preprocessing step and register a freshly
-    /// sampled nonce tree's commitments.
-    #[expect(dead_code, reason = "removed together with nonce preprocessing")]
-    Preprocess {
-        group_id: B256,
-        nonces_commitment: B256,
-    },
-    /// An action to reveal this validator's nonce commitment for a signing
-    /// round.
-    #[expect(dead_code, reason = "removed together with nonce preprocessing")]
-    RevealNonceCommitments {
-        signature_id: B256,
-        nonces: bindings::SignNonces,
-        proof: Vec<B256>,
-        expires_at: u64,
-    },
     /// An action to commit this validator's freshly generated nonces for a
     /// signing round.
     CommitNonces {
@@ -242,45 +226,6 @@ impl ActionEncoder<Action> for Encoder {
                     gas: 300_000,
                 },
                 expires_at,
-            ),
-            Action::Preprocess {
-                group_id,
-                nonces_commitment,
-            } => (
-                Transaction {
-                    to: self.coordinator,
-                    value: U256::ZERO,
-                    data: Coordinator::preprocessCall {
-                        gid: group_id,
-                        commitment: nonces_commitment,
-                    }
-                    .abi_encode()
-                    .into(),
-                    gas: 250_000,
-                },
-                // Nonce registration doesn't carry an expiry - we cannot
-                // reliably know for how long it is valuable.
-                None,
-            ),
-            Action::RevealNonceCommitments {
-                signature_id,
-                nonces,
-                proof,
-                expires_at,
-            } => (
-                Transaction {
-                    to: self.coordinator,
-                    value: U256::ZERO,
-                    data: Coordinator::signRevealNoncesCall {
-                        sid: signature_id,
-                        nonces,
-                        proof,
-                    }
-                    .abi_encode()
-                    .into(),
-                    gas: 250_000,
-                },
-                Some(expires_at),
             ),
             Action::CommitNonces {
                 signature_id,

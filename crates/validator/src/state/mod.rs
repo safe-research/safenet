@@ -458,12 +458,7 @@ impl StateTransition<State> for Transition {
                 )
             }
             Message::Resume(result) => match result {
-                // The preprocessing effects producing these resumes are no
-                // longer emitted.
-                Resume::Noop
-                | Resume::NonceTree { .. }
-                | Resume::NonceCommitments { .. }
-                | Resume::Nonce { .. } => (state, Vec::new()),
+                Resume::Noop => (state, Vec::new()),
                 Resume::Setup { group_id, secrets } => {
                     self.handle_key_gen_setup(state, group_id, secrets)
                 }

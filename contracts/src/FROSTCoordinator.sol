@@ -4,7 +4,6 @@ pragma solidity ^0.8.30;
 import {IFROSTCoordinatorCallback} from "@/interfaces/IFROSTCoordinatorCallback.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
-import {FROSTNonceCommitmentSet} from "@/libraries/FROSTNonceCommitmentSet.sol";
 import {FROSTParticipantMap} from "@/libraries/FROSTParticipantMap.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {FROSTSignatureShares} from "@/libraries/FROSTSignatureShares.sol";
@@ -20,7 +19,6 @@ import {Secp256k1} from "@/libraries/Secp256k1.sol";
  */
 contract FROSTCoordinator {
     using FROSTGroupId for FROSTGroupId.T;
-    using FROSTNonceCommitmentSet for FROSTNonceCommitmentSet.T;
     using FROSTParticipantMap for FROSTParticipantMap.T;
     using FROSTSignatureId for FROSTSignatureId.T;
     using FROSTSignatureShares for FROSTSignatureShares.T;
@@ -58,13 +56,11 @@ contract FROSTCoordinator {
     /**
      * @notice Represents a FROST signing group and its associated state.
      * @custom:param participants The participant map for the group.
-     * @custom:param nonces The nonce commitment set for the group.
      * @custom:param state The internal state of the group.
      * @custom:param key The group public key.
      */
     struct Group {
         FROSTParticipantMap.T participants;
-        FROSTNonceCommitmentSet.T nonces;
         GroupState state;
         Secp256k1.Point key;
     }
@@ -212,15 +208,6 @@ contract FROSTCoordinator {
      * @param secretShare The revealed secret share.
      */
     event KeyGenComplaintResponded(FROSTGroupId.T indexed gid, address plaintiff, address accused, uint256 secretShare);
-
-    /**
-     * @notice Emitted when a nonce commitment is submitted for preprocessing.
-     * @param gid The group ID.
-     * @param participant The participant address.
-     * @param chunk The chunk index.
-     * @param commitment The nonce commitment Merkle root.
-     */
-    event Preprocess(FROSTGroupId.T indexed gid, address participant, uint64 chunk, bytes32 commitment);
 
     /**
      * @notice Emitted when a signing ceremony is initiated.
@@ -505,24 +492,6 @@ contract FROSTCoordinator {
         emit KeyGenComplaintResponded(gid, plaintiff, msg.sender, secretShare);
     }
 
-    /**
-     * @notice Submits a commitment to a chunk of nonces for preprocessing.
-     * @param gid The group ID.
-     * @param commitment The nonce commitment Merkle root.
-     * @return chunk The chunk index used for this commitment.
-     * @dev This function implements the first step of a two-round signing protocol. Participants pre-commit to a large
-     *      set of nonces (1024) by submitting the Merkle root of the nonce commitments. This is the "commitment"
-     *      phase. The actual nonces are kept secret until a signing ceremony begins. This commitment/reveal scheme is a
-     *      crucial defense against adaptive signature forgery attacks (e.g., Wagner's Birthday Attack), as it forces
-     *      participants to choose their nonces before the message to be signed is known.
-     */
-    function preprocess(FROSTGroupId.T gid, bytes32 commitment) external returns (uint64 chunk) {
-        Group storage group = $groups[gid];
-        group.participants.verify(msg.sender);
-        chunk = group.nonces.commit(msg.sender, commitment, group.state.sequence);
-        emit Preprocess(gid, msg.sender, chunk, commitment);
-    }
-
     // ============================================================
     // EXTERNAL AND PUBLIC FUNCTIONS - SIGNING
     // ============================================================
@@ -548,28 +517,15 @@ contract FROSTCoordinator {
     }
 
     /**
-     * @notice Reveals a nonce pair for a signing ceremony.
-     * @param sid The signature ID.
-     * @param nonces The nonce pair to reveal.
-     * @param proof The Merkle proof for the nonce commitment.
-     * @dev In the second round of signing, each participant reveals the specific nonce pair they will use for this
-     *      ceremony. The contract verifies that this nonce pair was included in the previously committed Merkle tree
-     *      using the provided `proof`. This ensures that participants cannot maliciously choose their nonces after
-     *      seeing the message and other participants' nonces.
-     */
-    function signRevealNonces(FROSTSignatureId.T sid, SignNonces calldata nonces, bytes32[] calldata proof) external {
-        (Group storage group,) = _signatureGroupAndMessage(sid);
-        group.nonces.verify(msg.sender, nonces.d, nonces.e, sid.sequence(), proof);
-        emit SignRevealedNonces(sid, msg.sender, nonces);
-    }
-
-    /**
      * @notice Commits a nonce pair for a signing ceremony.
      * @param sid The signature ID.
      * @param nonces The nonce pair to commit.
      * @dev In the first round of signing, each participant commits to a fresh nonce pair that it generated for this
      *      ceremony. Nonce pairs must never be reused across signing ceremonies. Participants may commit more than once
      *      for the same ceremony, so offchain consumers must only consider the first commitment from each participant.
+     *      Committing after the message is known is safe: FROST's binding factor ties each signature share to the
+     *      message and to the commitments of every selected signer, which defends against Wagner-style (ROS) forgery
+     *      attacks on concurrent signing ceremonies.
      */
     function signCommitNonces(FROSTSignatureId.T sid, SignNonces calldata nonces) external {
         (Group storage group,) = _signatureGroupAndMessage(sid);

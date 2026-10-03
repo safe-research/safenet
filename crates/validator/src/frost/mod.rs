@@ -11,7 +11,6 @@ pub mod error;
 pub mod keygen;
 mod marshal;
 mod participants;
-pub mod preprocess;
 pub mod sign;
 
 #[cfg(test)]
