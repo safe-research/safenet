@@ -19,15 +19,10 @@ export const COORDINATOR_SIGNING_PROGRESS_EVENTS = parseAbi([
 	"event SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z)",
 ]);
 
-export const COORDINATOR_OTHER_EVENTS = parseAbi([
-	"event Preprocess(bytes32 indexed gid, address participant, uint64 chunk, bytes32 commitment)",
-]);
-
 export const COORDINATOR_EVENTS = [
 	COORDINATOR_SIGNING_INITIATED_EVENT,
 	...COORDINATOR_SIGNING_PROGRESS_EVENTS,
 	...COORDINATOR_KEY_GEN_EVENTS,
-	...COORDINATOR_OTHER_EVENTS,
 ] as const;
 
 export const COORDINATOR_KEY_GEN_SELECTORS = [

@@ -196,7 +196,6 @@ sol! {
             address accused,
             uint256 secretShare
         );
-        event Preprocess(bytes32 indexed gid, address participant, uint64 chunk, bytes32 commitment);
         event Sign(
             address indexed initiator,
             bytes32 indexed gid,
@@ -222,9 +221,7 @@ sol! {
         function keyGenComplaintResponse(bytes32 gid, address plaintiff, uint256 secretShare) external;
         function keyGenConfirm(bytes32 gid) external;
         function keyGenConfirmWithCallback(bytes32 gid, Callback callback) external;
-        function preprocess(bytes32 gid, bytes32 commitment) external;
         function sign(bytes32 gid, bytes32 message) external;
-        function signRevealNonces(bytes32 sid, SignNonces nonces, bytes32[] proof) external;
         function signCommitNonces(bytes32 sid, SignNonces nonces) external;
         function signShare(
             bytes32 sid,

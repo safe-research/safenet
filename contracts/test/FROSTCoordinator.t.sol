@@ -3,7 +3,6 @@ pragma solidity ^0.8.30;
 
 import {Test, Vm} from "@forge-std/Test.sol";
 import {Arrays} from "@oz/utils/Arrays.sol";
-import {MerkleProof} from "@oz/utils/cryptography/MerkleProof.sol";
 import {CommitmentShareMerkleTree} from "@test/util/CommitmentShareMerkleTree.sol";
 import {FROSTMath} from "@test/util/FROSTMath.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
@@ -342,31 +341,6 @@ contract FROSTCoordinatorTest is Test {
 
         FROST.Signature memory signature = coordinator.signatureValue(sid);
         FROST.verify(groupKey, signature, message);
-    }
-
-    function test_SignRevealNonces() public {
-        (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
-        address participant = participants.addr(0);
-
-        // We setup a commit with **a single** pair of nonces in a Merkle tree
-        // full of 0s in order to speed up the test. In practice, we compute and
-        // commit to trees with 1024 nonce pairs.
-        bytes32[] memory nonceProof = new bytes32[](10);
-        FROSTCoordinator.SignNonces memory nonces = FROSTCoordinator.SignNonces({
-            d: ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[0])).toPoint(),
-            e: ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[0])).toPoint()
-        });
-        // forge-lint: disable-next-line(asm-keccak256)
-        bytes32 leaf = keccak256(abi.encode(0, nonces.d.x, nonces.d.y, nonces.e.x, nonces.e.y));
-        vm.prank(participant);
-        coordinator.preprocess(gid, MerkleProof.processProof(nonceProof, leaf));
-
-        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("Hello, Safenet!"));
-
-        vm.expectEmit();
-        emit FROSTCoordinator.SignRevealedNonces(sid, participant, nonces);
-        vm.prank(participant);
-        coordinator.signRevealNonces(sid, nonces, nonceProof);
     }
 
     function test_SignCommitNonces_RevertsWhenNotSigning() public {
