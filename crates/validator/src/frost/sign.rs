@@ -29,13 +29,6 @@ pub struct SigningNonces(round1::SigningNonces);
 
 impl SigningNonces {
     /// Generates a fresh signing nonce pair for `key_share`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used once signing nonces are generated per ceremony"
-        )
-    )]
     pub fn generate<R>(key_share: &KeyShare, rng: &mut R) -> Self
     where
         R: CryptoRng + RngCore,
@@ -45,13 +38,6 @@ impl SigningNonces {
     }
 
     /// The public nonce commitments to publish onchain.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used once signing nonces are committed per ceremony"
-        )
-    )]
     pub fn commitments(&self) -> bindings::SignNonces {
         marshal::solidity_sign_nonces(self.0.commitments())
     }

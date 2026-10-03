@@ -55,6 +55,10 @@ pub enum EffectKind {
     RevealNonceCommitments,
     /// Consume this validator's nonce for a signing round.
     UseNonce,
+    /// Generate and persist this validator's nonces for a signing ceremony.
+    GenerateNonces,
+    /// Consume this validator's nonces for a signing ceremony.
+    UseNonceNEW,
     /// Reconcile stored group secrets with the state machine.
     ReconcileGroupSecrets,
 }
@@ -67,6 +71,8 @@ impl EffectKind {
             Self::NonceTree,
             Self::RevealNonceCommitments,
             Self::UseNonce,
+            Self::GenerateNonces,
+            Self::UseNonceNEW,
             Self::ReconcileGroupSecrets,
         ]
         .into_iter()
@@ -79,6 +85,8 @@ impl EffectKind {
             Self::NonceTree => "nonce_tree",
             Self::RevealNonceCommitments => "reveal_nonce_commitments",
             Self::UseNonce => "use_nonce",
+            Self::GenerateNonces => "generate_nonces",
+            Self::UseNonceNEW => "use_nonce_new",
             Self::ReconcileGroupSecrets => "reconcile_group_secrets",
         }
     }

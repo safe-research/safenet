@@ -325,13 +325,6 @@ impl SecretStore {
     /// Existing nonces are **never overwritten**, so a ceremony only ever has
     /// the first nonce pair stored for it, and one whose nonces were taken is
     /// never given a fresh pair.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used once signing nonces are generated per ceremony"
-        )
-    )]
     pub async fn store_signing_nonces(
         &self,
         group: B256,
@@ -376,10 +369,6 @@ impl SecretStore {
     /// gracefully no-ops instead of reusing them. Clearing is permanent and
     /// not undone by a reorg; the returned nonces live on only in the snapshot
     /// state, which a reorg is free to roll back.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used once signing nonces are used per ceremony")
-    )]
     pub async fn take_signing_nonces(
         &self,
         signature_id: B256,
