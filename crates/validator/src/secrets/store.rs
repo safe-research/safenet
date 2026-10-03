@@ -155,7 +155,7 @@ impl SecretStore {
         .fetch_one(&pool)
         .await?;
         metrics::secrets_total(SecretKind::Keygen).set(keygen as f64);
-        metrics::secrets_total(SecretKind::NoncesNEW).set(signing_nonces as f64);
+        metrics::secrets_total(SecretKind::Nonces).set(signing_nonces as f64);
 
         Ok(Self { pool })
     }
@@ -242,7 +242,7 @@ impl SecretStore {
         .await?;
         tx.commit().await?;
 
-        metrics::secrets_total(SecretKind::NoncesNEW).increment(inserted as f64);
+        metrics::secrets_total(SecretKind::Nonces).increment(inserted as f64);
         stored
             .map(|nonces| serde_json::from_str(&nonces))
             .transpose()
@@ -368,7 +368,7 @@ impl SecretStore {
             .rows_affected();
         tx.commit().await?;
         metrics::secrets_total(SecretKind::Keygen).decrement(keygen as f64);
-        metrics::secrets_total(SecretKind::NoncesNEW).decrement(signing_nonces as f64);
+        metrics::secrets_total(SecretKind::Nonces).decrement(signing_nonces as f64);
 
         Ok(Pruned {
             keygen,

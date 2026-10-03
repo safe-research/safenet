@@ -114,7 +114,7 @@ impl Transition {
     /// Publishes this validator's nonce commitments once the
     /// [`Effect::GenerateNonces`] effect has produced them, entering
     /// [`SigningState::CollectNonceCommitments`]'s collection round.
-    pub(super) fn handle_nonce_commitments_new(
+    pub(super) fn handle_nonce_commitments(
         &self,
         state: State,
         signature_id: B256,
@@ -225,7 +225,7 @@ impl Transition {
     /// Tracks a peer's nonce commitment. Only a signer's first commitment for
     /// the ceremony counts, and later ones are ignored. Once every expected
     /// signer has committed, enters [`SigningState::CollectSigningShares`] and
-    /// dispatches the [`Effect::UseNonceNEW`] effect to burn this validator's
+    /// dispatches the [`Effect::UseNonce`] effect to burn this validator's
     /// own nonces and produce a signature share from the now-complete set of
     /// commitments. If the round times out first, the signers that did commit
     /// continue without the others instead (see
@@ -317,7 +317,7 @@ impl Transition {
 
                 (
                     state,
-                    vec![Command::Effect(Effect::UseNonceNEW {
+                    vec![Command::Effect(Effect::UseNonce {
                         message,
                         signature_id,
                     })],
@@ -332,11 +332,11 @@ impl Transition {
     }
 
     /// Publishes this validator's signature share once the
-    /// [`Effect::UseNonceNEW`] effect has produced its nonces, attaching the
+    /// [`Effect::UseNonce`] effect has produced its nonces, attaching the
     /// packet's completion callback (`stageEpoch`/`attestTransaction`) so the
     /// group's completed signature carries out its onchain effect
     /// automatically.
-    pub(super) fn handle_nonces_new(
+    pub(super) fn handle_nonces(
         &self,
         state: State,
         message: B256,
@@ -590,7 +590,7 @@ impl Transition {
                     signing_selection = ?revealed.keys().collect::<Vec<_>>(),
                     "continuing signing ceremony with signers that revealed nonce commitments"
                 );
-                commands.push(Command::Effect(Effect::UseNonceNEW {
+                commands.push(Command::Effect(Effect::UseNonce {
                     message: *message,
                     signature_id: *signature_id,
                 }));

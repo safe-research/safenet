@@ -1,7 +1,7 @@
 //! The snapshotted validator state.
 
 mod keygen;
-mod preprocess;
+mod secrets;
 mod sign;
 mod transactions;
 
@@ -323,8 +323,8 @@ enum SigningState {
     /// Every signer's nonce commitment has been collected (or the commitment
     /// round timed out and the signers that did commit continue without the
     /// others) and this validator's own signature share is being produced;
-    /// waiting for the [`Effect::UseNonceNEW`] effect to complete before it
-    /// can be published.
+    /// waiting for the [`Effect::UseNonce`] effect to complete before it can
+    /// be published.
     CollectSigningShares {
         /// The key share for participating in the signing ceremony.
         key_share: Arc<KeyShare>,
@@ -462,13 +462,11 @@ impl StateTransition<State> for Transition {
                 Resume::Setup { group_id, secrets } => {
                     self.handle_key_gen_setup(state, group_id, secrets)
                 }
-                Resume::NonceCommitmentsNEW {
+                Resume::NonceCommitments {
                     signature_id,
                     nonces,
-                } => self.handle_nonce_commitments_new(state, signature_id, nonces),
-                Resume::NonceNEW { message, nonces } => {
-                    self.handle_nonces_new(state, message, nonces)
-                }
+                } => self.handle_nonce_commitments(state, signature_id, nonces),
+                Resume::Nonce { message, nonces } => self.handle_nonces(state, message, nonces),
             },
         }
     }

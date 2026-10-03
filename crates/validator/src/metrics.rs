@@ -50,7 +50,7 @@ pub enum EffectKind {
     /// Generate and persist this validator's nonces for a signing ceremony.
     GenerateNonces,
     /// Consume this validator's nonces for a signing ceremony.
-    UseNonceNEW,
+    UseNonce,
     /// Reconcile stored group secrets with the state machine.
     ReconcileGroupSecrets,
 }
@@ -60,7 +60,7 @@ impl EffectKind {
         [
             Self::KeyGenSetup,
             Self::GenerateNonces,
-            Self::UseNonceNEW,
+            Self::UseNonce,
             Self::ReconcileGroupSecrets,
         ]
         .into_iter()
@@ -70,7 +70,7 @@ impl EffectKind {
         match self {
             Self::KeyGenSetup => "key_gen_setup",
             Self::GenerateNonces => "generate_nonces",
-            Self::UseNonceNEW => "use_nonce_new",
+            Self::UseNonce => "use_nonce",
             Self::ReconcileGroupSecrets => "reconcile_group_secrets",
         }
     }
@@ -118,18 +118,18 @@ pub enum SecretKind {
     /// DKG polynomial secrets, one per group.
     Keygen,
     /// Signing nonce pairs, one per signing ceremony.
-    NoncesNEW,
+    Nonces,
 }
 
 impl SecretKind {
     fn variants() -> impl Iterator<Item = Self> {
-        [Self::Keygen, Self::NoncesNEW].into_iter()
+        [Self::Keygen, Self::Nonces].into_iter()
     }
 
     fn label(&self) -> &'static str {
         match self {
             Self::Keygen => "keygen",
-            Self::NoncesNEW => "nonces_new",
+            Self::Nonces => "nonces",
         }
     }
 }
