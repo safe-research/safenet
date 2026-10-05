@@ -450,7 +450,7 @@ impl BlockWatcher {
             }
 
             // While we wait around the expected block time, the block is likely
-            // available now or shortly after, so retry with the decreasing
+            // available now or shortly after, so retry with the configured
             // `block_retry_delays`. But on low-activity chains slots are commonly
             // skipped, so once the retries are exhausted, wait a whole block time
             // rather than hammering the node.
