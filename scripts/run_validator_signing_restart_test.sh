@@ -40,8 +40,8 @@ NAMES=(a b c)
 # Anvil default deployer account (index 0).
 SENDER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
-# Selector of `FROSTCoordinator.signRevealNonces`.
-SIGN_REVEAL_NONCES_SELECTOR=0x527bdde9
+# Selector of `FROSTCoordinator.signCommitNonces`.
+SIGN_COMMIT_NONCES_SELECTOR=0x38e9bdda
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/shared_test_scripts.sh"
@@ -154,7 +154,7 @@ VALIDATOR_C=$(tr '[:upper:]' '[:lower:]' <<< "${PARTICIPANTS[2]}")
 REVEAL_PENDING=0
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
     REVEAL_PENDING=$(cast rpc --rpc-url "$ANVIL_RPC_URL" txpool_content | jq \
-        --arg from "$VALIDATOR_C" --arg selector "$SIGN_REVEAL_NONCES_SELECTOR" \
+        --arg from "$VALIDATOR_C" --arg selector "$SIGN_COMMIT_NONCES_SELECTOR" \
         '[.pending | to_entries[] | select((.key | ascii_downcase) == $from)
             | .value[] | select(.input | startswith($selector))] | length')
     [ "$REVEAL_PENDING" -gt 0 ] && break
