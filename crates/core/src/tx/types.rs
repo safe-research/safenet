@@ -2,10 +2,9 @@
 
 use crate::tx::fees;
 use alloy::{
-    consensus::TxEip1559,
-    eips::eip1559::Eip1559Estimation,
-    primitives::{Address, Bytes, TxKind, U256},
-    rpc::types::AccessList,
+    consensus::constants::KECCAK_EMPTY,
+    eips::{eip1559::Eip1559Estimation, eip7702::constants::EIP7702_DELEGATION_DESIGNATOR},
+    primitives::{Address, B256, Bytes, U256, keccak256},
 };
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +38,58 @@ impl Default for Transaction {
     }
 }
 
+/// An EIP-7702 delegation to authorize alongside a transaction.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Authorization {
+    /// The delegate the signer account authorizes, or `Address::ZERO` to
+    /// remove the account's delegation.
+    pub address: Address,
+}
+
+impl Authorization {
+    /// The code hash of the signer account once the authorization is applied:
+    /// `keccak256(0xef0100 ‖ address)`, or [`KECCAK_EMPTY`] for
+    /// `Address::ZERO`.
+    pub fn code_hash(&self) -> B256 {
+        if self.address.is_zero() {
+            return KECCAK_EMPTY;
+        }
+        let mut code = [0; 23];
+        code[..3].copy_from_slice(&EIP7702_DELEGATION_DESIGNATOR);
+        code[3..].copy_from_slice(self.address.as_slice());
+        keccak256(code)
+    }
+}
+
+/// The onchain state of the signer account.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AccountStatus {
+    /// The account nonce.
+    pub nonce: u64,
+    /// The hash of the account's code, which is [`KECCAK_EMPTY`] for an
+    /// account without code.
+    pub code_hash: B256,
+}
+
+impl AccountStatus {
+    /// Creates an account status, treating a zero `code_hash`, which some
+    /// nodes return for an account that does not exist, as no code.
+    pub fn new(nonce: u64, code_hash: B256) -> Self {
+        let code_hash = match code_hash {
+            B256::ZERO => KECCAK_EMPTY,
+            code_hash => code_hash,
+        };
+        Self { nonce, code_hash }
+    }
+
+    /// Whether the account is delegated with EIP-7702.
+    pub fn is_delegated(&self) -> bool {
+        // An externally owned account's only possible code is a delegation
+        // designator.
+        self.code_hash != KECCAK_EMPTY
+    }
+}
+
 /// A [`Transaction`] with a nonce allocated for submission.
 ///
 /// It may contain fees from a previous submission.
@@ -50,6 +101,10 @@ pub struct AllocatedTransaction {
     /// The transaction.
     #[serde(flatten)]
     pub transaction: Transaction,
+    /// The EIP-7702 authorization carried by the transaction, which uses up
+    /// the nonce after `nonce`.
+    #[serde(default)]
+    pub authorization: Option<Authorization>,
     /// The maximum total fee per gas, set by the queue on submission.
     #[serde(default, with = "alloy::serde::quantity::opt")]
     pub max_fee_per_gas: Option<u128>,
@@ -59,20 +114,20 @@ pub struct AllocatedTransaction {
 }
 
 impl AllocatedTransaction {
-    /// Builds a concrete EIP-1559 transaction for signing, bumping `estimate`
-    /// above any fees from a previous submission so that it replaces it.
-    pub fn build(self, chain_id: u64, estimate: Eip1559Estimation) -> TxEip1559 {
+    /// Builds an unsigned transaction for signing, bumping `estimate` above any
+    /// fees from a previous submission so that it replaces it.
+    pub fn build(self, chain_id: u64, estimate: Eip1559Estimation) -> UnsignedTransaction {
         let fees = fees::bump(estimate, self.fees());
-        TxEip1559 {
+        UnsignedTransaction {
             chain_id,
             nonce: self.nonce,
             gas_limit: self.transaction.gas,
             max_fee_per_gas: fees.max_fee_per_gas,
             max_priority_fee_per_gas: fees.max_priority_fee_per_gas,
-            to: TxKind::Call(self.transaction.to),
+            to: self.transaction.to,
             value: self.transaction.value,
-            access_list: AccessList::default(),
             input: self.transaction.data,
+            authorization: self.authorization,
         }
     }
 
@@ -84,4 +139,28 @@ impl AllocatedTransaction {
             max_priority_fee_per_gas: self.max_priority_fee_per_gas?,
         })
     }
+}
+
+/// An unsigned transaction, as built by the queue for signing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnsignedTransaction {
+    /// The chain ID.
+    pub chain_id: u64,
+    /// The nonce.
+    pub nonce: u64,
+    /// The gas limit.
+    pub gas_limit: u64,
+    /// The maximum total fee per gas.
+    pub max_fee_per_gas: u128,
+    /// The maximum priority fee per gas.
+    pub max_priority_fee_per_gas: u128,
+    /// The destination of the transaction.
+    pub to: Address,
+    /// The transaction value.
+    pub value: U256,
+    /// The transaction calldata.
+    pub input: Bytes,
+    /// The EIP-7702 authorization to sign alongside the transaction, which
+    /// uses up the nonce after `nonce`.
+    pub authorization: Option<Authorization>,
 }

@@ -42,6 +42,7 @@ pub enum Assessment {
 }
 
 /// A transaction check in the sentinel engine's checker chain.
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait Checker: Send + Sync {
     /// A short, log-friendly identifier for this checker.

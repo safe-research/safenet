@@ -24,9 +24,13 @@ Additionally, the validator node stores intermediate state in a SQLite database 
 
 To run a validator, you need a reliable Ethereum RPC node that can accommodate a peak of 100.000 requests per day. The following table shows the approximate breakdown by RPC method (exact ratios depend on Safenet activity):
 
-| eth_getBlockByNumber | eth_sendRawTransaction | eth_maxPriorityFeePerGas | eth_getLogs | eth_getTransactionCount |
+| eth_getBlockByNumber | eth_sendRawTransaction | eth_maxPriorityFeePerGas | eth_getLogs | eth_getProof |
 | --- | --- | --- | --- | --- |
 | 42% | 8% | 11% | 11% | 28% |
+
+##### `eth_getProof` Support
+
+The validator reads its account's nonce and code with `eth_getProof` at the latest block it has observed, which can trail the RPC node's tip by a few blocks. Your RPC node must therefore serve `eth_getProof` for recent blocks. Most public Gnosis Chain RPCs do, but some disable the method entirely. Reth nodes need a non-zero `--rpc.eth-proof-window`, as the default only serves proofs for the tip.
 
 ##### `eth_getLogs` Reliability
 
@@ -64,6 +68,8 @@ Safenet Testnet’s onchain components are planned for deployment on Gnosis Chai
 
 > [!TIP] On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/validator/validator.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
 
+> [!TIP] To reduce gas costs and improve throughput, the validator can batch its transactions through an EIP-7702 executor implementing `ISafenet7702Executor`, such as [`Safenet7702Executor`](../contracts/src/Safenet7702Executor.sol). Set `executor` (and optionally `max_batch_gas`) in the `[transactions]` table: every transaction is then sent as a self-call to the executor, batching all actions queued while the previous transaction was pending, so many actions can get onchain in a single transaction. The validator's first transaction also delegates its account to the executor. EIP-7702 mempools accept only one pending transaction from a delegated account, so the validator keeps a single transaction in flight while its account is delegated. Removing `executor` does not undelegate the account immediately: the validator's next transaction removes the delegation, and until it executes, only one transaction is in flight.
+
 #### Consensus Secrets
 
 While participating in consensus, validators generate short-term secrets required to attest Safe transactions and participate correctly. Specifically, it generates:
@@ -94,6 +100,8 @@ It is read from the database at startup and tracked from there, so it describes 
 ## Running
 
 Configure the validator by writing a TOML configuration file — see [`crates/validator/src/config.rs`](../crates/validator/src/config.rs) for the full schema, and copy [`validator.sample.toml`](../crates/validator/validator.sample.toml) as a worked example to start from.
+
+The `rpc`, `signer` and `database` settings may reference environment variables as `${NAME}` (use `$$` for a literal `$`), so that secrets such as the validator private key or an RPC API key can be injected at startup instead of being stored in the configuration file — for example `signer = "${SIGNER_PRIVATE_KEY}"`. Substitution applies only to these settings; a referenced variable that is not set fails startup.
 
 ```sh
 cp crates/validator/validator.sample.toml validator.toml

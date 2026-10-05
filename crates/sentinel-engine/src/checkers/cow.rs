@@ -171,6 +171,7 @@ fn compute_order_uid(chain_id: U256, order: &CowOrder) -> [u8; 56] {
 /// [`CowChecker`]'s own logic and the actual HTTP call, so tests can supply
 /// a fake instead of standing up a real server (see `FakeOrderApi` in this
 /// module's tests).
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 trait OrderApi: Send + Sync {
     async fn fetch_order(
