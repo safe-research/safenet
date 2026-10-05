@@ -1,18 +1,9 @@
 use alloy::primitives::Address;
-use safenet_core::{driver, observability, tx::Signer};
+use safenet_core::{config, driver, observability, tx::Signer};
 use serde::Deserialize;
 use sqlx::sqlite::SqliteConnectOptions;
 use std::path::Path;
-use tokio::{fs, io};
 use url::Url;
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
-    Parse(#[from] toml::de::Error),
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -61,10 +52,8 @@ pub struct SentinelConfig {
 }
 
 impl Config {
-    pub async fn load(file: &Path) -> Result<Self, Error> {
-        let contents = fs::read_to_string(file).await?;
-        let config = toml::from_str(&contents)?;
-        Ok(config)
+    pub async fn load(file: &Path) -> Result<Self, config::Error> {
+        config::load(file).await
     }
 }
 

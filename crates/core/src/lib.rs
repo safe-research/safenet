@@ -10,6 +10,7 @@
 //!   restarts and roll back in case of reorgs.
 //! - Reliable transaction submission with all its complexities.
 
+pub mod config;
 pub mod driver;
 pub mod effects;
 pub mod index;
