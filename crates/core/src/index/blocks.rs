@@ -154,6 +154,8 @@ pub enum BlockUpdate {
     New {
         number: u64,
         hash: B256,
+        /// The block timestamp, in seconds since the Unix epoch.
+        timestamp: u64,
         logs_bloom: Bloom,
     },
 }
@@ -413,6 +415,7 @@ impl BlockWatcher {
             self.queue.push_back(BlockUpdate::New {
                 number: block.number,
                 hash: block.hash,
+                timestamp: block.timestamp,
                 logs_bloom: block.logs_bloom,
             });
         }
@@ -493,6 +496,7 @@ impl BlockWatcher {
 
         let number = block.number;
         let hash = block.hash;
+        let timestamp = block.timestamp;
         let logs_bloom = block.logs_bloom;
 
         // Record the new block, and advance the pending block.
@@ -518,6 +522,7 @@ impl BlockWatcher {
         Ok(BlockUpdate::New {
             number,
             hash,
+            timestamp,
             logs_bloom,
         })
     }
@@ -1411,6 +1416,7 @@ mod tests {
         BlockUpdate::New {
             number: block.header.number,
             hash: block.header.hash,
+            timestamp: block.header.timestamp,
             logs_bloom: block.header.logs_bloom,
         }
     }

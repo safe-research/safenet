@@ -15,7 +15,7 @@ use alloy::{
 };
 use serde::Deserialize;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
     num::{NonZeroU64, NonZeroUsize},
     range::RangeInclusive,
@@ -45,7 +45,8 @@ pub struct EventBlock {
     pub number: u64,
     /// The block timestamp, in seconds since the Unix epoch. `None` when the
     /// node omits the (non-standard, but widely supported) `blockTimestamp`
-    /// field from its `eth_getLogs` response.
+    /// field from its `eth_getLogs` response and it could not be determined
+    /// from the block's header.
     pub timestamp: Option<u64>,
 }
 
@@ -201,6 +202,7 @@ enum Step {
     Block {
         block_number: u64,
         block_hash: B256,
+        block_timestamp: u64,
         logs_bloom: Bloom,
         retries: u64,
     },
@@ -253,11 +255,12 @@ where
             BlockUpdate::New {
                 number,
                 hash,
+                timestamp,
                 logs_bloom,
-                ..
             } => Step::Block {
                 block_number: number,
                 block_hash: hash,
+                block_timestamp: timestamp,
                 logs_bloom,
                 retries: 0,
             },
@@ -300,10 +303,17 @@ where
             Step::Block {
                 block_number,
                 block_hash,
+                block_timestamp,
                 logs_bloom,
                 retries,
             } => self
-                .block(block_number, block_hash, logs_bloom, retries)
+                .block(
+                    block_number,
+                    block_hash,
+                    block_timestamp,
+                    logs_bloom,
+                    retries,
+                )
                 .await
                 .map(Some),
         }
@@ -332,7 +342,7 @@ where
             Fetch::MultipleQueries(blocks)
         };
 
-        let result = self.fetch_logs(fetch).await;
+        let result = self.fetch_logs(fetch, &BTreeMap::new()).await;
         self.step = if result.is_ok() {
             if query_to_block == to_block {
                 Step::Idle
@@ -374,6 +384,7 @@ where
         &mut self,
         block_number: u64,
         block_hash: B256,
+        block_timestamp: u64,
         logs_bloom: Bloom,
         retries: u64,
     ) -> Result<EventUpdate<E>, Error> {
@@ -390,13 +401,18 @@ where
             Fetch::MultipleQueries(BlockFilter::Hash(block_hash))
         };
 
-        let result = self.fetch_logs(fetch).await;
+        // The block watcher already fetched the block's header, so its timestamp
+        // fills in for logs the node returns without one, without an additional
+        // RPC request.
+        let block_timestamps = BTreeMap::from([(block_number, block_timestamp)]);
+        let result = self.fetch_logs(fetch, &block_timestamps).await;
         self.step = if result.is_ok() {
             Step::Idle
         } else {
             Step::Block {
                 block_number,
                 block_hash,
+                block_timestamp,
                 logs_bloom,
                 retries: retries + 1,
             }
@@ -410,7 +426,14 @@ where
 
     /// Fetches the watched logs for some blocks using the given strategy,
     /// returning them decoded and in `(block_number, log_index)` order.
-    async fn fetch_logs(&self, fetch: Fetch) -> Result<Vec<EventLog<E>>, Error> {
+    ///
+    /// `block_timestamps` maps block numbers to their timestamps, for logs that
+    /// the node returns without one.
+    async fn fetch_logs(
+        &self,
+        fetch: Fetch,
+        block_timestamps: &BTreeMap<u64, u64>,
+    ) -> Result<Vec<EventLog<E>>, Error> {
         let logs = match fetch {
             Fetch::SingleQuery(blocks) => {
                 let filter = blocks
@@ -476,7 +499,7 @@ where
                     .collect()
             }
         };
-        decode_and_sort(&logs)
+        decode_and_sort(&logs, block_timestamps)
     }
 
     /// Guards against nodes that silently cap the number of returned logs: a
@@ -499,7 +522,13 @@ where
 
 /// Decodes logs into the typed event set and sorts them into
 /// `(block_number, log_index)` order.
-fn decode_and_sort<E>(logs: &[Log]) -> Result<Vec<EventLog<E>>, Error>
+///
+/// A log's block timestamp is taken from the log itself when the node includes
+/// it, and otherwise looked up by block number in `block_timestamps`.
+fn decode_and_sort<E>(
+    logs: &[Log],
+    block_timestamps: &BTreeMap<u64, u64>,
+) -> Result<Vec<EventLog<E>>, Error>
 where
     E: Events,
 {
@@ -508,11 +537,12 @@ where
         .map(|log| {
             E::decode_log(log.topics(), &log.data().data)
                 .and_then(|data| {
+                    let number = log.block_number?;
+                    let timestamp = log
+                        .block_timestamp
+                        .or_else(|| block_timestamps.get(&number).copied());
                     Some(EventLog {
-                        block: EventBlock {
-                            number: log.block_number?,
-                            timestamp: log.block_timestamp,
-                        },
+                        block: EventBlock { number, timestamp },
                         index: log.log_index?,
                         address: log.inner.address,
                         data,
@@ -690,29 +720,32 @@ mod tests {
 
     #[test]
     fn decodes_and_sorts_logs() {
-        let events = decode_and_sort::<Erc20::Erc20Events>(&[
-            log(
-                (2, 0),
-                Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                },
-            ),
-            log(
-                (2, 5),
-                Erc20::Approval {
-                    amount: uint!(2_U256),
-                    ..Default::default()
-                },
-            ),
-            log(
-                (1, 1),
-                Erc20::Transfer {
-                    amount: uint!(3_U256),
-                    ..Default::default()
-                },
-            ),
-        ])
+        let events = decode_and_sort::<Erc20::Erc20Events>(
+            &[
+                log(
+                    (2, 0),
+                    Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    },
+                ),
+                log(
+                    (2, 5),
+                    Erc20::Approval {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    },
+                ),
+                log(
+                    (1, 1),
+                    Erc20::Transfer {
+                        amount: uint!(3_U256),
+                        ..Default::default()
+                    },
+                ),
+            ],
+            &BTreeMap::new(),
+        )
         .unwrap();
 
         assert_eq!(
@@ -770,11 +803,11 @@ mod tests {
         ];
 
         assert_matches!(
-            decode_and_sort::<Erc20::Erc20Events>(&logs),
+            decode_and_sort::<Erc20::Erc20Events>(&logs, &BTreeMap::new()),
             Err(Error::DecodeLog { log_index, .. }) if log_index == 1
         );
 
-        let events = decode_and_sort::<TokenEvents>(&logs).unwrap();
+        let events = decode_and_sort::<TokenEvents>(&logs, &BTreeMap::new()).unwrap();
         assert_eq!(
             events,
             [
@@ -803,6 +836,76 @@ mod tests {
         );
     }
 
+    #[test]
+    fn decodes_logs_with_known_block_timestamps() {
+        let without_timestamp = |position, event| Log {
+            block_timestamp: None,
+            ..log(position, event)
+        };
+        let logs = vec![
+            log(
+                (1, 0),
+                Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                },
+            ),
+            without_timestamp(
+                (2, 0),
+                Erc20::Transfer {
+                    amount: uint!(2_U256),
+                    ..Default::default()
+                },
+            ),
+            without_timestamp(
+                (3, 0),
+                Erc20::Transfer {
+                    amount: uint!(3_U256),
+                    ..Default::default()
+                },
+            ),
+        ];
+        let block_timestamps = BTreeMap::from([(1, 0), (2, block_timestamp(2))]);
+
+        let events = decode_and_sort::<Erc20::Erc20Events>(&logs, &block_timestamps).unwrap();
+
+        assert_eq!(
+            events,
+            [
+                // The log's own timestamp takes precedence over a known one.
+                event_log(
+                    (1, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                ),
+                // A log without a timestamp falls back to the known one.
+                event_log(
+                    (2, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    })
+                ),
+                // Neither the log nor the known timestamps have one.
+                EventLog {
+                    block: EventBlock {
+                        number: 3,
+                        timestamp: None,
+                    },
+                    ..event_log(
+                        (3, 0),
+                        Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                            amount: uint!(3_U256),
+                            ..Default::default()
+                        })
+                    )
+                },
+            ]
+        );
+    }
+
     #[tokio::test]
     async fn single_query_fetches_all_events_at_once() {
         let asserter = Asserter::new();
@@ -826,7 +929,10 @@ mod tests {
         ]);
 
         let logs = events
-            .fetch_logs(Fetch::SingleQuery(BlockFilter::Range { from: 1, to: 2 }))
+            .fetch_logs(
+                Fetch::SingleQuery(BlockFilter::Range { from: 1, to: 2 }),
+                &BTreeMap::new(),
+            )
             .await
             .unwrap();
 
@@ -873,10 +979,10 @@ mod tests {
         )]);
 
         let logs = events
-            .fetch_logs(Fetch::MultipleQueries(BlockFilter::Range {
-                from: 1,
-                to: 2,
-            }))
+            .fetch_logs(
+                Fetch::MultipleQueries(BlockFilter::Range { from: 1, to: 2 }),
+                &BTreeMap::new(),
+            )
             .await
             .unwrap();
 
@@ -949,10 +1055,13 @@ mod tests {
         asserter.push_success(&logs);
 
         let logs = events
-            .fetch_logs(Fetch::ClientFiltered {
-                block_hash: B256::repeat_byte(0x42),
-                logs_bloom: bloom::compute_logs_bloom(&logs),
-            })
+            .fetch_logs(
+                Fetch::ClientFiltered {
+                    block_hash: B256::repeat_byte(0x42),
+                    logs_bloom: bloom::compute_logs_bloom(&logs),
+                },
+                &BTreeMap::new(),
+            )
             .await
             .unwrap();
 
@@ -1003,7 +1112,10 @@ mod tests {
 
         assert_matches!(
             events
-                .fetch_logs(Fetch::SingleQuery(BlockFilter::Range { from: 1, to: 1 }))
+                .fetch_logs(
+                    Fetch::SingleQuery(BlockFilter::Range { from: 1, to: 1 }),
+                    &BTreeMap::new()
+                )
                 .await,
             Err(Error::TooManyLogs)
         );
@@ -1041,10 +1153,10 @@ mod tests {
 
         assert_matches!(
             events
-                .fetch_logs(Fetch::MultipleQueries(BlockFilter::Range {
-                    from: 1,
-                    to: 1
-                }))
+                .fetch_logs(
+                    Fetch::MultipleQueries(BlockFilter::Range { from: 1, to: 1 }),
+                    &BTreeMap::new()
+                )
                 .await,
             Err(Error::TooManyLogs)
         );
@@ -1066,10 +1178,10 @@ mod tests {
 
         assert_matches!(
             events
-                .fetch_logs(Fetch::MultipleQueries(BlockFilter::Range {
-                    from: 1,
-                    to: 1
-                }))
+                .fetch_logs(
+                    Fetch::MultipleQueries(BlockFilter::Range { from: 1, to: 1 }),
+                    &BTreeMap::new()
+                )
                 .await,
             Err(Error::Rpc(_))
         );
@@ -1101,10 +1213,10 @@ mod tests {
         }
 
         let logs = events
-            .fetch_logs(Fetch::MultipleQueries(BlockFilter::Range {
-                from: 1,
-                to: 1,
-            }))
+            .fetch_logs(
+                Fetch::MultipleQueries(BlockFilter::Range { from: 1, to: 1 }),
+                &BTreeMap::new(),
+            )
             .await
             .unwrap();
 
@@ -1137,10 +1249,13 @@ mod tests {
 
         assert_matches!(
             events
-                .fetch_logs(Fetch::ClientFiltered {
-                    block_hash: B256::repeat_byte(0x42),
-                    logs_bloom: Bloom::repeat_byte(0xcd),
-                })
+                .fetch_logs(
+                    Fetch::ClientFiltered {
+                        block_hash: B256::repeat_byte(0x42),
+                        logs_bloom: Bloom::repeat_byte(0xcd),
+                    },
+                    &BTreeMap::new()
+                )
                 .await,
             Err(Error::IncompleteLogs { block_hash }) if block_hash == B256::repeat_byte(0x42)
         );
@@ -1312,6 +1427,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
                 logs_bloom: Bloom::ZERO,
             })
             .unwrap();
@@ -1325,6 +1441,50 @@ mod tests {
         )]);
 
         // A single query returns the block's logs, then the watcher is idle.
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(1337..=1337),
+                logs: vec![event_log(
+                    (1337, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                )],
+            })
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn new_block_uses_the_header_timestamp_when_logs_omit_it() {
+        let asserter = Asserter::new();
+        let mut events = watcher(&asserter, Config::default());
+        events
+            .on_block_update(BlockUpdate::New {
+                number: 1337,
+                hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
+                logs_bloom: Bloom::ZERO,
+            })
+            .unwrap();
+
+        // The node omits `blockTimestamp` from the block's logs.
+        asserter.push_success(&vec![Log {
+            block_timestamp: None,
+            ..log(
+                (1337, 0),
+                Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                },
+            )
+        }]);
+
+        // The log gets the timestamp of the block update, and the logs query is
+        // the only request made.
         assert_eq!(
             events.next().await.unwrap(),
             Some(EventUpdate {
@@ -1380,6 +1540,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
                 logs_bloom: bloom::compute_logs_bloom(&block_logs),
             })
             .unwrap();
@@ -1417,6 +1578,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
                 logs_bloom: Bloom::ZERO,
             })
             .unwrap();
@@ -1479,6 +1641,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash,
+                timestamp: block_timestamp(1337),
                 logs_bloom: Bloom::ZERO,
             })
             .unwrap();
@@ -1525,6 +1688,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
                 logs_bloom: Bloom::ZERO,
             })
             .unwrap();
