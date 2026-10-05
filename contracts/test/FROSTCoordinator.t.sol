@@ -399,15 +399,19 @@ contract FROSTCoordinatorTest is Test {
     }
 
     function test_KeyGenComplain_CompromisedByRespondedComplaints() public {
-        // The commitments are not verified onchain, so dummy values suffice to
-        // get the group into the sharing phase where complaints are allowed.
+        // Only the proofs of knowledge and possession are verified onchain, so
+        // trivial commitments suffice to get the group into the sharing phase
+        // where complaints are allowed.
         FROSTGroupId.T gid;
         FROSTCoordinator.KeyGenCommitment memory commitment;
         commitment.q = ForgeSecp256k1.g(1).toPoint();
         commitment.c = new Secp256k1.Point[](THRESHOLD);
+        commitment.c[0] = ForgeSecp256k1.g(1).toPoint();
         for (uint256 i = 0; i < COUNT; i++) {
             bytes32 root = participants.root();
             (address participant, bytes32[] memory poap) = participants.proof(i);
+            commitment.pok = FROSTMath.proofOfKnowledge(participant, 1);
+            commitment.pop = FROSTMath.proofOfKnowledge(participant, 1);
             vm.prank(participant);
             (gid,) = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, bytes32(0), poap, commitment);
         }
