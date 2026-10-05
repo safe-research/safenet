@@ -47,14 +47,10 @@ pub fn transitions_total(kind: TransitionKind) -> Counter {
 pub enum EffectKind {
     /// Generate and persist the secrets for a key generation ceremony.
     KeyGenSetup,
-    /// Start eagerly generating nonce chunks for a group.
-    StartNonceGeneration,
-    /// Generate and persist the next nonce tree for a group.
-    NonceTree,
-    /// Reveal this validator's nonce commitments.
-    RevealNonceCommitments,
-    /// Consume this validator's nonce for a signing round.
-    UseNonce,
+    /// Generate and persist this validator's nonces for a signing ceremony.
+    GenerateNonces,
+    /// Consume this validator's nonces for a signing ceremony.
+    UseNonces,
     /// Reconcile stored group secrets with the state machine.
     ReconcileGroupSecrets,
 }
@@ -63,10 +59,8 @@ impl EffectKind {
     fn variants() -> impl Iterator<Item = Self> {
         [
             Self::KeyGenSetup,
-            Self::StartNonceGeneration,
-            Self::NonceTree,
-            Self::RevealNonceCommitments,
-            Self::UseNonce,
+            Self::GenerateNonces,
+            Self::UseNonces,
             Self::ReconcileGroupSecrets,
         ]
         .into_iter()
@@ -75,10 +69,8 @@ impl EffectKind {
     fn label(&self) -> &'static str {
         match self {
             Self::KeyGenSetup => "key_gen_setup",
-            Self::StartNonceGeneration => "start_nonce_generation",
-            Self::NonceTree => "nonce_tree",
-            Self::RevealNonceCommitments => "reveal_nonce_commitments",
-            Self::UseNonce => "use_nonce",
+            Self::GenerateNonces => "generate_nonces",
+            Self::UseNonces => "use_nonces",
             Self::ReconcileGroupSecrets => "reconcile_group_secrets",
         }
     }
@@ -125,7 +117,7 @@ pub fn effects_total(effect: EffectKind, result: Outcome) -> Counter {
 pub enum SecretKind {
     /// DKG polynomial secrets, one per group.
     Keygen,
-    /// Nonce chunks, each holding many nonces.
+    /// Signing nonce pairs, one per signing ceremony.
     Nonces,
 }
 

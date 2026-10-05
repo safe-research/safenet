@@ -2,7 +2,7 @@ use super::{Packet, SigningState, State, Transition};
 use crate::{
     bindings::{self, Consensus, Coordinator, Oracle, SignNonces},
     consensus::{epoch::EpochId, hashing},
-    frost::{self, keygen::KeyShare, preprocess::Nonces},
+    frost::{self, sign::SigningNonces},
     merkle::MerkleRoot,
     service::{Action, Effect},
 };
@@ -12,9 +12,8 @@ use alloy::{
 };
 use safenet_core::state::{Command, Commands};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, btree_map::Entry},
     mem,
-    sync::Arc,
 };
 
 impl Transition {
@@ -27,23 +26,16 @@ impl Transition {
     ) -> (State, Commands<State, Self>) {
         let mut commands = Vec::new();
 
-        let nonce = state
-            .epochs
-            .values_mut()
-            .find(|epoch| epoch.group.id() == event.gid)
-            .and_then(|epoch| epoch.nonces.observe(event.sequence));
-        match (nonce, state.signing.remove(&event.message)) {
-            (
-                Some(nonce),
-                Some(SigningState::WaitingForRequest {
-                    key_share,
-                    group_id,
-                    packet,
-                    signers,
-                    ..
-                }),
-            ) if group_id == event.gid => match packet {
-                Packet::Transaction { oracle, .. } => {
+        match state.signing.remove(&event.message) {
+            Some(SigningState::WaitingForRequest {
+                key_share,
+                group_id,
+                packet,
+                oracle_approved,
+                signers,
+                ..
+            }) if group_id == event.gid => match packet {
+                Packet::Transaction { oracle, .. } if !oracle_approved => {
                     let deadline = block.saturating_add(self.config.oracle_timeout.get());
                     tracing::info!(
                         message = %event.message,
@@ -59,7 +51,6 @@ impl Transition {
                             oracle,
                             group_id,
                             signature_id: event.sid,
-                            nonce,
                             packet,
                             signers,
                             deadline,
@@ -69,24 +60,27 @@ impl Transition {
                         .signature_id_to_message
                         .insert(event.sid, event.message);
                 }
-                Packet::EpochRollover { .. } => {
+                Packet::Transaction { .. } | Packet::EpochRollover { .. } => {
                     let deadline = block.saturating_add(self.config.signing_timeout.get());
                     tracing::info!(
                         message = %event.message,
                         signature_id = %event.sid,
                         group_id = %event.gid,
                         sequence = event.sequence,
-                        "accepted signing request; revealing nonce commitment"
+                        "accepted signing request; committing nonces"
                     );
+                    commands.push(Command::Effect(Effect::GenerateNonces {
+                        group_id: event.gid,
+                        signature_id: event.sid,
+                        key_share: key_share.clone(),
+                    }));
                     state.signing.insert(
                         event.message,
                         SigningState::CollectNonceCommitments {
                             key_share,
                             group_id: event.gid,
                             signature_id: event.sid,
-                            nonce,
-                            revealed: BTreeMap::new(),
-                            last_signer: None,
+                            committed: BTreeMap::new(),
                             packet,
                             signers,
                             deadline,
@@ -95,26 +89,9 @@ impl Transition {
                     state
                         .signature_id_to_message
                         .insert(event.sid, event.message);
-                    commands.push(Command::Effect(Effect::RevealNonceCommitments {
-                        signature_id: event.sid,
-                        message: event.message,
-                        root: nonce.root,
-                        offset: nonce.offset,
-                    }));
                 }
             },
-            (None, Some(SigningState::WaitingForRequest { group_id, .. }))
-                if group_id == event.gid =>
-            {
-                tracing::warn!(
-                    message = %event.message,
-                    signature_id = %event.sid,
-                    group_id = %event.gid,
-                    sequence = event.sequence,
-                    "not participating in signing request without a canonically linked nonce"
-                );
-            }
-            (_, Some(other)) => {
+            Some(other) => {
                 tracing::warn!(
                     message = %event.message,
                     signature_id = %event.sid,
@@ -122,7 +99,7 @@ impl Transition {
                 );
                 state.signing.insert(event.message, other);
             }
-            (_, None) => {
+            None => {
                 tracing::debug!(
                     message = %event.message,
                     signature_id = %event.sid,
@@ -134,18 +111,20 @@ impl Transition {
         (state, commands)
     }
 
-    /// Publishes this validator's revealed nonce commitment once the
-    /// [`Effect::RevealNonceCommitments`] effect has produced it, entering
+    /// Publishes this validator's nonce commitments once the
+    /// [`Effect::GenerateNonces`] effect has produced them, entering
     /// [`SigningState::CollectNonceCommitments`]'s collection round.
     pub(super) fn handle_nonce_commitments(
         &self,
         state: State,
         signature_id: B256,
-        message: B256,
         nonces: SignNonces,
-        proof: Vec<B256>,
     ) -> (State, Commands<State, Self>) {
-        let deadline = match state.signing.get(&message) {
+        let deadline = match state
+            .signature_id_to_message
+            .get(&signature_id)
+            .and_then(|message| state.signing.get(message))
+        {
             Some(SigningState::CollectNonceCommitments {
                 signature_id: sid,
                 deadline,
@@ -156,17 +135,16 @@ impl Transition {
 
         (
             state,
-            vec![Command::Action(Action::RevealNonceCommitments {
+            vec![Command::Action(Action::CommitNonces {
                 signature_id,
                 nonces,
-                proof,
                 expires_at: deadline,
             })],
         )
     }
 
     /// Resolves an oracle-backed signing round once its result lands:
-    /// approved, this validator reveals its nonce commitment (as in
+    /// approved, this validator commits its nonces (as in
     /// [`handle_sign`](Self::handle_sign)'s live-request case); rejected, the
     /// session is simply dropped. A result for anything other than a tracked
     /// [`SigningState::WaitingForOracle`] round is ignored, as is one from an
@@ -186,7 +164,6 @@ impl Transition {
                 packet,
                 signers,
                 group_id,
-                nonce,
                 ..
             }) if expected == oracle && event.approved => {
                 let deadline = block.saturating_add(self.config.signing_timeout.get());
@@ -194,32 +171,27 @@ impl Transition {
                     request_id = %event.requestId,
                     signature_id = %signature_id,
                     %oracle,
-                    "oracle approved transaction; revealing nonce commitment"
+                    "oracle approved transaction; committing nonces"
                 );
+                let effect = Effect::GenerateNonces {
+                    group_id,
+                    signature_id,
+                    key_share: key_share.clone(),
+                };
                 state.signing.insert(
                     event.requestId,
                     SigningState::CollectNonceCommitments {
                         key_share,
                         group_id,
                         signature_id,
-                        nonce,
-                        revealed: BTreeMap::new(),
-                        last_signer: None,
+                        committed: BTreeMap::new(),
                         packet,
                         signers,
                         deadline,
                     },
                 );
 
-                (
-                    state,
-                    vec![Command::Effect(Effect::RevealNonceCommitments {
-                        signature_id,
-                        message: event.requestId,
-                        root: nonce.root,
-                        offset: nonce.offset,
-                    })],
-                )
+                (state, vec![Command::Effect(effect)])
             }
             Some(SigningState::WaitingForOracle {
                 signature_id,
@@ -250,16 +222,19 @@ impl Transition {
         }
     }
 
-    /// Tracks a peer's revealed nonce commitment. Once every expected signer
-    /// has revealed, enters [`SigningState::CollectSigningShares`] and
-    /// dispatches the [`Effect::UseNonce`] effect to burn this validator's own
-    /// nonce and produce a signature share from the now-complete set of
-    /// revealed commitments.
-    pub(super) fn handle_sign_revealed_nonces(
+    /// Tracks a peer's nonce commitment. Only a signer's first commitment for
+    /// the ceremony counts, and later ones are ignored. Once every expected
+    /// signer has committed, enters [`SigningState::CollectSigningShares`] and
+    /// dispatches the [`Effect::UseNonces`] effect to burn this validator's
+    /// own nonces and produce a signature share from the now-complete set of
+    /// commitments. If the round times out first, the signers that did commit
+    /// continue without the others instead (see
+    /// [`handle_signing_timeouts`](Self::handle_signing_timeouts)).
+    pub(super) fn handle_sign_committed_nonces(
         &self,
         mut state: State,
         block: u64,
-        event: &Coordinator::SignRevealedNonces,
+        event: &Coordinator::SignCommittedNonces,
     ) -> (State, Commands<State, Self>) {
         let Some(&message) = state.signature_id_to_message.get(&event.sid) else {
             return (state, Vec::new());
@@ -270,30 +245,13 @@ impl Transition {
                 key_share,
                 group_id,
                 signature_id,
-                nonce,
-                mut revealed,
-                mut last_signer,
+                mut committed,
                 packet,
                 signers,
                 deadline,
             }) => {
-                match signers
-                    .contains(&event.participant)
-                    .then(|| frost::sign::verify_revealed_nonces(event.participant, &event.nonces))
-                {
-                    Some(Ok(nonces)) => {
-                        revealed.insert(event.participant, nonces);
-                        last_signer = Some(event.participant);
-                    }
-                    Some(Err(err)) => {
-                        tracing::warn!(
-                            signature_id = %signature_id,
-                            participant = %event.participant,
-                            %err,
-                            "ignoring invalid revealed nonce commitment",
-                        );
-                    }
-                    None => {
+                match committed.entry(event.participant) {
+                    _ if !signers.contains(&event.participant) => {
                         tracing::warn!(
                             signature_id = %signature_id,
                             participant = %event.participant,
@@ -301,18 +259,39 @@ impl Transition {
                             "ignoring nonce commitment from participant not in signing selection",
                         );
                     }
+                    Entry::Occupied(_) => {
+                        tracing::warn!(
+                            signature_id = %signature_id,
+                            participant = %event.participant,
+                            "ignoring repeated nonce commitment from participant",
+                        );
+                    }
+                    Entry::Vacant(entry) => {
+                        match frost::sign::verify_committed_nonces(event.participant, &event.nonces)
+                        {
+                            Ok(nonces) => {
+                                entry.insert(nonces);
+                            }
+                            Err(err) => {
+                                tracing::warn!(
+                                    signature_id = %signature_id,
+                                    participant = %event.participant,
+                                    %err,
+                                    "ignoring invalid nonce commitment",
+                                );
+                            }
+                        }
+                    }
                 }
 
-                if revealed.len() < signers.len() {
+                if committed.len() < signers.len() {
                     state.signing.insert(
                         message,
                         SigningState::CollectNonceCommitments {
                             key_share,
                             group_id,
                             signature_id,
-                            nonce,
-                            revealed,
-                            last_signer,
+                            committed,
                             packet,
                             signers,
                             deadline,
@@ -328,7 +307,7 @@ impl Transition {
                         key_share,
                         group_id,
                         signature_id,
-                        revealed,
+                        committed,
                         selections: BTreeMap::new(),
                         packet,
                         signers,
@@ -338,10 +317,9 @@ impl Transition {
 
                 (
                     state,
-                    vec![Command::Effect(Effect::UseNonce {
+                    vec![Command::Effect(Effect::UseNonces {
                         message,
-                        root: nonce.root,
-                        offset: nonce.offset,
+                        signature_id,
                     })],
                 )
             }
@@ -354,20 +332,20 @@ impl Transition {
     }
 
     /// Publishes this validator's signature share once the
-    /// [`Effect::UseNonce`] effect has produced it, attaching the packet's
-    /// completion callback (`stageEpoch`/`attestTransaction`) so the
+    /// [`Effect::UseNonces`] effect has produced its nonces, attaching the
+    /// packet's completion callback (`stageEpoch`/`attestTransaction`) so the
     /// group's completed signature carries out its onchain effect
     /// automatically.
     pub(super) fn handle_nonces(
         &self,
         state: State,
         message: B256,
-        nonces: Box<Nonces>,
+        nonces: Box<SigningNonces>,
     ) -> (State, Commands<State, Self>) {
         let Some(SigningState::CollectSigningShares {
             key_share,
             signature_id,
-            revealed,
+            committed,
             packet,
             deadline,
             ..
@@ -376,7 +354,7 @@ impl Transition {
             return (state, Vec::new());
         };
 
-        let result = match frost::sign::signature_share(key_share, *nonces, revealed, &message) {
+        let result = match frost::sign::signature_share(key_share, *nonces, committed, &message) {
             Ok(result) => result,
             Err(err) => {
                 tracing::warn!(
@@ -519,50 +497,6 @@ impl Transition {
         let next_deadline = block.saturating_add(self.config.signing_timeout.get());
         let mut commands = Vec::new();
 
-        // A helper for restarting a signing ceremony shared by timed out nonce
-        // collection and signing share broadcasting.
-        let restart_signing_ceremony =
-            |signature_id_to_message: &mut BTreeMap<B256, B256>,
-             commands: &mut Vec<Command<Action, Effect>>,
-             key_share: Arc<KeyShare>,
-             group_id: B256,
-             signature_id: B256,
-             signers: BTreeSet<Address>,
-             message: B256,
-             packet: Packet,
-             last_signer: Option<Address>| {
-                // The signature ID is no longer useful, unlink it.
-                signature_id_to_message.remove(&signature_id);
-
-                // Ensure that there are sufficient signers left (at least a
-                // group threshold of them) for restarting the ceremony. and
-                // that we are part of the signing selection.
-                if signers.len() < key_share.group_threshold() as usize
-                    || !signers.contains(&self.account)
-                {
-                    return None;
-                }
-
-                // We want to restart the signing process. By convention, the
-                // last signer to participate is responsible for kicking if off.
-                // If that is us, queue up an action for it.
-                if last_signer == Some(self.account) {
-                    commands.push(Command::Action(Action::Sign {
-                        group_id,
-                        message,
-                        expires_at: next_deadline,
-                    }));
-                }
-                Some(SigningState::WaitingForRequest {
-                    key_share,
-                    group_id,
-                    responsible: last_signer,
-                    packet,
-                    signers,
-                    deadline: next_deadline,
-                })
-            };
-
         for (message, signing) in &state.signing {
             if signing.deadline() <= block {
                 tracing::warn!(
@@ -621,7 +555,6 @@ impl Transition {
                 oracle,
                 group_id,
                 signature_id,
-                nonce,
                 packet,
                 signers,
                 deadline,
@@ -634,42 +567,53 @@ impl Transition {
                 key_share,
                 group_id,
                 signature_id,
-                nonce,
-                revealed,
-                last_signer,
+                committed,
                 packet,
-                signers,
                 deadline,
+                ..
             } if *deadline <= block => {
-                // The remaining signers are all the ones that revealed nonces.
-                signers.retain(|signer| revealed.contains_key(signer));
-
-                if let Some(new_state) = restart_signing_ceremony(
-                    &mut state.signature_id_to_message,
-                    &mut commands,
-                    key_share.clone(),
-                    *group_id,
-                    *signature_id,
-                    mem::take(signers),
-                    *message,
-                    packet.clone(),
-                    *last_signer,
-                ) {
-                    *signing = new_state;
-                    true
-                } else {
-                    false
+                // Instead of restarting the signing ceremony, continue it with
+                // the signers that committed their nonces before the deadline
+                // (any later commitments are ignored). Make sure that there are
+                // sufficient signers left (at least a group threshold of them)
+                // and that we are part of the signing selection.
+                if committed.len() < key_share.group_threshold() as usize
+                    || !committed.contains_key(&self.account)
+                {
+                    state.signature_id_to_message.remove(signature_id);
+                    return false;
                 }
+
+                tracing::info!(
+                    %message,
+                    %signature_id,
+                    signing_selection = ?committed.keys().collect::<Vec<_>>(),
+                    "continuing signing ceremony with signers that committed nonces"
+                );
+                commands.push(Command::Effect(Effect::UseNonces {
+                    message: *message,
+                    signature_id: *signature_id,
+                }));
+                *signing = SigningState::CollectSigningShares {
+                    key_share: key_share.clone(),
+                    group_id: *group_id,
+                    signature_id: *signature_id,
+                    signers: committed.keys().copied().collect(),
+                    committed: mem::take(committed),
+                    selections: BTreeMap::new(),
+                    packet: packet.clone(),
+                    deadline: next_deadline,
+                };
+                true
             }
             SigningState::CollectSigningShares {
                 key_share,
                 group_id,
                 signature_id,
-                revealed,
                 selections,
                 packet,
-                signers,
                 deadline,
+                ..
             } if *deadline <= block => {
                 // Select the largest section that is at least as large as the
                 // group threshold. This is necessarily unique because the
@@ -683,23 +627,45 @@ impl Transition {
                     })
                     .max_by_key(|selection| selection.shares_from.len())
                     .unwrap_or_default();
+                let signers = canonical_selection.shares_from;
+                let last_signer = canonical_selection.last_signer;
 
-                if let Some(new_state) = restart_signing_ceremony(
-                    &mut state.signature_id_to_message,
-                    &mut commands,
-                    key_share.clone(),
-                    *group_id,
-                    *signature_id,
-                    canonical_selection.shares_from,
-                    *message,
-                    packet.clone(),
-                    canonical_selection.last_signer,
-                ) {
-                    *signing = new_state;
-                    true
-                } else {
-                    false
+                // The signature ID is no longer useful, unlink it.
+                state.signature_id_to_message.remove(signature_id);
+
+                // Ensure that there are sufficient signers left (at least a
+                // group threshold of them) for restarting the ceremony and
+                // that we are part of the signing selection.
+                if signers.len() < key_share.group_threshold() as usize
+                    || !signers.contains(&self.account)
+                {
+                    return false;
                 }
+
+                // We want to restart the signing process. By convention, the
+                // last signer to participate is responsible for kicking it off.
+                // If that is us, queue up an action for it.
+                if last_signer == Some(self.account) {
+                    commands.push(Command::Action(Action::Sign {
+                        group_id: *group_id,
+                        message: *message,
+                        expires_at: next_deadline,
+                    }));
+                }
+
+                // Ceremonies are only ever restarted once they have reached
+                // the signature share round, which for oracle-backed packets
+                // means that the oracle has already approved them.
+                *signing = SigningState::WaitingForRequest {
+                    key_share: key_share.clone(),
+                    group_id: *group_id,
+                    responsible: last_signer,
+                    packet: packet.clone(),
+                    oracle_approved: true,
+                    signers,
+                    deadline: next_deadline,
+                };
+                true
             }
             SigningState::WaitingForAttestation {
                 signature_id,

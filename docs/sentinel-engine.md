@@ -79,7 +79,7 @@ log_filter = "info"
 
 | Setting | Required | Description |
 | --- | --- | --- |
-| `rpc` | Yes | RPC endpoint used by checks that query chain state. |
+| `rpc` | Yes | RPC endpoint used by checks that query chain state. May reference environment variables as `${NAME}` (`$$` for a literal `$`). |
 | `bind_address` | No | HTTP listen address; defaults to `127.0.0.1:5473`. |
 | `engine.blocklist` | Yes | Destinations treated as known malicious by the blocklist check. |
 | `engine.address_poisoning_lookback_blocks` | Yes | Recent block range inspected for an established interaction. |

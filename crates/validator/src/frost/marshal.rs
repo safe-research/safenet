@@ -1,7 +1,7 @@
 //! Marshalling between secp256k1 primitives and their Solidity types.
 
 use super::error;
-use crate::{bindings, frost::ecdh::EncryptionPublicKey};
+use crate::{bindings, frost::ecdh};
 use alloy::primitives::U256;
 use frost_secp256k1::{
     keys::{self, dkg},
@@ -15,26 +15,28 @@ use k256::{
     },
 };
 
-/// Converts a DKG round 1 [`Package`](dkg::round1::Package) and an encryption
-/// public key to the ABI [`KeyGenCommitment`](bindings::KeyGenCommitment):
+/// Converts an encryption [`Package`](ecdh::Package) and a DKG round 1
+/// [`Package`](dkg::round1::Package) to the ABI
+/// [`KeyGenCommitment`](bindings::KeyGenCommitment):
 ///
-/// - `q`  the encryption public key for ECDH-encrypted secret shares,
-/// - `c`  all coefficient commitments `[g^a₀, …, g^a_{t-1}]`,
-/// - `r`  the proof-of-knowledge nonce commitment `R`,
-/// - `mu` the proof-of-knowledge scalar `μ`.
+/// - `q`   the encryption public key for ECDH-encrypted secret shares,
+/// - `pop` the proof of possession of the encryption public key,
+/// - `c`   all coefficient commitments `[g^a₀, …, g^a_{t-1}]`,
+/// - `pok` the proof of knowledge of `a₀`.
 pub fn solidity_commitment(
-    encryption_public_key: &EncryptionPublicKey,
+    encryption_package: &ecdh::Package,
     package: &dkg::round1::Package,
 ) -> bindings::KeyGenCommitment {
-    let q = solidity_point(encryption_public_key.as_point());
+    let q = solidity_point(encryption_package.public_key_point());
+    let pop = solidity_signature(encryption_package.proof_of_possession());
     let c = package
         .commitment()
         .coefficients()
         .iter()
         .map(|coefficient| solidity_point(&coefficient.value()))
         .collect();
-    let bindings::Signature { r, z } = solidity_signature(package.proof_of_knowledge());
-    bindings::KeyGenCommitment { q, c, r, mu: z }
+    let pok = solidity_signature(package.proof_of_knowledge());
+    bindings::KeyGenCommitment { q, pop, c, pok }
 }
 
 /// Converts a verifying share and the peer-encrypted secret shares to the ABI
@@ -101,11 +103,14 @@ pub fn solidity_signature(signature: &frost_secp256k1::Signature) -> bindings::S
 }
 
 /// Converts an ABI [`KeyGenCommitment`](bindings::KeyGenCommitment) back to the
-/// peer's encryption public key and DKG round 1 package.
+/// peer's encryption package and DKG round 1 package.
 pub fn frost_commitment(
     commitment: &bindings::KeyGenCommitment,
-) -> Result<(EncryptionPublicKey, dkg::round1::Package), frost_secp256k1::Error> {
-    let encryption_public_key = EncryptionPublicKey::from_point(frost_point(&commitment.q)?)?;
+) -> Result<(ecdh::Package, dkg::round1::Package), frost_secp256k1::Error> {
+    let encryption_package = ecdh::Package::new(
+        frost_point(&commitment.q)?,
+        frost_signature(&commitment.pop.r, &commitment.pop.z)?,
+    );
     let coefficients = keys::VerifiableSecretSharingCommitment::new(
         commitment
             .c
@@ -116,9 +121,9 @@ pub fn frost_commitment(
             })
             .collect::<Result<_, frost_secp256k1::Error>>()?,
     );
-    let proof_of_knowledge = frost_signature(&commitment.r, &commitment.mu)?;
+    let proof_of_knowledge = frost_signature(&commitment.pok.r, &commitment.pok.z)?;
     let package = dkg::round1::Package::new(coefficients, proof_of_knowledge);
-    Ok((encryption_public_key, package))
+    Ok((encryption_package, package))
 }
 
 /// Converts a `U256` to a canonical secp256k1 scalar.

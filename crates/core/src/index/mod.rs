@@ -160,9 +160,9 @@ mod tests {
     fn config() -> Config {
         Config {
             blocks: blocks::Config {
-                block_time: blocks::BlockTime::Millis(2_000),
-                block_propagation_delay: 500,
-                block_retry_delays: vec![],
+                block_time: blocks::Timing::Millis(2_000),
+                block_propagation_delay: blocks::Timing::Millis(500),
+                block_retry_delays: blocks::Timing::Millis(vec![]),
                 max_reorg_depth: 3,
                 start_block: None,
             },
@@ -177,8 +177,15 @@ mod tests {
     }
 
     #[test]
-    fn deserializes_auto_block_time() {
-        let config = serde_json::from_str::<Config>(r#"{"block_time":"auto"}"#).unwrap();
+    fn deserializes_auto_timings() {
+        let config = serde_json::from_str::<Config>(
+            r#"{
+                "block_time": "auto",
+                "block_propagation_delay": "auto",
+                "block_retry_delays": "auto"
+            }"#,
+        )
+        .unwrap();
         assert_eq!(config, Config::default());
     }
 
@@ -203,9 +210,9 @@ mod tests {
             config,
             Config {
                 blocks: blocks::Config {
-                    block_time: blocks::BlockTime::Millis(2_000),
-                    block_propagation_delay: 250,
-                    block_retry_delays: vec![50, 75],
+                    block_time: blocks::Timing::Millis(2_000),
+                    block_propagation_delay: blocks::Timing::Millis(250),
+                    block_retry_delays: blocks::Timing::Millis(vec![50, 75]),
                     max_reorg_depth: 3,
                     start_block: Some(100),
                 },

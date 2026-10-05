@@ -24,7 +24,7 @@ sol! {
     /// A FROST group signature (`FROST.Signature`): the group commitment point
     /// `r` and the scalar component `z`. Onchain attestations and completed
     /// signatures share this shape.
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, PartialEq, Eq)]
     struct Signature {
         Point r;
         uint256 z;
@@ -57,14 +57,14 @@ sol! {
     }
 
     /// DKG commitment published in `keyGenAndCommit` / `keyGenCommit`: the
-    /// public encryption key `q`, the commitment vector `c`, the proof-of-
-    /// knowledge nonce `r` and its scalar `mu`.
+    /// public encryption key `q`, the proof of possession `pop` of `q`, the
+    /// commitment vector `c` and the proof of knowledge `pok` of `c[0]`.
     #[derive(Debug, Default, PartialEq, Eq)]
     struct KeyGenCommitment {
         Point q;
+        Signature pop;
         Point[] c;
-        Point r;
-        uint256 mu;
+        Signature pok;
     }
 
     /// DKG secret share published in `keyGenSecretShare`: the participant public
@@ -75,7 +75,7 @@ sol! {
         uint256[] f;
     }
 
-    /// A revealed FROST nonce commitment pair (hiding `d`, binding `e`).
+    /// A FROST nonce commitment pair (hiding `d`, binding `e`).
     #[derive(Debug, Default, PartialEq, Eq)]
     struct SignNonces {
         Point d;
@@ -196,7 +196,6 @@ sol! {
             address accused,
             uint256 secretShare
         );
-        event Preprocess(bytes32 indexed gid, address participant, uint64 chunk, bytes32 commitment);
         event Sign(
             address indexed initiator,
             bytes32 indexed gid,
@@ -204,7 +203,7 @@ sol! {
             bytes32 sid,
             uint64 sequence
         );
-        event SignRevealedNonces(bytes32 indexed sid, address participant, SignNonces nonces);
+        event SignCommittedNonces(bytes32 indexed sid, address participant, SignNonces nonces);
         event SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z);
         event SignCompleted(bytes32 indexed sid, bytes32 indexed selectionRoot, Signature signature);
 
@@ -222,9 +221,8 @@ sol! {
         function keyGenComplaintResponse(bytes32 gid, address plaintiff, uint256 secretShare) external;
         function keyGenConfirm(bytes32 gid) external;
         function keyGenConfirmWithCallback(bytes32 gid, Callback callback) external;
-        function preprocess(bytes32 gid, bytes32 commitment) external;
         function sign(bytes32 gid, bytes32 message) external;
-        function signRevealNonces(bytes32 sid, SignNonces nonces, bytes32[] proof) external;
+        function signCommitNonces(bytes32 sid, SignNonces nonces) external;
         function signShare(
             bytes32 sid,
             SignSelection selection,

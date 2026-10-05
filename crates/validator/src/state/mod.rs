@@ -1,7 +1,7 @@
 //! The snapshotted validator state.
 
 mod keygen;
-mod preprocess;
+mod secrets;
 mod sign;
 mod transactions;
 
@@ -18,7 +18,7 @@ use crate::{
             GroupCommitments, KeyShare, PublicKeyShare, Secrets, SharingState, VerifiedCommitment,
             VerifiedShare,
         },
-        sign::RevealedNonces,
+        sign::CommittedNonces,
     },
     merkle::MerkleRoot,
     metrics::{self, TransitionKind},
@@ -61,27 +61,6 @@ struct Epoch {
     group: Group,
     /// This validator's key share.
     key_share: Arc<KeyShare>,
-    /// This validator's canonical nonce-tree assignments for the epoch.
-    nonces: NonceState,
-}
-
-/// Canonical nonce state for one participating epoch.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct NonceState {
-    /// The next signing sequence expected for the group.
-    next_sequence: u64,
-    /// Canonical nonce roots by sequence chunk. `None` reserves a chunk while
-    /// its locally generated root is waiting to be registered onchain.
-    chunks: BTreeMap<u64, Option<B256>>,
-}
-
-/// The durable-store coordinates of a nonce selected by canonical state.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-struct NonceIndex {
-    /// The nonce tree's Merkle root.
-    root: B256,
-    /// The nonce's offset within the tree.
-    offset: u64,
 }
 
 /// The epoch-rollover / DKG state machine. Each active variant carries the
@@ -293,6 +272,13 @@ enum SigningState {
         responsible: Option<Address>,
         /// The packet being signed.
         packet: Packet,
+        /// Whether the packet's oracle already approved it, in which case the
+        /// signing round does not wait for an oracle result again. This is
+        /// the case when restarting a signing ceremony, as the oracle result
+        /// is only ever emitted once. Packets without an oracle never wait for
+        /// one, regardless of this flag.
+        #[serde(default)]
+        oracle_approved: bool,
         /// The group members expected to take part in signing.
         signers: BTreeSet<Address>,
         /// The block by which the signing round must complete.
@@ -309,8 +295,6 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// This validator's nonce selected for the signing round.
-        nonce: NonceIndex,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
@@ -318,8 +302,8 @@ enum SigningState {
         /// The block by which the oracle result must land.
         deadline: u64,
     },
-    /// This validator has revealed its nonce commitment and is waiting for
-    /// its peers to reveal theirs.
+    /// This validator has committed its nonces and is waiting for its peers
+    /// to commit theirs.
     CollectNonceCommitments {
         /// The key share for participating in the signing ceremony.
         key_share: Arc<KeyShare>,
@@ -327,12 +311,8 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// This validator's nonce selected for the signing round.
-        nonce: NonceIndex,
-        /// Verified revealed nonce commitments received from peers so far.
-        revealed: BTreeMap<Address, RevealedNonces>,
-        /// The last participant to reveal a valid nonce commitment, if any.
-        last_signer: Option<Address>,
+        /// Verified nonce commitments received from peers so far.
+        committed: BTreeMap<Address, CommittedNonces>,
         /// The packet being signed.
         packet: Packet,
         /// The group members expected to take part in signing.
@@ -340,9 +320,11 @@ enum SigningState {
         /// The block by which the commitment round must complete.
         deadline: u64,
     },
-    /// Every signer's nonce commitment has been revealed and this
-    /// validator's own signature share is being produced; waiting for the
-    /// [`Effect::UseNonce`] effect to complete before it can be published.
+    /// Every signer's nonce commitment has been collected (or the commitment
+    /// round timed out and the signers that did commit continue without the
+    /// others) and this validator's own signature share is being produced;
+    /// waiting for the [`Effect::UseNonces`] effect to complete before it can
+    /// be published.
     CollectSigningShares {
         /// The key share for participating in the signing ceremony.
         key_share: Arc<KeyShare>,
@@ -350,8 +332,8 @@ enum SigningState {
         group_id: B256,
         /// The signature id assigned to this signing round.
         signature_id: B256,
-        /// Verified revealed nonce commitments received from peers so far.
-        revealed: BTreeMap<Address, RevealedNonces>,
+        /// Verified nonce commitments received from peers so far.
+        committed: BTreeMap<Address, CommittedNonces>,
         /// The signing selections.
         selections: BTreeMap<MerkleRoot, SigningSelection>,
         /// The packet being signed.
@@ -431,14 +413,11 @@ impl StateTransition<State> for Transition {
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplaintResponded(
                     event,
                 )) => self.handle_key_gen_complaint_responded(state, log.block, &event),
-                Event::Coordinator(Coordinator::CoordinatorEvents::Preprocess(event)) => {
-                    self.handle_preprocess(state, &event)
-                }
                 Event::Coordinator(Coordinator::CoordinatorEvents::Sign(event)) => {
                     self.handle_sign(state, log.block, &event)
                 }
-                Event::Coordinator(Coordinator::CoordinatorEvents::SignRevealedNonces(event)) => {
-                    self.handle_sign_revealed_nonces(state, log.block, &event)
+                Event::Coordinator(Coordinator::CoordinatorEvents::SignCommittedNonces(event)) => {
+                    self.handle_sign_committed_nonces(state, log.block, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::SignShared(event)) => {
                     self.handle_sign_shared(state, &event)
@@ -465,7 +444,6 @@ impl StateTransition<State> for Transition {
                 let (state, rollover_commands) = self.handle_rollover_new_block(state, block);
                 let (state, keygen_timeout_commands) = self.handle_key_gen_timeouts(state, block);
                 let (state, signing_timeout_commands) = self.handle_signing_timeouts(state, block);
-                let (state, nonce_topup_commands) = self.handle_nonce_topup(state);
                 let (state, reconciliation_commands) =
                     self.handle_group_reconciliation(state, block);
                 (
@@ -474,7 +452,6 @@ impl StateTransition<State> for Transition {
                         rollover_commands,
                         keygen_timeout_commands,
                         signing_timeout_commands,
-                        nonce_topup_commands,
                         reconciliation_commands,
                     ]
                     .concat(),
@@ -485,17 +462,11 @@ impl StateTransition<State> for Transition {
                 Resume::Setup { group_id, secrets } => {
                     self.handle_key_gen_setup(state, group_id, secrets)
                 }
-                Resume::NonceTree {
-                    group_id,
-                    commitment,
-                } => self.handle_nonce_tree(state, group_id, commitment),
                 Resume::NonceCommitments {
                     signature_id,
-                    message,
                     nonces,
-                    proof,
-                } => self.handle_nonce_commitments(state, signature_id, message, nonces, proof),
-                Resume::Nonce { message, nonces } => self.handle_nonces(state, message, nonces),
+                } => self.handle_nonce_commitments(state, signature_id, nonces),
+                Resume::Nonces { message, nonces } => self.handle_nonces(state, message, nonces),
             },
         }
     }

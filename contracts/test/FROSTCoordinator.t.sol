@@ -3,7 +3,6 @@ pragma solidity ^0.8.30;
 
 import {Test, Vm} from "@forge-std/Test.sol";
 import {Arrays} from "@oz/utils/Arrays.sol";
-import {MerkleProof} from "@oz/utils/cryptography/MerkleProof.sol";
 import {CommitmentShareMerkleTree} from "@test/util/CommitmentShareMerkleTree.sol";
 import {FROSTMath} from "@test/util/FROSTMath.sol";
 import {ForgeSecp256k1} from "@test/util/ForgeSecp256k1.sol";
@@ -11,6 +10,7 @@ import {ParticipantMerkleTree} from "@test/util/ParticipantMerkleTree.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {FROST} from "@/libraries/FROST.sol";
 import {FROSTGroupId} from "@/libraries/FROSTGroupId.sol";
+import {FROSTParticipantMap} from "@/libraries/FROSTParticipantMap.sol";
 import {FROSTSignatureId} from "@/libraries/FROSTSignatureId.sol";
 import {Secp256k1} from "@/libraries/Secp256k1.sol";
 
@@ -69,11 +69,12 @@ contract FROSTCoordinatorTest is Test {
         FROSTCoordinator.KeyGenCommitment[] memory commitments = new FROSTCoordinator.KeyGenCommitment[](COUNT);
         for (uint256 i = 0; i < COUNT; i++) {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[i];
+            commitment.pok = FROSTMath.proofOfKnowledge(participants.addr(i), a[i][0]);
 
-            uint256 k = vm.randomUint(1, Secp256k1.N - 1);
-            commitment.r = ForgeSecp256k1.g(k).toPoint();
-            uint256 c = FROST.keyGenChallenge(participants.addr(i), ForgeSecp256k1.g(a[i][0]).toPoint(), commitment.r);
-            commitment.mu = addmod(k, mulmod(a[i][0], c, Secp256k1.N), Secp256k1.N);
+            // EXTENSION: We additionally prove possession of the encryption
+            // key, so that participants cannot reuse another participant's key
+            // in order to decrypt the secret shares intended for them.
+            commitment.pop = FROSTMath.proofOfKnowledge(participants.addr(i), q[i]);
         }
 
         // Round 1.3
@@ -115,11 +116,9 @@ contract FROSTCoordinatorTest is Test {
         // included in events emitted during the `KeyGen` process.
         for (uint256 i = 0; i < COUNT; i++) {
             FROSTCoordinator.KeyGenCommitment memory commitment = commitments[i];
-            uint256 c = FROST.keyGenChallenge(participants.addr(i), commitment.c[0], commitment.r);
-            Secp256k1.mulmuladd(commitment.mu, c, commitment.c[0], commitment.r);
+            FROST.verifyProofOfKnowledge(participants.addr(i), commitment.c[0], commitment.pok);
 
-            commitment.mu = 0;
-            commitment.r = Secp256k1.Point({x: 0, y: 0});
+            delete commitment.pok;
         }
 
         // Round 2.1*
@@ -144,9 +143,14 @@ contract FROSTCoordinatorTest is Test {
                 // EXTENSION: We apply ECDH to encrypt the `f_i(l)` evaluation
                 // for the target participant. This allows us to use the same
                 // onchain coordinator for the secret shares and not require an
-                // additional secret channel. This also implies that we only
-                // completely delete `f` in 2.3, as we need `a_0` to recover the
-                // secret shares sent by other participants.
+                // additional secret channel. This also implies that we need to
+                // keep the encryption key `q` until 2.2, in order to recover
+                // the secret shares sent by other participants. Before
+                // encrypting, we verify the target participant's proof of
+                // possession of its encryption key, so that we only ever
+                // encrypt to keys that the target participant owns. Note that
+                // this is also verified onchain by the coordinator.
+                FROST.verifyProofOfKnowledge(participants.addr(l), commitments[l].q, commitments[l].pop);
                 fi = FROSTMath.ecdh(fi, q[i], qq[l]);
 
                 share.f[k++] = fi;
@@ -226,67 +230,100 @@ contract FROSTCoordinatorTest is Test {
         }
     }
 
+    function test_KeyGenCommit_RevertsWithoutProofOfKnowledge() public {
+        // A participant must not be able to commit to a public key share it
+        // does not know the discrete logarithm of, otherwise it could create a
+        // group with a key that no one has access to (such as an existing
+        // group's key).
+        (FROSTGroupId.T existing,,) = _trustedKeyGen(bytes32(0));
+        FROSTGroupId.T gid = coordinator.keyGen(participants.root(), COUNT, THRESHOLD, bytes32(uint256(1)));
+
+        (address participant, bytes32[] memory poap) = participants.proof(0);
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        commitment.q = ForgeSecp256k1.g(1).toPoint();
+        commitment.c = new Secp256k1.Point[](THRESHOLD);
+        for (uint256 j = 1; j < THRESHOLD; j++) {
+            commitment.c[j] = ForgeSecp256k1.g(vm.randomUint(1, Secp256k1.N - 1)).toPoint();
+        }
+        commitment.c[0] = coordinator.groupKey(existing);
+        commitment.pok.r = ForgeSecp256k1.g(vm.randomUint(1, Secp256k1.N - 1)).toPoint();
+        commitment.pok.z = vm.randomUint(0, Secp256k1.N - 1);
+        commitment.pop = FROSTMath.proofOfKnowledge(participant, 1);
+
+        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
+        vm.prank(participant);
+        coordinator.keyGenCommit(gid, poap, commitment);
+    }
+
+    function test_KeyGenCommit_RevertsWithoutProofOfPossession() public {
+        // A participant must not be able to reuse another participant's
+        // encryption key, otherwise it could use the plaintext secret share
+        // revealed in response to a complaint in order to decrypt the secret
+        // shares intended for that participant.
+        FROSTGroupId.T gid = coordinator.keyGen(participants.root(), COUNT, THRESHOLD, bytes32(0));
+
+        uint256 q = vm.randomUint(1, Secp256k1.N - 1);
+        FROSTCoordinator.KeyGenCommitment memory commitment;
+        commitment.q = ForgeSecp256k1.g(q).toPoint();
+        commitment.c = new Secp256k1.Point[](THRESHOLD);
+        commitment.c[0] = ForgeSecp256k1.g(1).toPoint();
+
+        (address owner, bytes32[] memory ownerPoap) = participants.proof(0);
+        commitment.pok = FROSTMath.proofOfKnowledge(owner, 1);
+        commitment.pop = FROSTMath.proofOfKnowledge(owner, q);
+        vm.prank(owner);
+        coordinator.keyGenCommit(gid, ownerPoap, commitment);
+
+        (address copier, bytes32[] memory copierPoap) = participants.proof(1);
+        commitment.pok = FROSTMath.proofOfKnowledge(copier, 1);
+        vm.expectRevert(Secp256k1.InvalidMulMulAddWitness.selector);
+        vm.prank(copier);
+        coordinator.keyGenCommit(gid, copierPoap, commitment);
+    }
+
     function test_Sign() public {
         // Implementation of the two-round FROST signing protocol from RFC-9591
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5>
 
         (FROSTGroupId.T gid, uint256[] memory s,) = _trustedKeyGen(bytes32(0));
 
-        // Round 1
-
-        // We setup a commit with **a single** pair of nonces in a Merkle tree
-        // full of 0s in order to speed up the test. In practice, we compute and
-        // commit to trees with 1024 nonce pairs.
-        bytes32[] memory nonceProof = new bytes32[](10);
-        Nonces[] memory nonces = new Nonces[](COUNT);
-        {
-            bytes32[] memory commitments = new bytes32[](COUNT);
-            for (uint256 i = 0; i < COUNT; i++) {
-                Nonces memory n = nonces[i];
-                uint256 d = FROST.nonce(bytes32(vm.randomUint()), s[i]);
-                n.d = ForgeSecp256k1.g(d);
-                uint256 e = FROST.nonce(bytes32(vm.randomUint()), s[i]);
-                n.e = ForgeSecp256k1.g(e);
-                // forge-lint: disable-next-line(asm-keccak256)
-                bytes32 leaf = keccak256(abi.encode(0, n.d.x(), n.d.y(), n.e.x(), n.e.y()));
-                commitments[i] = MerkleProof.processProof(nonceProof, leaf);
-            }
-            for (uint256 i = 0; i < COUNT; i++) {
-                vm.prank(participants.addr(i));
-                coordinator.preprocess(gid, commitments[i]);
-            }
-        }
-
-        // Round 2
-
-        // The complete list of participants is implicitely selects all honest
-        // all participants should cooperate. "honest" must be deterministic
-        // such that there is no ambiguity on the set for honest validators.
-        uint256[] memory honestParticipants = _honestParticipants();
-
-        // The signature aggregator (the coordinator contract) reveals the
-        // message to sign and the participants reveal their committed nonces
-        // from round 1.
+        // The signature aggregator (the coordinator contract) starts a signing
+        // ceremony for the message to sign.
         bytes32 message = keccak256("Hello, Safenet!");
 
         vm.expectEmit();
         emit FROSTCoordinator.Sign(address(this), gid, message, FROSTSignatureId.create(gid, 0), 0);
         FROSTSignatureId.T sid = coordinator.sign(gid, message);
 
+        // Round 1
+
+        // The complete list of participants is implicitely selects all honest
+        // all participants should cooperate. "honest" must be deterministic
+        // such that there is no ambiguity on the set for honest validators.
+        uint256[] memory honestParticipants = _honestParticipants();
+
+        // Each honest participant generates a fresh nonce pair for the signing
+        // ceremony and commits to it.
+        // <https://datatracker.ietf.org/doc/html/rfc9591#section-5.1>
+        Nonces[] memory nonces = new Nonces[](COUNT);
         for (uint256 i = 0; i < honestParticipants.length; i++) {
             uint256 h = honestParticipants[i];
             Nonces memory n = nonces[h];
+            n.d = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[h]));
+            n.e = ForgeSecp256k1.g(FROST.nonce(bytes32(vm.randomUint()), s[h]));
             FROSTCoordinator.SignNonces memory nn = FROSTCoordinator.SignNonces({d: n.d.toPoint(), e: n.e.toPoint()});
             vm.expectEmit();
-            emit FROSTCoordinator.SignRevealedNonces(sid, participants.addr(h), nn);
+            emit FROSTCoordinator.SignCommittedNonces(sid, participants.addr(h), nn);
             vm.prank(participants.addr(h));
-            coordinator.signRevealNonces(sid, nn, nonceProof);
+            coordinator.signCommitNonces(sid, nn);
         }
+
+        // Round 2
 
         // The `sign` algorithm from RFC-9591. Note that the algorithms assume a
         // sorted list of participants. Note that at this point, all commitment
         // nonces are available from event data (assuming a block limit for
-        // participants to reveal their nonces before being declared "dishonest").
+        // participants to commit their nonces before being declared "dishonest").
         // <https://datatracker.ietf.org/doc/html/rfc9591#section-5.2>
         _sortByParticipantId(honestParticipants);
         address[] memory honestAddrs = new address[](honestParticipants.length);
@@ -361,6 +398,51 @@ contract FROSTCoordinatorTest is Test {
         FROST.verify(groupKey, signature, message);
     }
 
+    function test_SignCommitNonces_RevertsWhenNotSigning() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = FROSTSignatureId.create(gid, 0);
+        address participant = participants.addr(0);
+        FROSTCoordinator.SignNonces memory nonces = _randomSignNonces();
+
+        vm.expectRevert(FROSTCoordinator.NotSigning.selector);
+        vm.prank(participant);
+        coordinator.signCommitNonces(sid, nonces);
+    }
+
+    function test_SignCommitNonces_RevertsForNonParticipant() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("Hello, Safenet!"));
+        FROSTCoordinator.SignNonces memory nonces = _randomSignNonces();
+
+        vm.expectRevert(FROSTParticipantMap.InvalidParticipant.selector);
+        vm.prank(address(0x5afe));
+        coordinator.signCommitNonces(sid, nonces);
+    }
+
+    function test_SignCommitNonces_RevertsOnInvalidNonces() public {
+        (FROSTGroupId.T gid,,) = _trustedKeyGen(bytes32(0));
+        FROSTSignatureId.T sid = coordinator.sign(gid, keccak256("Hello, Safenet!"));
+        address participant = participants.addr(0);
+        Secp256k1.Point memory zero = Secp256k1.Point({x: 0, y: 0});
+
+        FROSTCoordinator.SignNonces memory nonces = _randomSignNonces();
+        nonces.d = zero;
+        vm.expectRevert(Secp256k1.NotOnCurve.selector);
+        vm.prank(participant);
+        coordinator.signCommitNonces(sid, nonces);
+
+        nonces = _randomSignNonces();
+        nonces.e = zero;
+        vm.expectRevert(Secp256k1.NotOnCurve.selector);
+        vm.prank(participant);
+        coordinator.signCommitNonces(sid, nonces);
+    }
+
+    function _randomSignNonces() private returns (FROSTCoordinator.SignNonces memory nonces) {
+        nonces.d = ForgeSecp256k1.rand().toPoint();
+        nonces.e = ForgeSecp256k1.rand().toPoint();
+    }
+
     function _randomSortedAddresses(uint16 count) private view returns (address[] memory result) {
         result = new address[](count);
         for (uint256 i = 0; i < result.length; i++) {
@@ -379,15 +461,20 @@ contract FROSTCoordinatorTest is Test {
 
         FROSTCoordinator.KeyGenCommitment memory commitment;
         // Because we are in a trusted setup, we don't actually need to encrypt
-        // anything. Specify a dummy encryption key.
+        // anything. Specify a dummy encryption key (which every participant
+        // still needs to provide a proof of possession for).
         commitment.q = ForgeSecp256k1.g(1).toPoint();
         // In our trusted key gen setup, we pretend like the first participant
         // has the full polynomial for deriving all the shares, and all other
-        // participants do not add anything.
+        // participants only add a constant term of `1` (which is required in
+        // order to provide a proof of knowledge for their commitment).
         commitment.c = new Secp256k1.Point[](THRESHOLD);
+        commitment.c[0] = ForgeSecp256k1.g(1).toPoint();
         for (uint256 i = 1; i < COUNT; i++) {
             bytes32 root = participants.root();
             (address participant, bytes32[] memory poap) = participants.proof(i);
+            commitment.pok = FROSTMath.proofOfKnowledge(participant, 1);
+            commitment.pop = FROSTMath.proofOfKnowledge(participant, 1);
             vm.prank(participant);
             coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, poap, commitment);
         }
@@ -397,9 +484,15 @@ contract FROSTCoordinatorTest is Test {
             }
             bytes32 root = participants.root();
             (address participant, bytes32[] memory poap) = participants.proof(0);
+            commitment.pok = FROSTMath.proofOfKnowledge(participant, a[0]);
+            commitment.pop = FROSTMath.proofOfKnowledge(participant, 1);
             vm.prank(participant);
             (gid,) = coordinator.keyGenAndCommit(root, COUNT, THRESHOLD, context, poap, commitment);
         }
+
+        // The group polynomial is the first participant's polynomial plus all
+        // of the `1` contributions from the remaining `COUNT - 1` participants.
+        a[0] = addmod(a[0], COUNT - 1, Secp256k1.N);
 
         // We don't actually need to encrypt and broadcast secret shares, the
         // trusted dealer computes the private keys for each participant.

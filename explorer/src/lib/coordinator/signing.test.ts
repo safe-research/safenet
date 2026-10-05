@@ -152,7 +152,7 @@ describe("loadCoordinator (via loadLatestAttestationStatus)", () => {
 
 // Selectors for coordinator signing progress events
 const SIGN_SELECTOR = "0xb48d242879f9f3df555c800db966f65cba128c7213198748fa202ed54e092691";
-const SIGN_REVEALED_NONCES_SELECTOR = "0xa8415ae8824ba92b55156b0447b9b9bbc3ba63988b076fb0c8d8e180893d1a46";
+const SIGN_COMMITTED_NONCES_SELECTOR = "0xe995b4a17d436f1fe8cab93c9ace8286df3e11eb7d3fe46edfc27fb8576324f5";
 const SIGN_SHARED_SELECTOR = "0x25a4d6e8d11a9fdc20ffdd826473485ae4cdd453271726c072a16836c1882e7c";
 
 const SID: `0x${string}` = `0x${"aa".repeat(32)}`;
@@ -183,10 +183,10 @@ const makeSignLog = (_sid: string) => ({
 	),
 });
 
-// Builds a SignRevealedNonces raw log
-const makeRevealedNoncesLog = (sid: string, participant: Address, blockNumber = "0x2") => ({
+// Builds a SignCommittedNonces raw log
+const makeCommittedNoncesLog = (sid: string, participant: Address, blockNumber = "0x2") => ({
 	...makeLog(
-		[SIGN_REVEALED_NONCES_SELECTOR, sid],
+		[SIGN_COMMITTED_NONCES_SELECTOR, sid],
 		// participant (address, 32 bytes) + nonces struct (4 × uint256 = 128 bytes)
 		`0x${"00".repeat(12)}${participant.slice(2).toLowerCase()}${"00".repeat(128)}`,
 		blockNumber,
@@ -236,8 +236,8 @@ describe("loadLatestAttestationStatus — participation fields", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("populates committed from SignRevealedNonces events", async () => {
-		const committedLog = makeRevealedNoncesLog(SID, PARTICIPANT_A);
+	it("populates committed from SignCommittedNonces events", async () => {
+		const committedLog = makeCommittedNoncesLog(SID, PARTICIPANT_A);
 		const provider = makeFullProvider({ progressLogs: [committedLog] });
 		const load = await loadModule();
 

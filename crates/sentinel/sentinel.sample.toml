@@ -6,6 +6,11 @@
 # `src/config.rs` for the full schema, and `../../docs/sentinel-handbook.md`
 # for an operator's guide to running a sentinel.
 
+# The `rpc`, `signer` and `database` values below may reference environment
+# variables as `${NAME}` (use `$$` for a literal `$`), so that secrets such as
+# the private key or an RPC API key need not be stored in this file, e.g.
+# `signer = "${SIGNER_PRIVATE_KEY}"`.
+
 # The chain RPC endpoint.
 rpc = "https://rpc.gnosischain.com"
 
@@ -54,6 +59,28 @@ log_filter = "info"
 # use_client_filtering = true
 
 [transactions]
+# Optional: the maximum number of transactions submitted onchain but not yet
+# executed at any one time. Cannot be combined with `executor`.
+# max_in_flight_transactions = 16
+
+# Optional: the `ISafenet7702Executor` this service's signer account delegates
+# to via EIP-7702. Every transaction is then sent as a self-call to the
+# executor's `execute`, batching all actions queued while the previous
+# transaction is pending. The first transaction carries the EIP-7702
+# authorization that delegates the account. EIP-7702 mempools accept only one
+# pending transaction from a delegated account, so setting `executor` limits
+# the service to one transaction in flight and cannot be combined with
+# `max_in_flight_transactions`. Omit to submit one transaction per action; if
+# the account is still delegated, for example from an earlier `executor`, its
+# next transaction removes the delegation, and until then only one transaction
+# is in flight.
+# executor = "0x0000000000000000000000000000000000000000"
+
+# Optional: the maximum gas a single batched transaction may consume. Queued
+# actions that do not fit wait for the next batch, and an action that does not
+# fit on its own is sent as a batch of one. Requires `executor`.
+# max_batch_gas = 2000000
+
 # Optional: caps the priority fee of estimated fees to at most this
 # percentage of the total max fee per gas (see the sentinel handbook's gas
 # cost tip). Lower values reduce what you can overpay on a bad fee estimate,
