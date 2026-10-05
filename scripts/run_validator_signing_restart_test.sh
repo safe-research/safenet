@@ -145,6 +145,7 @@ echo "==> Mining blocks until validator C's nonce commitment is pending (timeout
 DEADLINE=$((SECONDS + TIMEOUT))
 VALIDATOR_C=$(tr '[:upper:]' '[:lower:]' <<< "${PARTICIPANTS[2]}")
 COMMIT_PENDING=0
+PROPOSED=0
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
     COMMIT_PENDING=$(cast rpc --rpc-url "$ANVIL_RPC_URL" txpool_content | jq \
         --arg from "$VALIDATOR_C" --arg selector "$SIGN_COMMIT_NONCES_SELECTOR" \
@@ -153,7 +154,20 @@ while [ "$SECONDS" -lt "$DEADLINE" ]; do
     [ "$COMMIT_PENDING" -gt 0 ] && break
 
     assert_processes_alive "FAILURE: A validator exited before validator C committed its nonces." "${VALIDATOR_PIDS[@]}"
-    cast rpc --rpc-url "$ANVIL_RPC_URL" evm_mine >/dev/null
+
+    # Only mine until the proposal is included: the validators commit their
+    # nonces in reaction to its block alone. Mining any further would race
+    # with the validators, as a commitment sent between checking the
+    # transaction pool and mining the next block would be included in that
+    # block before it is ever seen pending.
+    if [ "$PROPOSED" -eq 0 ]; then
+        PROPOSED=$(fetch_logs "$ANVIL_RPC_URL" "$CONSENSUS_ADDR" \
+            'TransactionProposed(bytes32,bytes32,address,uint64,bytes,(uint256,address,address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256))' \
+            | jq 'length')
+    fi
+    if [ "$PROPOSED" -eq 0 ]; then
+        cast rpc --rpc-url "$ANVIL_RPC_URL" evm_mine >/dev/null
+    fi
     sleep "$BLOCK_TIME"
 done
 
