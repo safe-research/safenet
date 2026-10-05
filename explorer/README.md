@@ -2,6 +2,8 @@
 
 The Safenet Explorer is a React 19 single-page application for inspecting the state of the Safenet network: transaction proposals, epoch information, validator status, and consensus state.
 
+For what each proposal status badge means, see the [transaction lifecycle](../docs/transaction-lifecycle.md).
+
 ## Stack
 
 - **React 19** + **TypeScript 5**

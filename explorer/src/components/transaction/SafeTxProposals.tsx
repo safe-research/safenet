@@ -99,12 +99,26 @@ function SafeTxProposalVoting({ oracle, proposal }: { oracle: Address; proposal:
 	);
 }
 
+// Why a proposal will not be attested, for the proposals that never are; null for any other.
+function noAttestationReason({ arbitration, status }: TransactionProposalWithStatus): string | null {
+	if (arbitration !== null) {
+		return arbitration.outcome === null
+			? "Sentinels disagreed, this transaction is under review by the Security Council."
+			: "Sentinels disagreed, so this transaction went to arbitration. It will not be attested.";
+	}
+	return status === "DENIED" ? "Sentinels denied this transaction. It will not be attested." : null;
+}
+
 function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWithStatus; number: number }) {
+	const disputed = proposal.arbitration !== null;
+	// A disputed or denied proposal is never attested, so its signing progress is not loaded: it
+	// would never complete, and the page would keep polling for it.
+	const neverAttested = disputed || proposal.status === "DENIED";
 	return (
 		<Box className="space-y-2">
 			<div className="flex items-center gap-2">
 				<p className="font-semibold">Proposal #{number}</p>
-				<ProposalInfoButton proposal={proposal} />
+				{!neverAttested && <ProposalInfoButton proposal={proposal} />}
 			</div>
 			<div className="md:flex md:justify-between">
 				<p>Status:</p>
@@ -130,11 +144,11 @@ function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWit
 							<InlineExplorerTxLink txHash={proposal.attestedAt.tx}>Explorer Tx</InlineExplorerTxLink>
 						</>
 					) : (
-						"-"
+						(noAttestationReason(proposal) ?? "-")
 					)}
 				</p>
 			</div>
-			<SafeTxAttestationStatus proposal={proposal} />
+			{!neverAttested && <SafeTxAttestationStatus proposal={proposal} />}
 		</Box>
 	);
 }

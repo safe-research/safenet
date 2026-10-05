@@ -173,7 +173,8 @@ stateDiagram-v2
 
 	commit_nonces --> commit_nonces : SignRevealedNonces(completed=false)
 	commit_nonces --> share : SignRevealedNonces(completed=true)
-	commit_nonces --> failure : timeout
+	commit_nonces --> share : timeout<br>len(revealed) >= threshold
+	commit_nonces --> skipped : timeout<br>len(revealed) < threshold
 
 	share --> share : SignShared()
 	share --> attest : SignCompleted()
@@ -191,7 +192,7 @@ stateDiagram-v2
 
 ### Responsible Participant
 
-One caveat to having parts of the Safenet consensus be onchain, is that there are times where someone needs to do something to drive the protocol forward (for example, in case of a signing ceremony failure where it needs to be restarted so that a new sequence number is allocated for the new signature attempt). The protocol defines a _responsible participant_ for executing this onchain transaction in order to keep consensus moving. In order for the responsible participant to be determined without any ambiguity, it is defined to be the last participant to participate in the topic in question (for example, in case of a signing ceremony that fails because of a timeout waiting for nonce commitments to be revealed, it would be the last participant to reveal its nonce, based on transaction order in the block; note that if there are multiple simultaneous signing ceremonies taking place, it only considers the last participant **in the signing ceremony that needs to be restarted**, and not across all ongoing signing ceremonies).
+One caveat to having parts of the Safenet consensus be onchain, is that there are times where someone needs to do something to drive the protocol forward (for example, in case of a signing ceremony failure where it needs to be restarted so that a new sequence number is allocated for the new signature attempt). The protocol defines a _responsible participant_ for executing this onchain transaction in order to keep consensus moving. In order for the responsible participant to be determined without any ambiguity, it is defined to be the last participant to participate in the topic in question (for example, in case of a signing ceremony that fails because of a timeout waiting for signature shares, it would be the last participant to publish its share to the canonical selection, based on transaction order in the block; note that if there are multiple simultaneous signing ceremonies taking place, it only considers the last participant **in the signing ceremony that needs to be restarted**, and not across all ongoing signing ceremonies).
 
 <!-- References -->
 

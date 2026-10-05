@@ -6,25 +6,32 @@
 //! local [`signer`], and resubmitting with bumped fees when a transaction is
 //! stuck.
 
+mod bundle;
+mod config;
 mod fees;
 pub mod signer;
 mod storage;
 pub mod types;
 
 use self::{
+    bundle::Bundler,
     fees::cap_priority_fee,
     signer::SigningError,
     storage::{Status, Submission, TransactionStorage},
-    types::AllocatedTransaction,
+    types::{AccountStatus, AllocatedTransaction, Authorization},
 };
-pub use self::{signer::Signer, types::Transaction};
+pub use self::{
+    config::{Config, SubmissionMode},
+    signer::Signer,
+    types::Transaction,
+};
 use crate::{index::BlockStatus, provider::Provider};
 use alloy::{
     eips::{BlockId, eip1559::Eip1559Estimation},
+    primitives::Address,
     providers::Provider as _,
     transports::TransportError,
 };
-use serde::Deserialize;
 use sqlx::sqlite::SqlitePool;
 
 /// Error produced by the [`TransactionQueue`].
@@ -39,6 +46,17 @@ pub enum Error {
     /// A transaction could not be signed.
     #[error(transparent)]
     Signing(#[from] SigningError),
+    /// The configured executor has no code.
+    #[error("executor {0} has no code")]
+    ExecutorWithoutCode(Address),
+    /// The configured maximum batch gas exceeds half of the block gas limit.
+    #[error("max batch gas {max_batch_gas} exceeds half of the block gas limit {gas_limit}")]
+    BatchGasExceedsBlockGasLimit {
+        /// The configured maximum batch gas.
+        max_batch_gas: u64,
+        /// The gas limit of the latest block.
+        gas_limit: u64,
+    },
 }
 
 impl Error {
@@ -65,33 +83,6 @@ pub(crate) fn lift_intermittent_error<T>(
     }
 }
 
-/// Transaction queue configuration.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(default, deny_unknown_fields)]
-pub struct Config {
-    /// The maximum number of transactions that may be in flight (submitted
-    /// onchain but not yet executed) at any one time. The queue only submits new
-    /// transactions while it is below this limit.
-    pub max_in_flight_transactions: usize,
-    /// How many blocks a submitted transaction may go unexecuted before it is
-    /// resubmitted with a bumped fee.
-    pub blocks_before_resubmit: u64,
-    /// Caps the priority fee of estimated fees to at most this percentage of the
-    /// total max fee per gas, lowering the priority fee (and max fee) when an
-    /// estimate exceeds it. `None` applies no cap.
-    pub priority_fee_cap_percentage: Option<f64>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            max_in_flight_transactions: 16,
-            blocks_before_resubmit: 2,
-            priority_fee_cap_percentage: None,
-        }
-    }
-}
-
 /// A queue of transactions to submit onchain.
 pub struct TransactionQueue {
     provider: Provider,
@@ -99,7 +90,7 @@ pub struct TransactionQueue {
     storage: TransactionStorage,
     config: Config,
     block_status: Option<BlockStatus>,
-    nonce_cache: Option<u64>,
+    account_cache: Option<AccountStatus>,
     fee_cache: Option<Eip1559Estimation>,
 }
 
@@ -107,12 +98,42 @@ impl TransactionQueue {
     /// Creates a transaction queue that signs `chain_id` transactions with
     /// `signer`, reads chain state and broadcasts through `provider`, and
     /// persists its state in `pool`.
+    ///
+    /// Fails if an executor is configured and has no code at the latest
+    /// block, or if the maximum batch gas exceeds half of the latest block's
+    /// gas limit.
     pub async fn new(
         provider: Provider,
         signer: Signer,
         pool: SqlitePool,
         config: Config,
     ) -> Result<Self, Error> {
+        if let SubmissionMode::Batched {
+            executor,
+            max_batch_gas,
+        } = config.mode
+        {
+            // Leave room in the block for other transactions, so that batches
+            // can still be included when blocks are busy.
+            let gas_limit = provider
+                .get_block(BlockId::latest())
+                .await?
+                .map(|block| block.header.gas_limit)
+                .unwrap_or_default();
+            if max_batch_gas > gas_limit / 2 {
+                return Err(Error::BatchGasExceedsBlockGasLimit {
+                    max_batch_gas,
+                    gas_limit,
+                });
+            }
+
+            // Self-calls to an executor without code succeed without doing
+            // anything, which would silently drop every transaction.
+            let code = provider.get_code_at(executor).await?;
+            if code.is_empty() {
+                return Err(Error::ExecutorWithoutCode(executor));
+            }
+        }
         let storage = TransactionStorage::new(pool).await?;
         Ok(Self {
             provider,
@@ -120,7 +141,7 @@ impl TransactionQueue {
             storage,
             config,
             block_status: None,
-            nonce_cache: None,
+            account_cache: None,
             fee_cache: None,
         })
     }
@@ -154,7 +175,7 @@ impl TransactionQueue {
 
         // Invalidate our caches if necessary.
         if previous.is_none_or(|previous| previous.latest != status.latest) {
-            self.nonce_cache = None;
+            self.account_cache = None;
             self.fee_cache = None;
         }
 
@@ -178,20 +199,27 @@ impl TransactionQueue {
             self.storage.unmark_executed(block).await?;
         }
 
-        // The signer nonce is an RPC round-trip needed both to mark executed
-        // transactions and to assign nonces to queued ones. Skip it and the
-        // remaining work when there is no new inclusion possibilities (either
-        // there is no new latest block, or there are no outstanding txs).
+        // The signer account is an RPC round-trip needed both to mark
+        // executed transactions and to assign nonces to queued ones. Skip it
+        // and the remaining work when there is no new inclusion possibilities
+        // (either there is no new latest block, or there are no outstanding
+        // txs).
         if previous.is_none_or(|previous| previous.latest < status.latest)
             && self.storage.count_outstanding(status.latest).await? > 0
         {
-            let nonce = self.nonce().await?;
+            let nonce = self.account().await?.nonce;
             self.storage
                 .mark_executed(Status {
                     block: status.latest,
                     nonce,
                 })
                 .await?;
+            if self.storage.recover_authorization_gap(nonce).await? {
+                tracing::warn!(
+                    nonce,
+                    "authorization nonce unused onchain, sending a cancellation in its place"
+                );
+            }
             self.resubmit_stale(status.latest).await?;
             self.submit_pending(status.latest).await?;
         }
@@ -200,19 +228,58 @@ impl TransactionQueue {
     }
 
     /// Submits queued transactions while fewer than
-    /// `config.max_in_flight_transactions` are in flight.
+    /// `config.mode.max_in_flight_transactions()` are in flight, or none is
+    /// while the signer account is delegated. A transaction carries an
+    /// authorization whenever the account is not delegated as configured: to
+    /// the executor when one is configured, and to no delegate otherwise.
     async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {
-        let in_flight = self.storage.count_in_flight().await?;
-        for _ in in_flight..self.config.max_in_flight_transactions {
-            let nonce = self.nonce().await?;
-            let Some(transaction) = self
-                .storage
-                .next_transaction(Status { nonce, block })
-                .await?
-            else {
+        let mut in_flight = self.storage.count_in_flight().await?;
+        while in_flight < self.config.mode.max_in_flight_transactions() {
+            let account = self.account().await?;
+
+            // Mempools accept one pending transaction from a delegated account,
+            // even when no executor is configured and the queue is removing a
+            // leftover delegation. The account status is cached per block, so
+            // this holds for the whole pass.
+            if account.is_delegated() && in_flight > 0 {
+                break;
+            }
+
+            let authorize = |address| {
+                let wanted = Authorization { address };
+                (account.code_hash != wanted.code_hash()).then_some(wanted)
+            };
+            let bundler = match self.config.mode {
+                SubmissionMode::Direct { .. } => Bundler::direct(authorize(Address::ZERO)),
+                SubmissionMode::Batched {
+                    executor,
+                    max_batch_gas,
+                } => Bundler::batched(self.signer.address(), max_batch_gas, authorize(executor)),
+            };
+            let status = Status {
+                nonce: account.nonce,
+                block,
+            };
+            let Some(transaction) = self.storage.next_transaction(status, bundler).await? else {
                 break;
             };
+
+            if let Some(authorization) = transaction.authorization {
+                if authorization.address.is_zero() {
+                    tracing::info!(
+                        nonce = transaction.nonce,
+                        "removing the signer account's EIP-7702 delegation"
+                    );
+                } else {
+                    tracing::info!(
+                        nonce = transaction.nonce,
+                        executor = %authorization.address,
+                        "delegating the signer account to the executor"
+                    );
+                }
+            }
             self.submit_transaction(transaction, block).await?;
+            in_flight += 1;
         }
 
         Ok(())
@@ -295,23 +362,25 @@ impl TransactionQueue {
         Ok(())
     }
 
-    /// Returns the signer's onchain nonce at the latest block, fetched from
-    /// the chain on a cache miss and cached until the block status changes.
-    async fn nonce(&mut self) -> Result<u64, Error> {
-        match self.nonce_cache {
-            Some(nonce) => Ok(nonce),
+    /// Returns the signer account's onchain status at the latest block,
+    /// fetched from the chain on a cache miss and cached until the block status
+    /// changes.
+    async fn account(&mut self) -> Result<AccountStatus, Error> {
+        match self.account_cache {
+            Some(account) => Ok(account),
             None => {
                 let block_id = self
                     .block_status
                     .map(|block_status| BlockId::from(block_status.latest))
                     .unwrap_or_else(BlockId::latest);
-                let nonce = self
+                let proof = self
                     .provider
-                    .get_transaction_count(self.signer.address())
+                    .get_proof(self.signer.address(), vec![])
                     .block_id(block_id)
                     .await?;
-                self.nonce_cache = Some(nonce);
-                Ok(nonce)
+                let account = AccountStatus::new(proof.nonce, proof.code_hash);
+                self.account_cache = Some(account);
+                Ok(account)
             }
         }
     }
@@ -369,26 +438,54 @@ fn is_transaction_underpriced(err: &TransportError) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{bundle::ISafenet7702Executor, *};
     use alloy::{
-        primitives::{Address, B256, U64, address, keccak256},
-        rpc::{json_rpc::ErrorPayload, types::FeeHistory},
+        consensus::constants::KECCAK_EMPTY,
+        eips::eip7702::constants::PER_EMPTY_ACCOUNT_COST,
+        primitives::{Address, B256, Bytes, U256, address, b256, keccak256},
+        rpc::{
+            json_rpc::ErrorPayload,
+            types::{Block, EIP1186AccountProofResponse, FeeHistory, Header},
+        },
+        sol_types::SolCall as _,
         transports::mock::Asserter,
     };
     use k256::ecdsa::SigningKey;
 
     const CHAIN_ID: u64 = 1;
     const ENTRY_POINT: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
+    const EXECUTOR: Address = address!("0x7702770277027702770277027702770277027702");
 
     /// A transaction queue backed by a mocked RPC client and an in-memory pool.
     async fn queue(asserter: &Asserter) -> TransactionQueue {
+        queue_with_mode(asserter, Config::default().mode).await
+    }
+
+    /// A [`queue`] submitting transactions in `mode`, with any executor it
+    /// configures deployed.
+    async fn queue_with_mode(asserter: &Asserter, mode: SubmissionMode) -> TransactionQueue {
+        if let SubmissionMode::Batched { .. } = mode {
+            asserter.push_success(&latest_block(30_000_000));
+            asserter.push_success(&Bytes::from_static(&[0xef])); // executor code
+        }
+        new_queue(asserter, mode).await.unwrap()
+    }
+
+    /// Creates a queue submitting transactions in `mode`, without mocking any
+    /// RPC responses.
+    async fn new_queue(
+        asserter: &Asserter,
+        mode: SubmissionMode,
+    ) -> Result<TransactionQueue, Error> {
         let provider = Provider::mocked_with_chain(asserter, CHAIN_ID);
         let private_key = SigningKey::from_slice(keccak256("test signer").as_slice()).unwrap();
         let signer = Signer::new(private_key);
         let pool = SqlitePool::connect("sqlite://:memory:").await.unwrap();
-        TransactionQueue::new(provider, signer, pool, Config::default())
-            .await
-            .unwrap()
+        let config = Config {
+            mode,
+            ..Default::default()
+        };
+        TransactionQueue::new(provider, signer, pool, config).await
     }
 
     /// A transaction carrying `data` as its calldata.
@@ -402,6 +499,58 @@ mod tests {
 
     fn block_status(latest: u64) -> BlockStatus {
         BlockStatus { latest, safe: 0 }
+    }
+
+    /// A latest-block response with `gas_limit`.
+    fn latest_block(gas_limit: u64) -> Block {
+        Block::empty(Header {
+            inner: alloy::consensus::Header {
+                gas_limit,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+    }
+
+    /// An account-proof response for a signer account with `nonce` and
+    /// `code_hash`.
+    fn account_proof(nonce: u64, code_hash: B256) -> EIP1186AccountProofResponse {
+        EIP1186AccountProofResponse {
+            nonce,
+            code_hash,
+            ..Default::default()
+        }
+    }
+
+    /// Batched submission mode through [`EXECUTOR`].
+    fn batched() -> SubmissionMode {
+        SubmissionMode::Batched {
+            executor: EXECUTOR,
+            max_batch_gas: 2_000_000,
+        }
+    }
+
+    /// The code hash of an account delegated to `delegate`.
+    fn delegated_to(delegate: Address) -> B256 {
+        Authorization { address: delegate }.code_hash()
+    }
+
+    /// Decodes the batch `transaction` back into the transactions it calls,
+    /// checking it is a self-call to `queue`'s signer account with no value.
+    fn batched_calls(queue: &TransactionQueue, transaction: &Transaction) -> Vec<Transaction> {
+        assert_eq!(transaction.to, queue.signer.address());
+        assert_eq!(transaction.value, U256::ZERO);
+        ISafenet7702Executor::executeCall::abi_decode(&transaction.data)
+            .unwrap()
+            .calls
+            .into_iter()
+            .map(|call| Transaction {
+                to: call.to,
+                value: call.value,
+                data: call.data,
+                gas: call.gasLimit.to(),
+            })
+            .collect()
     }
 
     /// A fee-history response yielding an estimate of a 210 max fee and 10
@@ -434,6 +583,71 @@ mod tests {
         }
     }
 
+    #[test]
+    fn computes_the_code_hash_of_an_authorized_account() {
+        // The code hash Anvil reports for an account delegated to this
+        // address.
+        let delegation = Authorization {
+            address: address!("0x4242424242424242424242424242424242424242"),
+        };
+        assert_eq!(
+            delegation.code_hash(),
+            b256!("0x46579a8344a531fa82a2118d3f30fa1fb3eb78c81068bb86d2a4dc702a810a9a"),
+        );
+
+        // Authorizing the zero address removes the delegation.
+        let undelegation = Authorization {
+            address: Address::ZERO,
+        };
+        assert_eq!(undelegation.code_hash(), KECCAK_EMPTY);
+    }
+
+    #[tokio::test]
+    async fn fails_to_start_with_an_executor_without_code() {
+        let asserter = Asserter::new();
+        asserter.push_success(&latest_block(30_000_000));
+        asserter.push_success(&Bytes::new()); // executor code
+        let result = new_queue(&asserter, batched()).await;
+        assert!(matches!(result, Err(Error::ExecutorWithoutCode(EXECUTOR))));
+    }
+
+    #[tokio::test]
+    async fn fails_to_start_with_a_batch_gas_above_half_the_block_gas_limit() {
+        let asserter = Asserter::new();
+        asserter.push_success(&latest_block(3_999_998));
+        let result = new_queue(&asserter, batched()).await;
+        assert!(matches!(
+            result,
+            Err(Error::BatchGasExceedsBlockGasLimit {
+                max_batch_gas: 2_000_000,
+                gas_limit: 3_999_998,
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn starts_with_an_executor_with_code() {
+        let asserter = Asserter::new();
+        asserter.push_success(&latest_block(4_000_000));
+        asserter.push_success(&Bytes::from_static(&[0xef])); // executor code
+        let result = new_queue(&asserter, batched()).await;
+        assert!(result.is_ok());
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn treats_a_zero_code_hash_as_an_account_without_code() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+
+        // Some nodes report a zero code hash for an account that does not
+        // exist yet, such as a new signer that has never sent a transaction.
+        asserter.push_success(&account_proof(0, B256::ZERO)); // signer account
+        let account = queue.account().await.unwrap();
+        assert_eq!(account.code_hash, KECCAK_EMPTY);
+        assert!(!account.is_delegated());
+    }
+
     #[tokio::test]
     async fn processes_each_block_status_once() {
         let asserter = Asserter::new();
@@ -442,7 +656,7 @@ mod tests {
 
         // The initial status submits the queued transaction against the block
         // watcher's already-known head.
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(10)).await.unwrap();
@@ -462,11 +676,11 @@ mod tests {
 
         // Submit at block 10, then observe the nonce advance at block 11 and
         // mark the transaction executed there.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(10)).await.unwrap();
-        asserter.push_success(&U64::from(1));
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY));
         queue.update_block_status(block_status(11)).await.unwrap();
         assert_eq!(queue.storage.count_in_flight().await.unwrap(), 0);
 
@@ -474,7 +688,7 @@ mod tests {
         // status invalidates execution markers above the safe block and then
         // reconciles them against the latest canonical nonce.
         queue.block_status = None;
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         queue
             .update_block_status(BlockStatus {
                 latest: 11,
@@ -492,14 +706,14 @@ mod tests {
         let mut queue = queue(&asserter).await;
         queue.queue([(tx("0x01"), Some(1000))]).await.unwrap();
 
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(10)).await.unwrap();
 
         // At block 11 the signer nonce has advanced to 1, so nonce 0 executed.
         // No transaction is broadcast, so only the nonce is fetched.
-        asserter.push_success(&U64::from(1));
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY));
         queue.update_block_status(block_status(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
@@ -511,11 +725,11 @@ mod tests {
         // We update up to block 12, where the nonce stays the same. This means
         // that it is not submitted and gets resubmitted (since it did not get
         // executed on the new canonical chain since the reorg).
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         queue.update_block_status(block_status(11)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(12)).await.unwrap();
@@ -524,7 +738,7 @@ mod tests {
         // Now the transaction gets picked up, and since there are no remaining
         // outstanding transactions we avoid any additional RPC requests on
         // future blocks.
-        asserter.push_success(&U64::from(1)); // signer transaction count
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY)); // signer account
         queue.update_block_status(block_status(13)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
@@ -543,9 +757,9 @@ mod tests {
         let mut queue = queue(&asserter).await;
 
         // Fill up the queue with transactions that will not execute.
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
-        for i in 0..queue.config.max_in_flight_transactions {
+        for i in 0..queue.config.mode.max_in_flight_transactions() {
             queue
                 .queue([(tx(&format!("0x{i:02x}")), Some(12))])
                 .await
@@ -564,7 +778,7 @@ mod tests {
 
         // At block 11, the nonce advances by 1, opening up one more transaction
         // to be submitted.
-        asserter.push_success(&U64::from(1)); // signer transaction count
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(11)).await.unwrap();
@@ -575,9 +789,9 @@ mod tests {
         // do get resubmissions of the remaining original inflight transactions
         // because of the resubmit deadline, despite being past the expiry. This
         // is because once a transaction is in the mempool, it has to execute.
-        asserter.push_success(&U64::from(2)); // signer transaction count
+        asserter.push_success(&account_proof(2, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
-        for _ in 2..queue.config.max_in_flight_transactions {
+        for _ in 2..queue.config.mode.max_in_flight_transactions() {
             asserter.push_success(&B256::ZERO); // transaction hash from submission
         }
         queue.update_block_status(block_status(12)).await.unwrap();
@@ -585,7 +799,8 @@ mod tests {
 
         // At block 13, all the remaining transactions get mined, the second
         // transaction was already expired and does not resubmit.
-        asserter.push_success(&U64::from(queue.config.max_in_flight_transactions + 1)); // signer transaction count
+        let nonce = queue.config.mode.max_in_flight_transactions() as u64 + 1;
+        asserter.push_success(&account_proof(nonce, KECCAK_EMPTY)); // signer account
         queue.update_block_status(block_status(13)).await.unwrap();
         assert!(asserter.read_q().is_empty());
 
@@ -618,7 +833,7 @@ mod tests {
 
         // The initial submission fails at the transport layer. It reserves a
         // nonce, but does not establish a fee floor.
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_failure_msg("no connection"); // submission fails
         queue.update_block_status(block_status(10)).await.unwrap();
@@ -629,7 +844,7 @@ mod tests {
 
         // It is retried on the next block with the fresh estimate, without a
         // replacement bump caused by the failed attempt.
-        asserter.push_success(&U64::from(0)); // signer transaction count
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
         asserter.push_success(&fee_history()); // fee estimate
         asserter.push_success(&B256::ZERO); // transaction hash from submission
         queue.update_block_status(block_status(11)).await.unwrap();
@@ -646,18 +861,18 @@ mod tests {
         queue.queue([(tx("0x01"), None)]).await.unwrap();
 
         // Establish a successfully submitted fee floor of 210 and 10.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(10)).await.unwrap();
 
         // The transaction is not stale at block 11.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         queue.update_block_status(block_status(11)).await.unwrap();
 
         // Its replacement at block 12 uses bumped fees, but fails for an
         // unrelated RPC reason.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_failure_msg("node unavailable");
         queue.update_block_status(block_status(12)).await.unwrap();
@@ -670,7 +885,7 @@ mod tests {
 
         // The next successful retry therefore records the same single bump,
         // rather than another bump above the failed attempt.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(13)).await.unwrap();
@@ -687,17 +902,17 @@ mod tests {
         queue.queue([(tx("0x01"), None)]).await.unwrap();
 
         // Establish a successfully submitted fee floor of 210 and 10.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(10)).await.unwrap();
 
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         queue.update_block_status(block_status(11)).await.unwrap();
 
         // The replacement is rejected specifically because its bumped fees
         // of 231 and 11 are still underpriced.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_failure_msg("replacement transaction underpriced");
         queue.update_block_status(block_status(12)).await.unwrap();
@@ -707,7 +922,7 @@ mod tests {
         assert_eq!(transaction.max_priority_fee_per_gas, Some(11));
 
         // The next retry bumps above the rejected fee floor.
-        asserter.push_success(&U64::from(0));
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY));
         asserter.push_success(&fee_history());
         asserter.push_success(&B256::ZERO);
         queue.update_block_status(block_status(13)).await.unwrap();
@@ -715,5 +930,357 @@ mod tests {
         let transaction = in_flight(&queue).await;
         assert_eq!(transaction.max_fee_per_gas, Some(255));
         assert_eq!(transaction.max_priority_fee_per_gas, Some(13));
+    }
+
+    #[tokio::test]
+    async fn recovers_an_unused_authorization_nonce_with_a_full_budget() {
+        let asserter = Asserter::new();
+        let mut queue = queue_with_mode(
+            &asserter,
+            SubmissionMode::Direct {
+                max_in_flight_transactions: 1,
+            },
+        )
+        .await;
+
+        // Nonce 0 carries an authorization that takes nonce 1, which fills the
+        // in-flight budget, and another transaction is waiting behind it.
+        queue.storage.enqueue([(tx("0x01"), None)]).await.unwrap();
+        queue
+            .storage
+            .next_transaction(
+                Status { nonce: 0, block: 0 },
+                Bundler::direct(Some(Authorization {
+                    address: Address::repeat_byte(0x77),
+                })),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        queue.queue([(tx("0x02"), None)]).await.unwrap();
+
+        // Nonce 0 is consumed without its authorization, so the authorization's
+        // nonce is cancelled and submitted, even though the cancellation takes
+        // up the whole in-flight budget.
+        asserter.push_success(&account_proof(1, KECCAK_EMPTY)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let cancellation = in_flight(&queue).await;
+        assert_eq!(cancellation.nonce, 1);
+        assert_eq!(cancellation.transaction, Transaction::default());
+        assert_eq!(cancellation.max_fee_per_gas, Some(210));
+
+        // Once it lands, the waiting transaction is submitted at the next nonce.
+        asserter.push_success(&account_proof(2, KECCAK_EMPTY)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let next = in_flight(&queue).await;
+        assert_eq!((next.nonce, next.transaction), (2, tx("0x02")));
+    }
+
+    #[tokio::test]
+    async fn sends_transactions_as_is_without_an_executor() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let transaction = in_flight(&queue).await;
+        assert_eq!(transaction.transaction, tx("0x01"));
+        assert_eq!(transaction.authorization, None);
+    }
+
+    #[tokio::test]
+    async fn delegates_an_undelegated_account_to_the_executor() {
+        let asserter = Asserter::new();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        // The first batch is a self-call that carries the authorization, which
+        // takes nonce 1.
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let delegation = in_flight(&queue).await;
+        assert_eq!(delegation.nonce, 0);
+        assert_eq!(delegation.transaction.to, queue.signer.address());
+        assert_eq!(
+            delegation.authorization,
+            Some(Authorization { address: EXECUTOR })
+        );
+
+        // Nothing else is submitted while the batch is in flight.
+        queue.queue([(tx("0x02"), None)]).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // Once it executes with its authorization, the delegated account's next
+        // batch skips the authorization's nonce and carries no authorization.
+        asserter.push_success(&account_proof(2, delegated_to(EXECUTOR))); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let next = in_flight(&queue).await;
+        assert_eq!(next.nonce, 2);
+        assert_eq!(next.transaction.to, queue.signer.address());
+        assert_eq!(next.authorization, None);
+    }
+
+    #[tokio::test]
+    async fn redelegates_an_account_delegated_elsewhere_to_the_executor() {
+        let asserter = Asserter::new();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        let elsewhere = delegated_to(Address::repeat_byte(0x77));
+        asserter.push_success(&account_proof(0, elsewhere)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let delegation = in_flight(&queue).await;
+        assert_eq!(delegation.transaction.to, queue.signer.address());
+        assert_eq!(
+            delegation.authorization,
+            Some(Authorization { address: EXECUTOR })
+        );
+    }
+
+    #[tokio::test]
+    async fn undelegates_a_delegated_account_without_an_executor() {
+        let asserter = Asserter::new();
+        let mut queue = queue(&asserter).await;
+        queue
+            .queue([(tx("0x01"), None), (tx("0x02"), None), (tx("0x03"), None)])
+            .await
+            .unwrap();
+
+        // The account is still delegated, for example from an earlier executor
+        // configuration, so only its next transaction is submitted. It is sent
+        // as is, carrying an authorization that removes the delegation.
+        asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let undelegation = in_flight(&queue).await;
+        assert_eq!(undelegation.nonce, 0);
+        assert_eq!(
+            undelegation.transaction,
+            Transaction {
+                gas: tx("0x01").gas + PER_EMPTY_ACCOUNT_COST,
+                ..tx("0x01")
+            }
+        );
+        assert_eq!(
+            undelegation.authorization,
+            Some(Authorization {
+                address: Address::ZERO
+            })
+        );
+
+        // While the account is delegated, nothing else is submitted.
+        asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // Once the delegation is removed, the configured in-flight limit applies
+        // again, and the remaining transactions are submitted together.
+        asserter.push_success(&account_proof(2, KECCAK_EMPTY)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(12)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let in_flight = queue.storage.stale_submissions(Some(1_000)).await.unwrap();
+        let in_flight = in_flight
+            .into_iter()
+            .map(|transaction| {
+                (
+                    transaction.nonce,
+                    transaction.transaction,
+                    transaction.authorization,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(in_flight, [(2, tx("0x02"), None), (3, tx("0x03"), None)]);
+    }
+
+    #[tokio::test]
+    async fn batches_transactions_queued_while_a_batch_is_in_flight() {
+        let asserter = Asserter::new();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        asserter.push_success(&account_proof(0, KECCAK_EMPTY)); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // Transactions queued while the batch is in flight are not submitted,
+        // and make no RPC requests.
+        queue.queue([(tx("0x02"), None)]).await.unwrap();
+        queue
+            .queue([(tx("0x03"), None), (tx("0x04"), None)])
+            .await
+            .unwrap();
+
+        // Once the batch executes, they are all submitted as a single batch.
+        asserter.push_success(&account_proof(2, delegated_to(EXECUTOR))); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let batch = in_flight(&queue).await;
+        assert_eq!(batch.nonce, 2);
+        assert_eq!(
+            batched_calls(&queue, &batch.transaction),
+            [tx("0x02"), tx("0x03"), tx("0x04")]
+        );
+    }
+
+    #[tokio::test]
+    async fn resubmits_a_stale_batch_with_the_same_calls() {
+        let asserter = Asserter::new();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
+        queue
+            .queue([(tx("0x01"), None), (tx("0x02"), None)])
+            .await
+            .unwrap();
+
+        asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+        let batch = in_flight(&queue).await;
+
+        // Another transaction is queued while the batch is pending.
+        queue.queue([(tx("0x03"), None)]).await.unwrap();
+        asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // The stale batch is rebroadcast with bumped fees, but with the same
+        // calls, and nothing else is submitted.
+        asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(12)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let resubmitted = in_flight(&queue).await;
+        assert_eq!(resubmitted.nonce, 0);
+        assert_eq!(resubmitted.transaction, batch.transaction);
+        assert_eq!(
+            batched_calls(&queue, &resubmitted.transaction),
+            [tx("0x01"), tx("0x02")]
+        );
+        assert_eq!(resubmitted.max_fee_per_gas, Some(231));
+    }
+
+    #[tokio::test]
+    async fn splits_transactions_exceeding_the_batch_gas_into_successive_batches() {
+        let asserter = Asserter::new();
+
+        // The limit fits two of the queued transactions per batch.
+        let max_batch_gas = 300_000;
+        let mut queue = queue_with_mode(
+            &asserter,
+            SubmissionMode::Batched {
+                executor: EXECUTOR,
+                max_batch_gas,
+            },
+        )
+        .await;
+        let transactions = (1..=5)
+            .map(|i| Transaction {
+                gas: 100_000,
+                ..tx(&format!("0x{i:02x}"))
+            })
+            .collect::<Vec<_>>();
+        queue
+            .queue(
+                transactions
+                    .iter()
+                    .map(|transaction| (transaction.clone(), None)),
+            )
+            .await
+            .unwrap();
+
+        // Each executed nonce makes room for the next batch.
+        for (nonce, calls) in transactions.chunks(2).enumerate() {
+            let nonce = nonce as u64;
+            asserter.push_success(&account_proof(nonce, delegated_to(EXECUTOR))); // signer account
+            asserter.push_success(&fee_history()); // fee estimate
+            asserter.push_success(&B256::ZERO); // transaction hash from submission
+            queue
+                .update_block_status(block_status(10 + nonce))
+                .await
+                .unwrap();
+            assert!(asserter.read_q().is_empty());
+
+            let batch = in_flight(&queue).await;
+            assert_eq!(batch.nonce, nonce);
+            assert_eq!(batched_calls(&queue, &batch.transaction), calls);
+            assert!(batch.transaction.gas <= max_batch_gas);
+        }
+
+        // Once the last batch executes, nothing is left to submit.
+        asserter.push_success(&account_proof(3, delegated_to(EXECUTOR))); // signer account
+        queue.update_block_status(block_status(13)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+        assert_eq!(queue.storage.count_in_flight().await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn leaves_transactions_expired_behind_a_batch_out_of_the_next_one() {
+        let asserter = Asserter::new();
+        let mut queue = queue_with_mode(&asserter, batched()).await;
+        queue.queue([(tx("0x01"), None)]).await.unwrap();
+
+        asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(10)).await.unwrap();
+
+        queue
+            .queue([(tx("0x02"), Some(12)), (tx("0x03"), None)])
+            .await
+            .unwrap();
+        asserter.push_success(&account_proof(0, delegated_to(EXECUTOR))); // signer account
+        queue.update_block_status(block_status(11)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        // The batch executes at block 12, by which the waiting transaction
+        // expired, so the next batch leaves it out.
+        asserter.push_success(&account_proof(1, delegated_to(EXECUTOR))); // signer account
+        asserter.push_success(&fee_history()); // fee estimate
+        asserter.push_success(&B256::ZERO); // transaction hash from submission
+        queue.update_block_status(block_status(12)).await.unwrap();
+        assert!(asserter.read_q().is_empty());
+
+        let batch = in_flight(&queue).await;
+        assert_eq!(batch.nonce, 1);
+        assert_eq!(batched_calls(&queue, &batch.transaction), [tx("0x03")]);
     }
 }

@@ -18,6 +18,10 @@ For more information on Safenet, consult the [technical overview](./overview.md)
 
 To run a sentinel, you need a reliable Ethereum RPC node, able to keep up with `eth_getLogs`/`eth_getBlockByNumber` polling plus the `commit`/`reveal`/`finalize`/`claim` transactions described under [Running](#running) below.
 
+##### `eth_getProof` Support
+
+The sentinel reads its account's nonce and code with `eth_getProof` at the latest block it has observed, which can trail the RPC node's tip by a few blocks. Your RPC node must therefore serve `eth_getProof` for recent blocks. Most public Gnosis Chain RPCs do, but some disable the method entirely. Reth nodes need a non-zero `--rpc.eth-proof-window`, as the default only serves proofs for the tip.
+
 ##### `eth_getLogs` Reliability
 
 Unfortunately, some RPC providers are unreliable with `eth_getLogs` requests: if the logs are queried too soon after a block is observed then an empty array will be returned even if there are logs in that block. This seems to affect RPC providers that use older versions of Nethermind before 1.36.
@@ -56,9 +60,13 @@ The exact amount varies by chain and by how many requests a sentinel votes on, s
 
 > [!TIP] On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/sentinel/sentinel.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
 
+> [!TIP] To reduce gas costs and improve throughput, the sentinel can batch its transactions through an EIP-7702 executor implementing `ISafenet7702Executor`, such as [`Safenet7702Executor`](../contracts/src/Safenet7702Executor.sol). Set `executor` (and optionally `max_batch_gas`) in the `[transactions]` table: every transaction is then sent as a self-call to the executor, batching all actions queued while the previous transaction was pending, so many actions can get onchain in a single transaction. The sentinel's first transaction also delegates its account to the executor. EIP-7702 mempools accept only one pending transaction from a delegated account, so the sentinel keeps a single transaction in flight while its account is delegated. Removing `executor` does not undelegate the account immediately: the sentinel's next transaction removes the delegation, and until it executes, only one transaction is in flight.
+
 ## Running
 
 Configure the sentinel by writing a TOML configuration file — see [`crates/sentinel/src/config.rs`](../crates/sentinel/src/config.rs) for the full schema, and copy [`sentinel.sample.toml`](../crates/sentinel/sentinel.sample.toml) as a worked example to start from. Its mandatory `sentinel.engine` URL is a base URL; the sentinel appends the versioned security-check path itself.
+
+The `rpc`, `signer` and `database` settings may reference environment variables as `${NAME}` (use `$$` for a literal `$`), so that secrets such as the sentinel private key or an RPC API key can be injected at startup instead of being stored in the configuration file — for example `signer = "${SIGNER_PRIVATE_KEY}"`. Substitution applies only to these settings; a referenced variable that is not set fails startup.
 
 ```sh
 cp crates/sentinel/sentinel.sample.toml sentinel.toml
