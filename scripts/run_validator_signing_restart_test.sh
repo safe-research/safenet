@@ -8,12 +8,13 @@
 # staging of epoch 1 (the genesis group's only other signing ceremony). Anvil's
 # interval mining is then paused so that blocks are mined by this script, and
 # a Safe transaction is proposed for the genesis group. As soon as validator
-# C's nonce reveal is in the transaction pool (but not yet mined), validator C
-# is stopped and interval mining resumes. All three validators reveal their
-# nonces, but only A and B publish signature shares, so the signature share
-# round times out and the ceremony is restarted by A and B with a new signing
-# request. The test succeeds once the transaction is attested under that new
-# signing request, with nonces and signature shares from A and B only.
+# C's nonce commitment is in the transaction pool (but not yet mined),
+# validator C is stopped and interval mining resumes. All three validators
+# commit their nonces, but only A and B publish signature shares, so the
+# signature share round times out and the ceremony is restarted by A and B
+# with a new signing request. The test succeeds once the transaction is
+# attested under that new signing request, with nonces and signature shares
+# from A and B only.
 #
 # Requirements: anvil, forge, cast, jq, and cargo.
 set -euo pipefail
@@ -93,41 +94,33 @@ DEADLINE=$((SECONDS + TIMEOUT))
 TRUE_WORD=0000000000000000000000000000000000000000000000000000000000000001
 GENESIS_GROUP=""
 GENESIS_COMPLETED=0
-PREPROCESSED=0
 STAGED=0
 
-echo "==> Waiting for genesis to complete, every participant to submit a nonce tree, and epoch 1 to be staged (timeout: ${TIMEOUT}s)..."
+echo "==> Waiting for genesis to complete and epoch 1 to be staged (timeout: ${TIMEOUT}s)..."
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
     CONFIRMATIONS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" 'KeyGenConfirmed(bytes32,address,bool)')
     GENESIS_GROUP=$(jq -r '.[0].topics[1] // empty' <<< "$CONFIRMATIONS")
     GENESIS_COMPLETED=$(jq --arg true_word "$TRUE_WORD" \
         '[.[] | select(.data | endswith($true_word))] | length' <<< "$CONFIRMATIONS")
 
-    if [ -n "$GENESIS_GROUP" ]; then
-        PREPROCESS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" 'Preprocess(bytes32,address,uint64,bytes32)')
-        # `participant` is the first non-indexed word, a padded address.
-        PREPROCESSED=$(jq --arg gid "$GENESIS_GROUP" \
-            '[.[] | select(.topics[1] == $gid) | .data[26:66]] | unique | length' <<< "$PREPROCESS")
-    fi
-
     STAGED=$(fetch_logs "$ANVIL_RPC_URL" "$CONSENSUS_ADDR" \
         'EpochStaged(uint64,uint64,uint64,bytes32,(uint256,uint256),bytes32,((uint256,uint256),uint256))' \
         | jq '[.[] | select(.topics[2] == "0x0000000000000000000000000000000000000000000000000000000000000001")] | length')
 
-    echo "    genesis completed: $([ "$GENESIS_COMPLETED" -gt 0 ] && echo yes || echo no); nonce trees: $PREPROCESSED/${#PARTICIPANTS[@]}; epoch 1 staged: $([ "$STAGED" -gt 0 ] && echo yes || echo no)"
-    [ "$GENESIS_COMPLETED" -gt 0 ] && [ "$PREPROCESSED" -eq "${#PARTICIPANTS[@]}" ] && [ "$STAGED" -gt 0 ] && break
+    echo "    genesis completed: $([ "$GENESIS_COMPLETED" -gt 0 ] && echo yes || echo no); epoch 1 staged: $([ "$STAGED" -gt 0 ] && echo yes || echo no)"
+    [ "$GENESIS_COMPLETED" -gt 0 ] && [ "$STAGED" -gt 0 ] && break
 
     assert_processes_alive "FAILURE: A validator exited before genesis completed." "${VALIDATOR_PIDS[@]}"
     sleep "$BLOCK_TIME"
 done
 
-if [ "$GENESIS_COMPLETED" -lt 1 ] || [ "$PREPROCESSED" -ne "${#PARTICIPANTS[@]}" ] || [ "$STAGED" -lt 1 ]; then
-    EXIT_MESSAGE="TIMEOUT: genesis did not complete with a nonce tree from every participant and a staged epoch 1 in time."
+if [ "$GENESIS_COMPLETED" -lt 1 ] || [ "$STAGED" -lt 1 ]; then
+    EXIT_MESSAGE="TIMEOUT: genesis did not complete with a staged epoch 1 in time."
     exit 1
 fi
 
 # From here on, blocks are only mined by this script until validator C is
-# stopped, so that its nonce reveal can be caught in the transaction pool
+# stopped, so that its nonce commitment can be caught in the transaction pool
 # before it is mined and C gets a chance to publish its signature share.
 echo "==> Pausing interval mining..."
 cast rpc --rpc-url "$ANVIL_RPC_URL" evm_setIntervalMining 0 >/dev/null
@@ -148,24 +141,24 @@ env \
 PROPOSAL_PID=$!
 PIDS+=("$PROPOSAL_PID")
 
-echo "==> Mining blocks until validator C's nonce reveal is pending (timeout: ${TIMEOUT}s)..."
+echo "==> Mining blocks until validator C's nonce commitment is pending (timeout: ${TIMEOUT}s)..."
 DEADLINE=$((SECONDS + TIMEOUT))
 VALIDATOR_C=$(tr '[:upper:]' '[:lower:]' <<< "${PARTICIPANTS[2]}")
-REVEAL_PENDING=0
+COMMIT_PENDING=0
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
-    REVEAL_PENDING=$(cast rpc --rpc-url "$ANVIL_RPC_URL" txpool_content | jq \
+    COMMIT_PENDING=$(cast rpc --rpc-url "$ANVIL_RPC_URL" txpool_content | jq \
         --arg from "$VALIDATOR_C" --arg selector "$SIGN_COMMIT_NONCES_SELECTOR" \
         '[.pending | to_entries[] | select((.key | ascii_downcase) == $from)
             | .value[] | select(.input | startswith($selector))] | length')
-    [ "$REVEAL_PENDING" -gt 0 ] && break
+    [ "$COMMIT_PENDING" -gt 0 ] && break
 
-    assert_processes_alive "FAILURE: A validator exited before validator C revealed its nonce." "${VALIDATOR_PIDS[@]}"
+    assert_processes_alive "FAILURE: A validator exited before validator C committed its nonces." "${VALIDATOR_PIDS[@]}"
     cast rpc --rpc-url "$ANVIL_RPC_URL" evm_mine >/dev/null
     sleep "$BLOCK_TIME"
 done
 
-if [ "$REVEAL_PENDING" -eq 0 ]; then
-    EXIT_MESSAGE="TIMEOUT: validator C did not reveal its nonce for the proposed transaction in time."
+if [ "$COMMIT_PENDING" -eq 0 ]; then
+    EXIT_MESSAGE="TIMEOUT: validator C did not commit its nonces for the proposed transaction in time."
     exit 1
 fi
 
@@ -250,27 +243,27 @@ participants_of() {
 expected_participants() {
     printf '%s\n' "$@" | jq -nRc '[inputs | ascii_downcase | ltrimstr("0x")] | sort'
 }
-REVEALED_LOGS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
+COMMITTED_LOGS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
     'SignRevealedNonces(bytes32,address,((uint256,uint256),(uint256,uint256)))')
 SHARED_LOGS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
     'SignShared(bytes32,bytes32,address,uint256)')
 
 # The first ceremony must have timed out in its signature share round: every
-# validator revealed its nonce, but validator C never shared.
+# validator committed its nonces, but validator C never shared.
 EVERYONE=$(expected_participants "${PARTICIPANTS[@]}")
 A_AND_B=$(expected_participants "${PARTICIPANTS[@]:0:2}")
-FIRST_REVEALED=$(participants_of "$FIRST_SID" "$REVEALED_LOGS")
+FIRST_COMMITTED=$(participants_of "$FIRST_SID" "$COMMITTED_LOGS")
 FIRST_SHARED=$(participants_of "$FIRST_SID" "$SHARED_LOGS")
-if [ "$FIRST_REVEALED" != "$EVERYONE" ] || [ "$FIRST_SHARED" != "$A_AND_B" ]; then
-    EXIT_MESSAGE="FAILURE: expected the first signing request $FIRST_SID to have nonces from $EVERYONE and signature shares from $A_AND_B, but nonces were revealed by $FIRST_REVEALED and signature shares were shared by $FIRST_SHARED."
+if [ "$FIRST_COMMITTED" != "$EVERYONE" ] || [ "$FIRST_SHARED" != "$A_AND_B" ]; then
+    EXIT_MESSAGE="FAILURE: expected the first signing request $FIRST_SID to have nonces from $EVERYONE and signature shares from $A_AND_B, but nonces were committed by $FIRST_COMMITTED and signature shares were shared by $FIRST_SHARED."
     exit 1
 fi
 
 # The restarted ceremony must only include validators A and B.
-RESTARTED_REVEALED=$(participants_of "$RESTARTED_SID" "$REVEALED_LOGS")
+RESTARTED_COMMITTED=$(participants_of "$RESTARTED_SID" "$COMMITTED_LOGS")
 RESTARTED_SHARED=$(participants_of "$RESTARTED_SID" "$SHARED_LOGS")
-if [ "$RESTARTED_REVEALED" != "$A_AND_B" ] || [ "$RESTARTED_SHARED" != "$A_AND_B" ]; then
-    EXIT_MESSAGE="FAILURE: expected the restarted signing request $RESTARTED_SID to have nonces and signature shares from $A_AND_B, but nonces were revealed by $RESTARTED_REVEALED and signature shares were shared by $RESTARTED_SHARED."
+if [ "$RESTARTED_COMMITTED" != "$A_AND_B" ] || [ "$RESTARTED_SHARED" != "$A_AND_B" ]; then
+    EXIT_MESSAGE="FAILURE: expected the restarted signing request $RESTARTED_SID to have nonces and signature shares from $A_AND_B, but nonces were committed by $RESTARTED_COMMITTED and signature shares were shared by $RESTARTED_SHARED."
     exit 1
 fi
 

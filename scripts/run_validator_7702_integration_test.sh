@@ -110,30 +110,29 @@ account_code() {
     cast code "$1" --rpc-url "$ANVIL_RPC_URL" | tr '[:upper:]' '[:lower:]'
 }
 
-echo "==> Waiting for both validators to delegate to the executor and submit their nonce trees (timeout: ${TIMEOUT}s)..."
+echo "==> Waiting for genesis to complete and both validators to delegate to the executor (timeout: ${TIMEOUT}s)..."
 DEADLINE=$((SECONDS + TIMEOUT))
-READY=0
+TRUE_WORD=0000000000000000000000000000000000000000000000000000000000000001
+GENESIS_COMPLETED=0
+DELEGATED=0
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
-    PREPROCESS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" 'Preprocess(bytes32,address,uint64,bytes32)')
-    READY=0
+    GENESIS_COMPLETED=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" 'KeyGenConfirmed(bytes32,address,bool)' \
+        | jq --arg true_word "$TRUE_WORD" '[.[] | select(.data | endswith($true_word))] | length')
+    DELEGATED=0
     for address in "${PARTICIPANTS[@]}"; do
-        # `participant` is the first non-indexed word, a padded address.
-        PREPROCESSED=$(jq --arg addr "${address#0x}" \
-            '[.[] | select((.data[26:66] | ascii_downcase) == ($addr | ascii_downcase))] | length' \
-            <<< "$PREPROCESS")
-        if [ "$PREPROCESSED" -gt 0 ] && [ "$(account_code "$address")" = "$DELEGATED_CODE" ]; then
-            READY=$((READY + 1))
+        if [ "$(account_code "$address")" = "$DELEGATED_CODE" ]; then
+            DELEGATED=$((DELEGATED + 1))
         fi
     done
-    echo "    validators delegated with a nonce tree: $READY/${#PARTICIPANTS[@]}"
-    [ "$READY" -eq "${#PARTICIPANTS[@]}" ] && break
+    echo "    genesis completed: $([ "$GENESIS_COMPLETED" -gt 0 ] && echo yes || echo no); validators delegated: $DELEGATED/${#PARTICIPANTS[@]}"
+    [ "$GENESIS_COMPLETED" -gt 0 ] && [ "$DELEGATED" -eq "${#PARTICIPANTS[@]}" ] && break
 
     assert_processes_alive "FAILURE: A validator exited before genesis completed." "$VALIDATOR_A_PID" "$VALIDATOR_B_PID"
     sleep "$BLOCK_TIME"
 done
 
-if [ "$READY" -ne "${#PARTICIPANTS[@]}" ]; then
-    EXIT_MESSAGE="TIMEOUT: the validators did not delegate to the executor and submit their nonce trees in time."
+if [ "$GENESIS_COMPLETED" -lt 1 ] || [ "$DELEGATED" -ne "${#PARTICIPANTS[@]}" ]; then
+    EXIT_MESSAGE="TIMEOUT: genesis did not complete with both validators delegated to the executor in time."
     exit 1
 fi
 

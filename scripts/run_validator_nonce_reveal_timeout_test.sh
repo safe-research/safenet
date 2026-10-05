@@ -1,19 +1,18 @@
 #!/bin/bash
 # Regression test: a signing ceremony whose nonce commitment round times out
-# must continue with the signers that revealed their nonces, rather than
+# must continue with the signers that committed their nonces, rather than
 # restarting the whole ceremony with a new signing request.
 #
 # This starts Anvil, deploys the contracts, and runs three Rust validator
 # instances through genesis key generation, forming a 2-of-3 group, and the
 # staging of epoch 1 (the genesis group's only other signing ceremony). Once
-# every participant has registered its first nonce tree and epoch 1 is staged,
-# validator C is stopped and a Safe transaction is proposed for the genesis
-# group. Validators A and B reveal their nonces but validator C never does, so
-# the nonce commitment round times out with a threshold of revealed nonces. The
-# test succeeds once the transaction is attested under the signature ID of the
-# original signing request, with nonces and signature shares from A and B only,
-# and without any further signing request (which is what restarting the
-# ceremony would need).
+# epoch 1 is staged, validator C is stopped and a Safe transaction is proposed
+# for the genesis group. Validators A and B commit their nonces but validator C
+# never does, so the nonce commitment round times out with a threshold of
+# committed nonces. The test succeeds once the transaction is attested under the
+# signature ID of the original signing request, with nonces and signature
+# shares from A and B only, and without any further signing request (which is
+# what restarting the ceremony would need).
 #
 # Requirements: anvil, forge, cast, jq, and cargo.
 set -euo pipefail
@@ -90,40 +89,32 @@ DEADLINE=$((SECONDS + TIMEOUT))
 TRUE_WORD=0000000000000000000000000000000000000000000000000000000000000001
 GENESIS_GROUP=""
 GENESIS_COMPLETED=0
-PREPROCESSED=0
 STAGED=0
 
-echo "==> Waiting for genesis to complete, every participant to submit a nonce tree, and epoch 1 to be staged (timeout: ${TIMEOUT}s)..."
+echo "==> Waiting for genesis to complete and epoch 1 to be staged (timeout: ${TIMEOUT}s)..."
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
     CONFIRMATIONS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" 'KeyGenConfirmed(bytes32,address,bool)')
     GENESIS_GROUP=$(jq -r '.[0].topics[1] // empty' <<< "$CONFIRMATIONS")
     GENESIS_COMPLETED=$(jq --arg true_word "$TRUE_WORD" \
         '[.[] | select(.data | endswith($true_word))] | length' <<< "$CONFIRMATIONS")
 
-    if [ -n "$GENESIS_GROUP" ]; then
-        PREPROCESS=$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" 'Preprocess(bytes32,address,uint64,bytes32)')
-        # `participant` is the first non-indexed word, a padded address.
-        PREPROCESSED=$(jq --arg gid "$GENESIS_GROUP" \
-            '[.[] | select(.topics[1] == $gid) | .data[26:66]] | unique | length' <<< "$PREPROCESS")
-    fi
-
     STAGED=$(fetch_logs "$ANVIL_RPC_URL" "$CONSENSUS_ADDR" \
         'EpochStaged(uint64,uint64,uint64,bytes32,(uint256,uint256),bytes32,((uint256,uint256),uint256))' \
         | jq '[.[] | select(.topics[2] == "0x0000000000000000000000000000000000000000000000000000000000000001")] | length')
 
-    echo "    genesis completed: $([ "$GENESIS_COMPLETED" -gt 0 ] && echo yes || echo no); nonce trees: $PREPROCESSED/${#PARTICIPANTS[@]}; epoch 1 staged: $([ "$STAGED" -gt 0 ] && echo yes || echo no)"
-    [ "$GENESIS_COMPLETED" -gt 0 ] && [ "$PREPROCESSED" -eq "${#PARTICIPANTS[@]}" ] && [ "$STAGED" -gt 0 ] && break
+    echo "    genesis completed: $([ "$GENESIS_COMPLETED" -gt 0 ] && echo yes || echo no); epoch 1 staged: $([ "$STAGED" -gt 0 ] && echo yes || echo no)"
+    [ "$GENESIS_COMPLETED" -gt 0 ] && [ "$STAGED" -gt 0 ] && break
 
     assert_processes_alive "FAILURE: A validator exited before genesis completed." "${VALIDATOR_PIDS[@]}"
     sleep "$BLOCK_TIME"
 done
 
-if [ "$GENESIS_COMPLETED" -lt 1 ] || [ "$PREPROCESSED" -ne "${#PARTICIPANTS[@]}" ] || [ "$STAGED" -lt 1 ]; then
-    EXIT_MESSAGE="TIMEOUT: genesis did not complete with a nonce tree from every participant and a staged epoch 1 in time."
+if [ "$GENESIS_COMPLETED" -lt 1 ] || [ "$STAGED" -lt 1 ]; then
+    EXIT_MESSAGE="TIMEOUT: genesis did not complete with a staged epoch 1 in time."
     exit 1
 fi
 
-echo "==> Stopping validator C (${PARTICIPANTS[2]}) so that it never reveals its nonce..."
+echo "==> Stopping validator C (${PARTICIPANTS[2]}) so that it never commits its nonces..."
 kill "${VALIDATOR_PIDS[2]}"
 wait "${VALIDATOR_PIDS[2]}" 2>/dev/null || true
 LIVE_VALIDATOR_PIDS=("${VALIDATOR_PIDS[@]:0:2}")
@@ -190,7 +181,7 @@ if [ "$SIGN_REQUEST_COUNT" -ne 1 ] || [ "$REQUESTED_SID" != "$ATTESTED_SID" ]; t
     exit 1
 fi
 
-# Both the revealed nonces and the signature shares for the signing request
+# Both the committed nonces and the signature shares for the signing request
 # must come from validators A and B only. `participant` is the first
 # non-indexed word of both events, a padded address.
 EXPECTED_SIGNERS=$(printf '%s\n' "${PARTICIPANTS[@]:0:2}" | jq -nRc '[inputs | ascii_downcase | ltrimstr("0x")] | sort')
@@ -198,14 +189,14 @@ signers_of() {
     jq -c --arg sid "$ATTESTED_SID" \
         '[.[] | select(.topics[1] == $sid) | .data[26:66] | ascii_downcase] | sort' <<< "$1"
 }
-REVEALED=$(signers_of "$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
+COMMITTED=$(signers_of "$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
     'SignRevealedNonces(bytes32,address,((uint256,uint256),(uint256,uint256)))')")
 SHARED=$(signers_of "$(fetch_logs "$ANVIL_RPC_URL" "$COORDINATOR_ADDR" \
     'SignShared(bytes32,bytes32,address,uint256)')")
-if [ "$REVEALED" != "$EXPECTED_SIGNERS" ] || [ "$SHARED" != "$EXPECTED_SIGNERS" ]; then
-    EXIT_MESSAGE="FAILURE: expected nonces and signature shares from $EXPECTED_SIGNERS, but nonces were revealed by $REVEALED and signature shares were shared by $SHARED."
+if [ "$COMMITTED" != "$EXPECTED_SIGNERS" ] || [ "$SHARED" != "$EXPECTED_SIGNERS" ]; then
+    EXIT_MESSAGE="FAILURE: expected nonces and signature shares from $EXPECTED_SIGNERS, but nonces were committed by $COMMITTED and signature shares were shared by $SHARED."
     exit 1
 fi
 
-EXIT_MESSAGE="SUCCESS: the genesis group ($GENESIS_GROUP) attested transaction $TRANSACTION_HASH under its original signing request $ATTESTED_SID, continuing with validators A and B after validator C never revealed its nonce."
+EXIT_MESSAGE="SUCCESS: the genesis group ($GENESIS_GROUP) attested transaction $TRANSACTION_HASH under its original signing request $ATTESTED_SID, continuing with validators A and B after validator C never committed its nonces."
 exit 0
