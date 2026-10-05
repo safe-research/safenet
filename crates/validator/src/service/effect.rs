@@ -63,7 +63,7 @@ impl Effect {
 }
 
 /// The result of performing an [`Effect`], resumed into the state machine.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub enum Resume {
     /// An effect that does not require resuming.
     #[default]
@@ -135,7 +135,7 @@ impl Handler {
                     .await?
                     .map(|nonces| Resume::NonceCommitments {
                         signature_id,
-                        nonces: nonces.commitments(),
+                        nonces,
                     })
                     .unwrap_or(Resume::Noop))
             }

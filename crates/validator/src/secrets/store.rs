@@ -41,6 +41,7 @@
 //! other that is missing rather than being recreated.
 
 use crate::{
+    bindings,
     frost::{keygen::Secrets, sign::SigningNonces},
     metrics::{self, SecretKind},
 };
@@ -207,8 +208,11 @@ impl SecretStore {
     }
 
     /// Persists the signing `nonces` `me` generated for the signing ceremony
-    /// `signature_id` of `group`, and returns the nonces stored for that
-    /// ceremony, or `None` when they were already used.
+    /// `signature_id` of `group`, and returns the commitments of the nonces
+    /// stored for that ceremony, or `None` when they were already used.
+    ///
+    /// The secret nonces themselves can only be read back with
+    /// [`SecretStore::take_signing_nonces`].
     ///
     /// Existing nonces are **never overwritten**, so a ceremony only ever has
     /// the first nonce pair stored for it, and one whose nonces were taken is
@@ -219,7 +223,7 @@ impl SecretStore {
         signature_id: B256,
         me: Address,
         nonces: SigningNonces,
-    ) -> Result<Option<SigningNonces>, Error> {
+    ) -> Result<Option<bindings::SignNonces>, Error> {
         let mut tx = self.pool.begin().await?;
         let inserted = sqlx::query(
             "INSERT INTO signing_nonces (signature_id, group_id, address, nonces)
@@ -243,10 +247,12 @@ impl SecretStore {
         tx.commit().await?;
 
         metrics::secrets_total(SecretKind::Nonces).increment(inserted as f64);
-        stored
-            .map(|nonces| serde_json::from_str(&nonces))
-            .transpose()
-            .map_err(Error::from)
+        let commitments = stored
+            .map(|nonces| serde_json::from_str::<SigningNonces>(&nonces))
+            .transpose()?
+            .map(|nonces| nonces.commitments());
+
+        Ok(commitments)
     }
 
     /// Takes the signing nonces stored for the signing ceremony `signature_id`,
@@ -926,37 +932,30 @@ mod tests {
         let store = store().await;
 
         let first = signing_nonces();
+        let first_commitments = first.commitments();
         let stored = store
-            .store_signing_nonces(GROUP, signature_id(1), ME, first.clone())
+            .store_signing_nonces(GROUP, signature_id(1), ME, first)
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(
-            serde_json::to_string(&stored).unwrap(),
-            serde_json::to_string(&first).unwrap(),
-        );
+        assert_eq!(stored, first_commitments);
 
         let stored = store
             .store_signing_nonces(GROUP, signature_id(1), ME, signing_nonces())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(
-            serde_json::to_string(&stored).unwrap(),
-            serde_json::to_string(&first).unwrap(),
-        );
+        assert_eq!(stored, first_commitments);
 
         // Another signing ceremony gets its own nonces.
         let second = signing_nonces();
+        let second_commitments = second.commitments();
         let stored = store
-            .store_signing_nonces(GROUP, signature_id(2), ME, second.clone())
+            .store_signing_nonces(GROUP, signature_id(2), ME, second)
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(
-            serde_json::to_string(&stored).unwrap(),
-            serde_json::to_string(&second).unwrap(),
-        );
+        assert_eq!(stored, second_commitments);
     }
 
     #[tokio::test]

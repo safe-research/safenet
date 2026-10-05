@@ -23,7 +23,11 @@ use std::{
 ///
 /// A nonce pair must be used for at most one signature share; producing a
 /// signature share consumes it.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
+// Not `Clone` outside of tests, so that moving the nonces into a signature
+// share uses them up and accidental reuse is harder. This is not a guarantee:
+// a serialization round trip can still clone them.
+#[cfg_attr(test, derive(Clone))]
 pub struct SigningNonces(round1::SigningNonces);
 
 impl SigningNonces {

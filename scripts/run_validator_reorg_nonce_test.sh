@@ -15,10 +15,14 @@
 # A commits its nonces for the transaction's signing ceremony but cannot sign
 # with them. The chain is then reorged back past the block where secret shares
 # were distributed (using `anvil_reorg`, which mines empty replacement blocks
-# over the reorged range), and validator B is restarted. Both validators detect
-# the reorg, roll their local state back to before the key share was
-# confirmed, and reprocess the (now share-less) chain. Finally, the same
-# transaction is proposed again and must be attested.
+# over the reorged range). Validator A detects the reorg, rolls its local state
+# back to before the key share was confirmed, and reprocesses the (now
+# share-less) chain. Validator B stays stopped, so the group cannot reconfirm,
+# until validator A's safe block has passed the start of the reorged range:
+# had validator A scheduled the group's nonces for deletion there, it would
+# have pruned them by then. Validator B is then restarted, the group reconfirms
+# its key share, and the same transaction is proposed again and must be
+# attested with the nonces validator A committed before the reorg.
 #
 # Requirements: anvil, forge, cast, jq, and cargo.
 set -euo pipefail
@@ -28,6 +32,16 @@ ANVIL_RPC_URL="${ANVIL_RPC_URL:-http://127.0.0.1:$ANVIL_PORT}"
 CHAIN_ID=31337
 BLOCK_TIME=1
 TIMEOUT="${TIMEOUT:-60}"
+# Large enough reorg depth support to work with slow CI tests, as the reorg
+# spans the whole DKG confirmation and a signing request.
+MAX_REORG_DEPTH=10
+# Validator B replays the chain on restart, warping to the block
+# `max_reorg_depth` behind the head and collecting every secret scheduled at or
+# before it. It is restarted around `MAX_REORG_DEPTH` blocks after a reorg of
+# up to `MAX_REORG_DEPTH` blocks, so a depth of more than twice that keeps the
+# DKG secrets it scheduled for deletion before the reorg until its replay
+# retains them again.
+VALIDATOR_B_MAX_REORG_DEPTH=$((3 * MAX_REORG_DEPTH))
 
 # Anvil accounts 1 and 2, one per validator instance.
 PARTICIPANTS=(
@@ -70,16 +84,13 @@ validator_config() {
     print_validator_config_base \
         "$ANVIL_RPC_URL" "$1" "$2" "$CONSENSUS_ADDR" "$ORACLE_ADDR" \
         1000000 "$(($BLOCK_TIME * 1000))" PARTICIPANTS
-
-    # Large enough reorg depth support to work with slow CI tests, as the
-    # reorg spans the whole DKG confirmation and a signing request.
-    echo "max_reorg_depth = 20"
+    echo "max_reorg_depth = $3"
 }
 
 VALIDATOR_A_CONFIG="$TMPDIR/validator_a.toml"
-validator_config "${PRIVATE_KEYS[0]}" "$VALIDATOR_A_DB" > "$VALIDATOR_A_CONFIG"
+validator_config "${PRIVATE_KEYS[0]}" "$VALIDATOR_A_DB" "$MAX_REORG_DEPTH" > "$VALIDATOR_A_CONFIG"
 VALIDATOR_B_CONFIG="$TMPDIR/validator_b.toml"
-validator_config "${PRIVATE_KEYS[1]}" "$VALIDATOR_B_DB" > "$VALIDATOR_B_CONFIG"
+validator_config "${PRIVATE_KEYS[1]}" "$VALIDATOR_B_DB" "$VALIDATOR_B_MAX_REORG_DEPTH" > "$VALIDATOR_B_CONFIG"
 
 start_validator_a() {
     echo "==> Starting validator A (${PARTICIPANTS[0]})..."
@@ -121,6 +132,13 @@ validator_a_nonces() {
         'SignCommittedNonces(bytes32,address,((uint256,uint256),(uint256,uint256)))' |
         jq --arg sid "$1" --arg addr "${PARTICIPANTS[0]#0x}" \
             '[.[] | select(.topics[1] == $sid) | select((.data[26:66] | ascii_downcase) == ($addr | ascii_downcase)) | .data[66:]]'
+}
+
+# Prints the highest block number validator A has processed, from the
+# `new canonical block` trace events in its JSON logs.
+validator_a_processed_block() {
+    jq -R 'fromjson? | select(.fields.message == "new canonical block") | .fields.number' \
+        "$REPO_ROOT/validator_a_logs.txt" | jq -s 'max // 0'
 }
 
 # Prints the number of `KeyGenConfirmed(..., confirmed: true)` events for the
@@ -212,9 +230,38 @@ echo "    validator A committed nonces for signature $SIGNATURE_ID"
 
 CURRENT_BLOCK=$(cast block-number --rpc-url "$ANVIL_RPC_URL")
 REORG_DEPTH=$((CURRENT_BLOCK - SECRET_SHARED_BLOCK + 1))
+if [ "$REORG_DEPTH" -gt "$MAX_REORG_DEPTH" ]; then
+    EXIT_MESSAGE="FAILURE: the reorg would span $REORG_DEPTH blocks, more than the $MAX_REORG_DEPTH validator A supports; increase MAX_REORG_DEPTH."
+    exit 1
+fi
 
 echo "==> Reorging $REORG_DEPTH block(s) from block $CURRENT_BLOCK, spanning back past block $SECRET_SHARED_BLOCK where genesis's secret shares were shared..."
 cast rpc anvil_reorg "$REORG_DEPTH" '[]' --rpc-url "$ANVIL_RPC_URL" >/dev/null
+
+# Validator A reconciles the rolled-back group's secrets from the first reorged
+# block on, which is at most `CURRENT_BLOCK + 1` (in case a block was mined
+# before the reorg). It only deletes secrets scheduled at or before its safe
+# block, `MAX_REORG_DEPTH` blocks behind the block it processed, so by the
+# block after `PRUNED_BLOCK` anything scheduled for deletion over the reorged
+# range is gone. Without validator B the 2-of-2 group stays in its DKG
+# throughout, so its nonces must be retained the whole time.
+PRUNED_BLOCK=$((CURRENT_BLOCK + 1 + MAX_REORG_DEPTH))
+echo "==> Waiting for validator A to process block $((PRUNED_BLOCK + 1)) with validator B stopped (timeout: ${TIMEOUT}s)..."
+DEADLINE=$((SECONDS + TIMEOUT))
+PROCESSED_BLOCK=0
+while [ "$SECONDS" -lt "$DEADLINE" ]; do
+    assert_processes_alive "FAILURE: validator A exited after the reorg." "$VALIDATOR_A_PID"
+
+    PROCESSED_BLOCK=$(validator_a_processed_block)
+    [ "$PROCESSED_BLOCK" -gt "$PRUNED_BLOCK" ] && break
+
+    sleep "$BLOCK_TIME"
+done
+
+if [ "$PROCESSED_BLOCK" -le "$PRUNED_BLOCK" ]; then
+    EXIT_MESSAGE="TIMEOUT: validator A did not process block $((PRUNED_BLOCK + 1)) in time."
+    exit 1
+fi
 
 start_validator_b append
 
