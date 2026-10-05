@@ -671,7 +671,7 @@ impl Transition {
                 }
 
                 // Ceremonies are only ever restarted once they have reached
-                // the nonce commitment round, which for oracle-backed packets
+                // the signature share round, which for oracle-backed packets
                 // means that the oracle has already approved them.
                 *signing = SigningState::WaitingForRequest {
                     key_share: key_share.clone(),
