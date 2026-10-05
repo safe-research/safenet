@@ -444,7 +444,7 @@ mod tests {
                 .map(|(index, data)| EventLog {
                     block: EventBlock {
                         number: block,
-                        timestamp: None,
+                        timestamp: Default::default(),
                     },
                     index: index.try_into().expect("test log index fits in u64"),
                     address: Address::ZERO,

@@ -44,11 +44,8 @@ pub trait Events: Sized {
 pub struct EventBlock {
     /// The block number.
     pub number: u64,
-    /// The block timestamp, in seconds since the Unix epoch. `None` when the
-    /// node omits the (non-standard, but widely supported) `blockTimestamp`
-    /// field from its `eth_getLogs` response and it could not be determined
-    /// from the block's header.
-    pub timestamp: Option<u64>,
+    /// The block timestamp, in seconds since the Unix epoch.
+    pub timestamp: u64,
 }
 
 /// An event log, adding additional log position information (block and log
@@ -137,6 +134,11 @@ pub enum Error {
     /// RPC node.
     #[error("block {block_number} is unexpectedly missing")]
     MissingBlock { block_number: u64 },
+    /// The timestamp of a block with logs was neither included in its logs nor
+    /// fetched from its header, indicating a bug in the watcher or an
+    /// inconsistent RPC node.
+    #[error("timestamp for block {block_number} is unexpectedly missing")]
+    MissingBlockTimestamp { block_number: u64 },
     /// A block update arrived while the watcher was still processing the
     /// previous one.
     #[error("received a block update while not idle")]
@@ -677,7 +679,8 @@ fn narrowed_warp(from_block: u64, to_block: u64, page_size: NonZeroU64) -> Step 
 /// `(block_number, log_index)` order.
 ///
 /// A log's block timestamp is taken from the log itself when the node includes
-/// it, and otherwise looked up by block number in `block_timestamps`.
+/// it, and otherwise looked up by block number in `block_timestamps`; it is an
+/// error for a log to have neither.
 fn decode_and_sort<E>(
     logs: &[Log],
     block_timestamps: &BTreeMap<u64, u64>,
@@ -688,19 +691,8 @@ where
     let mut logs = logs
         .iter()
         .map(|log| {
-            E::decode_log(log.topics(), &log.data().data)
-                .and_then(|data| {
-                    let number = log.block_number?;
-                    let timestamp = log
-                        .block_timestamp
-                        .or_else(|| block_timestamps.get(&number).copied());
-                    Some(EventLog {
-                        block: EventBlock { number, timestamp },
-                        index: log.log_index?,
-                        address: log.inner.address,
-                        data,
-                    })
-                })
+            let (number, index, data) = E::decode_log(log.topics(), &log.data().data)
+                .and_then(|data| Some((log.block_number?, log.log_index?, data)))
                 .ok_or_else(|| Error::DecodeLog {
                     // This is an unfortunate typing quirk of `alloy`, but we
                     // should never have a log without a block hash or index set.
@@ -708,9 +700,21 @@ where
                     // report an error with weird data.
                     block_hash: log.block_hash.unwrap_or(B256::repeat_byte(0xff)),
                     log_index: log.log_index.unwrap_or(u64::MAX),
-                })
+                })?;
+            let timestamp = log
+                .block_timestamp
+                .or_else(|| block_timestamps.get(&number).copied())
+                .ok_or(Error::MissingBlockTimestamp {
+                    block_number: number,
+                })?;
+            Ok(EventLog {
+                block: EventBlock { number, timestamp },
+                index,
+                address: log.inner.address,
+                data,
+            })
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     logs.sort_unstable_by_key(|log| (log.block.number, log.index));
     Ok(logs)
 }
@@ -878,7 +882,7 @@ mod tests {
         EventLog {
             block: EventBlock {
                 number: block,
-                timestamp: Some(block_timestamp(block)),
+                timestamp: block_timestamp(block),
             },
             index,
             address: WATCHED,
@@ -1036,7 +1040,7 @@ mod tests {
         ];
         let block_timestamps = BTreeMap::from([(1, 0), (2, block_timestamp(2))]);
 
-        let events = decode_and_sort::<Erc20::Erc20Events>(&logs, &block_timestamps).unwrap();
+        let events = decode_and_sort::<Erc20::Erc20Events>(&logs[..2], &block_timestamps).unwrap();
 
         assert_eq!(
             events,
@@ -1057,21 +1061,13 @@ mod tests {
                         ..Default::default()
                     })
                 ),
-                // Neither the log nor the known timestamps have one.
-                EventLog {
-                    block: EventBlock {
-                        number: 3,
-                        timestamp: None,
-                    },
-                    ..event_log(
-                        (3, 0),
-                        Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                            amount: uint!(3_U256),
-                            ..Default::default()
-                        })
-                    )
-                },
             ]
+        );
+
+        // Neither the log nor the known timestamps have one.
+        assert_matches!(
+            decode_and_sort::<Erc20::Erc20Events>(&logs, &block_timestamps),
+            Err(Error::MissingBlockTimestamp { block_number: 3 })
         );
     }
 
