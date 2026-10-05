@@ -206,8 +206,9 @@ enum KeyGenConfirmation {
 struct Complaint {
     /// The total number of complaints raised against the participant.
     total: u16,
-    /// The number of complaints not yet responded to.
-    unresponded: u16,
+    /// The plaintiffs whose complaints require a response and have not yet
+    /// been responded to.
+    unresponded: BTreeSet<Address>,
 }
 
 /// The deadlines for collecting confirmations.

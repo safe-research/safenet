@@ -646,69 +646,87 @@ impl Transition {
     /// group's signing threshold, key generation restarts excluding them;
     /// otherwise, if this validator is the one accused, it reveals its own
     /// secret share for the plaintiff via [`Action::KeyGenComplaintResponse`].
+    /// Complaints raised after the complaint deadline still count towards the
+    /// threshold, but do not require a response.
     pub(super) fn handle_key_gen_complained(
         &self,
         mut state: State,
         block: u64,
         event: &Coordinator::KeyGenComplained,
     ) -> (State, Commands<State, Self>) {
-        let (next_epoch, group, participation, complaints, restart_deadline, response_expires_at) =
-            match &mut state.rollover {
-                RolloverState::CollectingShares {
-                    next_epoch,
-                    group,
-                    participation,
+        let (
+            next_epoch,
+            group,
+            participation,
+            complaints,
+            restart_deadline,
+            response_expires_at,
+            requires_response,
+        ) = match &mut state.rollover {
+            RolloverState::CollectingShares {
+                next_epoch,
+                group,
+                participation,
+                complaints,
+                deadline,
+                ..
+            } if group.id() == event.gid => {
+                let restart_deadline =
+                    deadline.map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
+                // We get at least another `key_gen_timeout` to get the
+                // complaint response onchain, which ends up being the same
+                // value as the restart deadline (by coincidence).
+                let response_expires_at = restart_deadline;
+                let requires_response = true;
+
+                (
+                    *next_epoch,
+                    &*group,
+                    &*participation,
                     complaints,
-                    deadline,
-                    ..
-                } if group.id() == event.gid => {
-                    let restart_deadline =
-                        deadline.map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
-                    // We get at least another `key_gen_timeout` to get the
-                    // complaint response onchain, which ends up being the same
-                    // value as the restart deadline (by coincidence).
-                    let response_expires_at = restart_deadline;
-                    (
-                        *next_epoch,
-                        &*group,
-                        &*participation,
-                        complaints,
-                        restart_deadline,
-                        response_expires_at,
-                    )
-                }
-                RolloverState::CollectingConfirmations {
-                    next_epoch,
-                    group,
-                    participation,
+                    restart_deadline,
+                    response_expires_at,
+                    requires_response,
+                )
+            }
+            RolloverState::CollectingConfirmations {
+                next_epoch,
+                group,
+                participation,
+                complaints,
+                deadlines,
+                ..
+            } if group.id() == event.gid => {
+                let restart_deadline = deadlines
+                    .as_ref()
+                    .map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
+                let response_expires_at = deadlines.as_ref().map(|deadlines| deadlines.response);
+                // The contract accepts complaints past the complaint deadline
+                // and counts them towards the accused being compromised, so we
+                // must count them as well. However, they are late and therefore
+                // do not require a response.
+                let requires_response = deadlines
+                    .as_ref()
+                    .is_none_or(|deadlines| block <= deadlines.complain);
+
+                (
+                    *next_epoch,
+                    &*group,
+                    &*participation,
                     complaints,
-                    deadlines,
-                    ..
-                } if group.id() == event.gid
-                    && deadlines
-                        .as_ref()
-                        .is_none_or(|deadlines| block <= deadlines.complain) =>
-                {
-                    let restart_deadline = deadlines
-                        .as_ref()
-                        .map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
-                    let response_expires_at =
-                        deadlines.as_ref().map(|deadlines| deadlines.response);
-                    (
-                        *next_epoch,
-                        &*group,
-                        &*participation,
-                        complaints,
-                        restart_deadline,
-                        response_expires_at,
-                    )
-                }
-                _ => return (state, Vec::new()),
-            };
+                    restart_deadline,
+                    response_expires_at,
+                    requires_response,
+                )
+            }
+            _ => return (state, Vec::new()),
+        };
 
         let complaint = complaints.entry(event.accused).or_default();
         complaint.total += 1;
-        complaint.unresponded += 1;
+        if requires_response {
+            complaint.unresponded.insert(event.plaintiff);
+        }
 
         // If we ever get threshold complaints, the keygen is done. This is
         // because it would reveal sufficient public information to compute
@@ -728,6 +746,7 @@ impl Transition {
         let mut commands = Vec::new();
         if let KeyGenParticipation::Participating(sharing_state) = participation
             && event.accused == self.account
+            && requires_response
         {
             match frost::keygen::reveal_secret_share(sharing_state, event.plaintiff) {
                 Ok(secret_share) => {
@@ -813,12 +832,14 @@ impl Transition {
                 _ => return (state, Vec::new()),
             };
 
-        let Some(complaint) = complaints
+        // Only consider responses to complaints that require one, so that a
+        // response to a late complaint can't resolve a different one.
+        if !complaints
             .get_mut(&event.accused)
-            .filter(|complaint| complaint.unresponded > 0)
-        else {
+            .is_some_and(|complaint| complaint.unresponded.remove(&event.plaintiff))
+        {
             return (state, Vec::new());
-        };
+        }
 
         match frost::keygen::verify_revealed_secret_share(
             participation.group_commitments(),
@@ -832,7 +853,6 @@ impl Transition {
                 {
                     shares.insert(event.accused, share);
                 }
-                complaint.unresponded -= 1;
             }
             Err(err) => {
                 tracing::warn!(
@@ -1072,7 +1092,7 @@ impl Transition {
             } => {
                 let unresponded = complaints
                     .iter()
-                    .filter(|(_, complaint)| complaint.unresponded > 0)
+                    .filter(|(_, complaint)| !complaint.unresponded.is_empty())
                     .map(|(address, _)| *address)
                     .collect::<BTreeSet<_>>();
                 let excluded = if block >= deadlines.response && !unresponded.is_empty() {
