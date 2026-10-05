@@ -216,8 +216,8 @@ where
                 // We are extra defensive with the updates that we pass to the
                 // state machine, so ensure that the logs are in strictly sorted
                 // and in the update's block range.
-                if !logs.is_sorted_by(|a, b| (a.block, a.index) < (b.block, b.index))
-                    || logs.iter().any(|log| !blocks.contains(&log.block))
+                if !logs.is_sorted_by(|a, b| (a.block.number, a.index) < (b.block.number, b.index))
+                    || logs.iter().any(|log| !blocks.contains(&log.block.number))
                 {
                     return Err(Error::BadUpdate);
                 }
@@ -237,7 +237,7 @@ where
                         (state, commands) =
                             self.accumulate_transition(state, commands, Message::NewBlock(block));
                     }
-                    while let Some(log) = logs.next_if(|log| log.block == block) {
+                    while let Some(log) = logs.next_if(|log| log.block.number == block) {
                         (state, commands) =
                             self.accumulate_transition(state, commands, Message::Event(log));
                     }
@@ -327,7 +327,7 @@ fn is_next_in_range(range: impl Into<RangeInclusive<u64>>, sub: RangeInclusive<u
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::{BlockUpdate, EventUpdate, Update};
+    use crate::index::{BlockUpdate, EventBlock, EventUpdate, Update};
     use alloy::primitives::Address;
     use serde::Deserialize;
 
@@ -441,8 +441,10 @@ mod tests {
                 .into_iter()
                 .enumerate()
                 .map(|(index, data)| EventLog {
-                    block,
-                    block_timestamp: None,
+                    block: EventBlock {
+                        number: block,
+                        timestamp: None,
+                    },
                     index: index.try_into().expect("test log index fits in u64"),
                     address: Address::ZERO,
                     data,

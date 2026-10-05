@@ -951,7 +951,7 @@ impl StateTransition<State> for SentinelTransition {
         match message {
             Message::NewBlock(block) => self.handle_block_advance(state, block),
             Message::Event(event) => {
-                let (block, block_timestamp) = (event.block, event.block_timestamp);
+                let (block, block_timestamp) = (event.block.number, event.block.timestamp);
                 match event.data {
                     SentinelEvents::Consensus(Consensus::ConsensusEvents::TransactionProposed(
                         event,
@@ -1063,7 +1063,7 @@ mod tests {
         primitives::{Bytes, Uint, address, aliases::U96, keccak256},
         signers::k256::ecdsa::SigningKey,
     };
-    use safenet_core::index::EventLog;
+    use safenet_core::index::{EventBlock, EventLog};
 
     const ORACLE: Address = address!("1111111111111111111111111111111111111111");
     const CONSENSUS: Address = address!("3333333333333333333333333333333333333333");
@@ -1293,8 +1293,10 @@ mod tests {
 
     fn log(block: u64, data: SentinelEvents) -> EventLog<SentinelEvents> {
         EventLog {
-            block,
-            block_timestamp: Some(block_timestamp(block)),
+            block: EventBlock {
+                number: block,
+                timestamp: Some(block_timestamp(block)),
+            },
             index: 0,
             address: Address::ZERO,
             data,
