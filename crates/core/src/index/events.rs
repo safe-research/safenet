@@ -237,6 +237,7 @@ pub struct EventWatcher<E> {
     addresses: Vec<Address>,
     topics: Vec<B256>,
     step: Step,
+    warned_missing_timestamps: bool,
     _events: PhantomData<fn() -> E>,
 }
 
@@ -252,6 +253,7 @@ where
             addresses,
             topics: E::topics(),
             step: Step::Idle,
+            warned_missing_timestamps: false,
             _events: PhantomData,
         }
     }
@@ -497,7 +499,7 @@ where
     /// `block_timestamps` maps block numbers to their timestamps, for logs that
     /// the node returns without one.
     async fn fetch_logs(
-        &self,
+        &mut self,
         fetch: Fetch,
         block_timestamps: &BTreeMap<u64, u64>,
     ) -> Result<Vec<EventLog<E>>, Error> {
@@ -507,7 +509,7 @@ where
 
     /// Queries the raw watched logs for some blocks using the given strategy,
     /// in no particular order.
-    async fn query_logs(&self, fetch: Fetch) -> Result<Vec<Log>, Error> {
+    async fn query_logs(&mut self, fetch: Fetch) -> Result<Vec<Log>, Error> {
         let logs = match fetch {
             Fetch::SingleQuery(blocks) => {
                 let filter = blocks
@@ -518,21 +520,23 @@ where
                 self.check_logs_limit(logs)?
             }
             Fetch::MultipleQueries(blocks) => {
-                futures::future::try_join_all(self.topics.iter().map(|topic| async move {
+                // The concurrent queries share an immutable borrow of the watcher.
+                let this = &*self;
+                futures::future::try_join_all(this.topics.iter().map(|topic| async move {
                     let result: Result<Vec<Log>, Error> = async {
                         let filter = blocks
                             .into_filter()
-                            .address(self.addresses.clone())
+                            .address(this.addresses.clone())
                             .event_signature(*topic);
-                        let logs = self.provider.get_logs(&filter).await?;
-                        self.check_logs_limit(logs)
+                        let logs = this.provider.get_logs(&filter).await?;
+                        this.check_logs_limit(logs)
                     }
                     .await;
 
                     // A failed query for a non-critical event is dropped rather
                     // than failing the whole fetch.
                     match result {
-                        Err(err) if self.config.fallible_events.contains(topic) => {
+                        Err(err) if this.config.fallible_events.contains(topic) => {
                             tracing::warn!(
                                 topic = %topic,
                                 ?err,
@@ -573,6 +577,17 @@ where
                     .collect()
             }
         };
+
+        // Only warn once per watcher, as a node that omits timestamps does so
+        // for every log and would otherwise warn on every fetch.
+        if !self.warned_missing_timestamps && logs.iter().any(|log| log.block_timestamp.is_none()) {
+            tracing::warn!(
+                "node does not include `blockTimestamp` in logs; falling back to block headers, \
+                 which requires additional RPC requests and degrades indexing performance"
+            );
+            self.warned_missing_timestamps = true;
+        }
+
         Ok(logs)
     }
 
@@ -1063,7 +1078,7 @@ mod tests {
     #[tokio::test]
     async fn single_query_fetches_all_events_at_once() {
         let asserter = Asserter::new();
-        let events = watcher(&asserter, Config::default());
+        let mut events = watcher(&asserter, Config::default());
 
         asserter.push_success(&vec![
             log(
@@ -1115,7 +1130,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_queries_fetches_one_event_per_query() {
         let asserter = Asserter::new();
-        let events = watcher(&asserter, Config::default());
+        let mut events = watcher(&asserter, Config::default());
 
         asserter.push_success(&vec![log(
             (2, 0),
@@ -1166,7 +1181,7 @@ mod tests {
     #[tokio::test]
     async fn client_filtered_filters_logs_by_address_and_event() {
         let asserter = Asserter::new();
-        let events = watcher(&asserter, Config::default());
+        let mut events = watcher(&asserter, Config::default());
 
         // A single query returns every log in the block; the watcher keeps only
         // those from a watched address with a watched event.
@@ -1244,7 +1259,7 @@ mod tests {
     #[tokio::test]
     async fn single_query_errors_when_too_many_logs() {
         let asserter = Asserter::new();
-        let events = watcher(
+        let mut events = watcher(
             &asserter,
             Config {
                 max_logs_per_query: Some(NonZeroUsize::new(10).unwrap()),
@@ -1278,7 +1293,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_queries_errors_when_a_query_returns_too_many_logs() {
         let asserter = Asserter::new();
-        let events = watcher(
+        let mut events = watcher(
             &asserter,
             Config {
                 max_logs_per_query: Some(NonZeroUsize::new(10).unwrap()),
@@ -1319,7 +1334,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_queries_propagates_a_failed_query() {
         let asserter = Asserter::new();
-        let events = watcher(&asserter, Config::default());
+        let mut events = watcher(&asserter, Config::default());
 
         asserter.push_failure_msg("query failed");
         asserter.push_success(&vec![log(
@@ -1344,7 +1359,7 @@ mod tests {
     #[tokio::test]
     async fn multiple_queries_drops_fallible_events() {
         let asserter = Asserter::new();
-        let events = watcher(
+        let mut events = watcher(
             &asserter,
             Config {
                 fallible_events: BTreeSet::from([Erc20::Transfer::SIGNATURE_HASH]),
@@ -1391,7 +1406,7 @@ mod tests {
     #[tokio::test]
     async fn client_filtered_errors_when_logs_do_not_match_bloom() {
         let asserter = Asserter::new();
-        let events = watcher(&asserter, Config::default());
+        let mut events = watcher(&asserter, Config::default());
 
         asserter.push_success(&vec![log(
             (1, 0),
