@@ -129,10 +129,10 @@ test-integration-validator-signing-restart:
     ./scripts/run_validator_signing_restart_test.sh
 
 # Regression test: a signing ceremony whose nonce commitment round times out
-# must continue with the signers that revealed, instead of restarting (Anvil +
+# must continue with the signers that committed, instead of restarting (Anvil +
 # three validator instances, one of which is stopped before signing).
-test-integration-validator-nonce-reveal-timeout:
-    ./scripts/run_validator_nonce_reveal_timeout_test.sh
+test-integration-validator-nonce-commit-timeout:
+    ./scripts/run_validator_nonce_commit_timeout_test.sh
 
 # Regression test: a reorg deeper than the configured `max_reorg_depth` must
 # make the validator fail loudly instead of silently continuing (Anvil + a

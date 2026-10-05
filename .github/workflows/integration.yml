@@ -38,10 +38,10 @@ jobs:
             just-args: ""
             log-artifact: validator-integration-signing-restart-logs
 
-          - name: validator-nonce-reveal-timeout
-            just-target: test-integration-validator-nonce-reveal-timeout
+          - name: validator-nonce-commit-timeout
+            just-target: test-integration-validator-nonce-commit-timeout
             just-args: ""
-            log-artifact: validator-integration-nonce-reveal-timeout-logs
+            log-artifact: validator-integration-nonce-commit-timeout-logs
 
           - name: validator-deep-reorg
             just-target: test-integration-validator-deep-reorg
