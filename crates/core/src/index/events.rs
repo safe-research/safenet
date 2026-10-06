@@ -187,7 +187,7 @@ enum Fetch {
 }
 
 /// The current state of the event watcher's log-fetching state machine.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 // NOTE: The large enum variant warning is there because of the `logs_bloom`
 // field on the `Block` variant. Since fetching a new block is the common case,
 // boxing the value would not be beneficial.
@@ -201,6 +201,9 @@ enum Step {
         from_block: u64,
         to_block: u64,
         page_size: NonZeroU64,
+        /// The current page, once its logs have been fetched but some of its
+        /// block timestamps are still missing.
+        fetched: Option<FetchedPage>,
     },
     /// Fetching the logs of a single new block by hash, having already failed
     /// `retries` times.
@@ -211,6 +214,20 @@ enum Step {
         logs_bloom: Bloom,
         retries: u64,
     },
+}
+
+/// A warp page whose logs have been fetched, but some of whose block timestamps
+/// are still missing.
+#[derive(Clone, Debug)]
+struct FetchedPage {
+    /// The last block of the page, which spans from the warp's current
+    /// `from_block` up to and including this block.
+    to_block: u64,
+    /// The page's raw logs.
+    logs: Vec<Log>,
+    /// The timestamps of the page's blocks resolved so far, keyed by block
+    /// number, for logs that the node returned without one.
+    block_timestamps: BTreeMap<u64, u64>,
 }
 
 /// Watches for the logs of the events `E` emitted by a set of addresses.
@@ -254,6 +271,7 @@ where
                 from_block: from,
                 to_block: to,
                 page_size: self.config.block_page_size,
+                fetched: None,
             },
             // Uncled blocks never had canonical logs, so there is nothing to do.
             BlockUpdate::Uncle { .. } => Step::Idle,
@@ -298,13 +316,17 @@ where
     /// `(block_number, log_index)` order (which may be empty) and the block range
     /// they were fetched for.
     pub async fn next(&mut self) -> Result<Option<EventUpdate<E>>, Error> {
-        match self.step {
+        match self.step.clone() {
             Step::Idle => Ok(None),
             Step::Warping {
                 from_block,
                 to_block,
                 page_size,
-            } => self.warp(from_block, to_block, page_size).await.map(Some),
+                fetched,
+            } => self
+                .warp(from_block, to_block, page_size, fetched)
+                .await
+                .map(Some),
             Step::Block {
                 block_number,
                 block_hash,
@@ -325,34 +347,71 @@ where
     }
 
     /// Fetches one page of a warp over `from_block..=to_block`, advancing to the
-    /// next page on success and narrowing the page size on failure.
+    /// next page on success.
+    ///
+    /// On failure, the page is retried: a failed logs query narrows the page
+    /// size, while a failed block header request keeps the page's logs and the
+    /// timestamps resolved so far, so that only the missing headers are
+    /// requested again.
     async fn warp(
         &mut self,
         from_block: u64,
         to_block: u64,
         page_size: NonZeroU64,
+        fetched: Option<FetchedPage>,
     ) -> Result<EventUpdate<E>, Error> {
-        // Note that block query ranges are inclusive.
-        let query_to_block = to_block.min(from_block.saturating_add(page_size.get() - 1));
-
-        // A single-block page splits into one query per event to query as little
-        // data as possible; larger pages use a single query for all events.
-        let blocks = BlockFilter::Range {
-            from: from_block,
-            to: query_to_block,
-        };
-        let fetch = if page_size.get() > 1 {
-            Fetch::SingleQuery(blocks)
+        let mut page = if let Some(page) = fetched {
+            // Reuse the already fetched page, and just retry querying missing
+            // block headers for timestamps.
+            page
         } else {
-            Fetch::MultipleQueries(blocks)
+            // Note that block query ranges are inclusive.
+            let query_to_block = to_block.min(from_block.saturating_add(page_size.get() - 1));
+
+            // A single-block page splits into one query per event to query as
+            // little data as possible; larger pages use a single query for all
+            // events.
+            let blocks = BlockFilter::Range {
+                from: from_block,
+                to: query_to_block,
+            };
+            let fetch = if page_size.get() > 1 {
+                Fetch::SingleQuery(blocks)
+            } else {
+                Fetch::MultipleQueries(blocks)
+            };
+
+            match self.fetch_logs(fetch).await {
+                Ok(logs) => FetchedPage {
+                    to_block: query_to_block,
+                    logs,
+                    block_timestamps: BTreeMap::new(),
+                },
+                Err(err) => {
+                    self.step = narrowed_warp(from_block, to_block, page_size);
+                    return Err(err);
+                }
+            }
         };
 
-        let result = async {
-            let logs = self.fetch_logs(fetch).await?;
-            let block_timestamps = self.fetch_missing_block_timestamps(&logs).await?;
-            decode_and_sort(&logs, &block_timestamps)
+        if let Err(err) = self
+            .fetch_missing_block_timestamps(&page.logs, &mut page.block_timestamps)
+            .await
+        {
+            // Cache the fetched log page as well as the timestamps that have
+            // already been fetched. Next iteration, only the still missing
+            // block headers will be queried for their timestamps
+            self.step = Step::Warping {
+                from_block,
+                to_block,
+                page_size,
+                fetched: Some(page),
+            };
+            return Err(err);
         }
-        .await;
+
+        let query_to_block = page.to_block;
+        let result = decode_and_sort(&page.logs, &page.block_timestamps);
 
         self.step = if result.is_ok() {
             if query_to_block == to_block {
@@ -364,19 +423,11 @@ where
                     from_block: query_to_block + 1,
                     to_block,
                     page_size: self.config.block_page_size,
+                    fetched: None,
                 }
             }
         } else {
-            // Narrow the page size to query fewer logs on the next attempt.
-            // Rounding up keeps it from going below one, so single-block
-            // pages are retried indefinitely.
-            let page_size = NonZeroU64::new(page_size.get().div_ceil(2))
-                .expect("halving a nonzero page size stays nonzero");
-            Step::Warping {
-                from_block,
-                to_block,
-                page_size,
-            }
+            narrowed_warp(from_block, to_block, page_size)
         };
 
         result.map(|logs| EventUpdate {
@@ -518,21 +569,28 @@ where
     }
 
     /// Fetches the timestamps of the blocks with logs that the node returned
-    /// without one, keyed by block number.
+    /// without one, adding them to `block_timestamps` keyed by block number.
+    /// Blocks already in `block_timestamps` are not fetched again.
+    ///
+    /// On failure, `block_timestamps` still holds every timestamp that was
+    /// successfully fetched, so a retry only fetches the missing ones.
     ///
     /// Blocks are fetched by number, so this must only be used for logs in the
     /// reorg-safe range.
     async fn fetch_missing_block_timestamps(
         &self,
         logs: &[Log],
-    ) -> Result<BTreeMap<u64, u64>, Error> {
+        block_timestamps: &mut BTreeMap<u64, u64>,
+    ) -> Result<(), Error> {
         let block_numbers = logs
             .iter()
             .filter(|log| log.block_timestamp.is_none())
             .filter_map(|log| log.block_number)
+            .filter(|block_number| !block_timestamps.contains_key(block_number))
             .collect::<BTreeSet<_>>();
-        let block_timestamps = futures::future::try_join_all(block_numbers.into_iter().map(
-            |block_number| async move {
+
+        let results =
+            futures::future::join_all(block_numbers.into_iter().map(|block_number| async move {
                 let block = self
                     .provider
                     .get_block(BlockId::number(block_number))
@@ -540,10 +598,21 @@ where
                     .await?
                     .ok_or(Error::MissingBlock { block_number })?;
                 Ok::<_, Error>((block_number, block.header.timestamp))
-            },
-        ))
-        .await?;
-        Ok(block_timestamps.into_iter().collect())
+            }))
+            .await;
+
+        let mut first_err = None;
+        for result in results {
+            match result {
+                Ok((block_number, timestamp)) => {
+                    block_timestamps.insert(block_number, timestamp);
+                }
+                Err(err) => {
+                    first_err.get_or_insert(err);
+                }
+            }
+        }
+        first_err.map_or(Ok(()), Err)
     }
 
     /// Guards against nodes that silently cap the number of returned logs: a
@@ -561,6 +630,21 @@ where
             return Err(Error::TooManyLogs);
         }
         Ok(logs)
+    }
+}
+
+/// Returns the warp step retrying the page at `from_block` with a narrower page,
+/// to query fewer logs on the next attempt.
+fn narrowed_warp(from_block: u64, to_block: u64, page_size: NonZeroU64) -> Step {
+    // Rounding up keeps the page size from going below one, so single-block
+    // pages are retried indefinitely.
+    let page_size = NonZeroU64::new(page_size.get().div_ceil(2))
+        .expect("halving a nonzero page size stays nonzero");
+    Step::Warping {
+        from_block,
+        to_block,
+        page_size,
+        fetched: None,
     }
 }
 
@@ -1576,57 +1660,102 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn warp_narrows_the_page_when_fetching_a_header_fails() {
+    async fn warp_retries_only_the_missing_headers_when_fetching_a_header_fails() {
         let asserter = Asserter::new();
         let mut events = watcher(
             &asserter,
             Config {
-                block_page_size: NonZeroU64::new(8).unwrap(),
+                block_page_size: NonZeroU64::new(5).unwrap(),
                 ..Default::default()
             },
         );
         events
-            .on_block_update(BlockUpdate::Warp { from: 1, to: 8 })
+            .on_block_update(BlockUpdate::Warp { from: 1, to: 10 })
             .unwrap();
 
-        let logs = vec![without_timestamp(log(
-            (1, 0),
-            Erc20::Transfer {
-                amount: uint!(1_U256),
-                ..Default::default()
-            },
-        ))];
-
-        // The page's logs (1..=8) are fetched, but its header request fails,
-        // halving the page size to 4 like a failed logs query.
-        asserter.push_success(&logs);
+        // The first page's logs (1..=5) are fetched and the header of block 2
+        // too, but the header request for block 5 fails. Header requests are
+        // issued in block order.
+        asserter.push_success(&vec![
+            without_timestamp(log(
+                (2, 0),
+                Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                },
+            )),
+            without_timestamp(log(
+                (5, 0),
+                Erc20::Approval {
+                    amount: uint!(2_U256),
+                    ..Default::default()
+                },
+            )),
+        ]);
+        asserter.push_success(&block(2));
         asserter.push_failure_msg("header unavailable");
-        // The narrowed page (1..=4) refetches its logs, but the node reports
-        // the header as missing, halving the page size to 2.
-        asserter.push_success(&logs);
-        asserter.push_success::<Option<Block>>(&None);
-        // The page (1..=2) then succeeds.
-        asserter.push_success(&logs);
-        asserter.push_success(&block(1));
-
         assert_matches!(events.next().await, Err(Error::Rpc(_)));
+        assert!(asserter.read_q().is_empty());
+
+        // The retry only requests the header of block 5, which the node now
+        // reports as missing.
+        asserter.push_success::<Option<Block>>(&None);
         assert_matches!(
             events.next().await,
-            Err(Error::MissingBlock { block_number: 1 })
+            Err(Error::MissingBlock { block_number: 5 })
         );
+        assert!(asserter.read_q().is_empty());
+
+        // The next retry gets the header of block 5, completing the page
+        // without querying its logs again or narrowing it.
+        asserter.push_success(&block(5));
         assert_eq!(
             events.next().await.unwrap(),
             Some(EventUpdate {
-                blocks: range(1..=2),
+                blocks: range(1..=5),
+                logs: vec![
+                    event_log(
+                        (2, 0),
+                        Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                            amount: uint!(1_U256),
+                            ..Default::default()
+                        })
+                    ),
+                    event_log(
+                        (5, 0),
+                        Erc20::Erc20Events::Approval(Erc20::Approval {
+                            amount: uint!(2_U256),
+                            ..Default::default()
+                        })
+                    ),
+                ],
+            })
+        );
+        assert!(asserter.read_q().is_empty());
+
+        // The next page (6..=10) is fetched from scratch.
+        asserter.push_success(&vec![without_timestamp(log(
+            (7, 0),
+            Erc20::Transfer {
+                amount: uint!(3_U256),
+                ..Default::default()
+            },
+        ))]);
+        asserter.push_success(&block(7));
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(6..=10),
                 logs: vec![event_log(
-                    (1, 0),
+                    (7, 0),
                     Erc20::Erc20Events::Transfer(Erc20::Transfer {
-                        amount: uint!(1_U256),
+                        amount: uint!(3_U256),
                         ..Default::default()
                     })
                 )],
             })
         );
+        assert_eq!(events.next().await.unwrap(), None);
         assert!(asserter.read_q().is_empty());
     }
 
