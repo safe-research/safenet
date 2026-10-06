@@ -7,8 +7,8 @@
 #
 # This coordinates the existing contracts/script/*.s.sol front doors 1:1 with the runbook steps —
 # it does not reimplement any of their deployment logic:
-#   1. DeployConsensusScript    (coordinator via the CANONICAL CREATE2 factory, consensus via the
-#                               FACTORY-selected one, same as steps 2 and 3)
+#   1. DeployConsensusScript    (coordinator and consensus via the FACTORY-selected CREATE2
+#                               factory, same as steps 2, 3 and 5)
 #   2. DeployERC20Script        (fee token, skipped if SENTINEL_FEE_TOKEN is already set), plus a
 #                               mint(...) to each SENTINEL_ADDRESSES entry when a fresh token is
 #                               deployed, so sentinels can actually afford to post bonds

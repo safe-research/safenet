@@ -5,6 +5,7 @@ import {Script} from "@forge-std/Script.sol";
 import {FROSTCoordinator} from "@/FROSTCoordinator.sol";
 import {DeterministicDeployment} from "@script/util/DeterministicDeployment.sol";
 import {Genesis} from "@script/util/Genesis.sol";
+import {getFactory} from "@script/util/GetFactory.sol";
 
 contract GenesisScript is Script {
     using DeterministicDeployment for DeterministicDeployment.Factory;
@@ -16,8 +17,7 @@ contract GenesisScript is Script {
         // Optional script arguments:
         bytes32 genesisSalt = vm.envOr("GENESIS_SALT", bytes32(0));
         address coordinatorAddress = vm.envOr(
-            "COORDINATOR_ADDRESS",
-            DeterministicDeployment.CANONICAL.deploymentAddress(bytes32(0), type(FROSTCoordinator).creationCode)
+            "COORDINATOR_ADDRESS", getFactory(vm).deploymentAddress(bytes32(0), type(FROSTCoordinator).creationCode)
         );
 
         vm.startBroadcast();

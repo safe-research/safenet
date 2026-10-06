@@ -325,12 +325,10 @@ participants_cs=$(IFS=, ; echo "${participants[*]}")
 # default contract addresses based on other inputs and using deterministic
 # deployments. For now, simulate the deployments with our `contracts` image
 # and parse out the resulting addresses (see `simulate_forge_script`).
-# `DeployConsensusScript`'s consensus deploy, `DeployERC20Script`, and
-# `DeploySentinelOracleScript` all select the `CANONICAL` CREATE2 factory
-# (`FACTORY=2`, matching `run_sentinel_integration_test.sh`): the
-# `SAFE_SINGLETON_FACTORY` that `getFactory()` otherwise defaults to isn't
-# deployed on a bare Anvil node. (DeployConsensusScript's coordinator deploy
-# always uses `CANONICAL` directly, regardless of `FACTORY`.)
+# `DeployConsensusScript`, `DeployERC20Script`, and `DeploySentinelOracleScript`
+# all select the `CANONICAL` CREATE2 factory (`FACTORY=2`, matching
+# `run_sentinel_integration_test.sh`): the `SAFE_SINGLETON_FACTORY` that
+# `getFactory()` otherwise defaults to isn't deployed on a bare Anvil node.
 deployment="$(simulate_forge_script DeployConsensusScript -e FACTORY=2)"
 consensus="$(parse_address "$deployment" Consensus)"
 fee_token="$(parse_address "$(simulate_forge_script DeployERC20Script -e FACTORY=2)" 'ERC20 deployed at')"
@@ -482,5 +480,5 @@ fi
 
 # Kick off genesis, if requested.
 if [ $genesis == yes ]; then
-    forge_script GenesisScript
+    forge_script GenesisScript -e FACTORY=2
 fi

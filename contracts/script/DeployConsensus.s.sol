@@ -22,18 +22,18 @@ contract DeployConsensusScript is Script {
         bytes32 coordinatorSalt = vm.envOr("COORDINATOR_SALT", bytes32(0));
         bytes32 consensusSalt = vm.envOr("CONSENSUS_SALT", bytes32(0));
 
+        DeterministicDeployment.Factory factory = getFactory(vm);
+
         requireFullChainSupport(vm);
         vm.startBroadcast();
 
-        coordinator = FROSTCoordinator(
-            DeterministicDeployment.CANONICAL.deploy(coordinatorSalt, type(FROSTCoordinator).creationCode)
-        );
+        coordinator = FROSTCoordinator(factory.deploy(coordinatorSalt, type(FROSTCoordinator).creationCode));
 
         (bytes32 participantsRoot, uint16 count, uint16 threshold, bytes32 context) =
             Genesis.groupParameters(participants, genesisSalt);
         groupId = FROSTGroupId.create(participantsRoot, count, threshold, context);
         consensus = Consensus(
-            getFactory(vm).deployWithArgs(consensusSalt, type(Consensus).creationCode, abi.encode(coordinator, groupId))
+            factory.deployWithArgs(consensusSalt, type(Consensus).creationCode, abi.encode(coordinator, groupId))
         );
 
         vm.stopBroadcast();
