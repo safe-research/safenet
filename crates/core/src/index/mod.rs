@@ -375,6 +375,7 @@ mod tests {
             Update::Block(BlockUpdate::New {
                 number: 1000,
                 hash: block_hash(1000),
+                timestamp: block_timestamp(1000),
                 logs_bloom: block_bloom(1000),
             })
         );
@@ -406,7 +407,7 @@ mod tests {
             inner: consensus::Header {
                 parent_hash: number.checked_sub(1).map(block_hash).unwrap_or_default(),
                 number,
-                timestamp: number * 2,
+                timestamp: block_timestamp(number),
                 logs_bloom: block_bloom(number),
                 ..Default::default()
             },
@@ -420,6 +421,10 @@ mod tests {
         B256::from(bytes)
     }
 
+    fn block_timestamp(number: u64) -> u64 {
+        number * 2
+    }
+
     fn block_bloom(number: u64) -> Bloom {
         let mut bytes = [0; 256];
         bytes[248..].copy_from_slice(&number.to_be_bytes());
@@ -430,6 +435,7 @@ mod tests {
         Update::Block(BlockUpdate::New {
             number,
             hash: block_hash(number),
+            timestamp: block_timestamp(number),
             logs_bloom: block_bloom(number),
         })
     }
@@ -441,6 +447,7 @@ mod tests {
                 data: event.encode_log_data(),
             },
             block_number: Some(block_number),
+            block_timestamp: Some(block_timestamp(block_number)),
             log_index: Some(log_index),
             ..Default::default()
         }
@@ -466,7 +473,7 @@ mod tests {
                 .map(|(index, data)| EventLog {
                     block: EventBlock {
                         number: block,
-                        timestamp: None,
+                        timestamp: Some(block_timestamp(block)),
                     },
                     index: index.try_into().expect("test log index fits in u64"),
                     address: WATCHED,

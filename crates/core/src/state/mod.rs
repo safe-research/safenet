@@ -418,6 +418,7 @@ mod tests {
         Update::Block(BlockUpdate::New {
             number,
             hash: Default::default(),
+            timestamp: Default::default(),
             logs_bloom: Default::default(),
         })
     }
