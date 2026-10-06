@@ -399,43 +399,43 @@ impl StateTransition<State> for Transition {
                     self.handle_genesis_key_gen(state, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenCommitted(event)) => {
-                    self.handle_key_gen_committed(state, log.block, &event)
+                    self.handle_key_gen_committed(state, log.block.number, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenSecretShared(event)) => {
-                    self.handle_key_gen_secret_shared(state, log.block, &event)
+                    self.handle_key_gen_secret_shared(state, log.block.number, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenConfirmed(event)) => {
-                    self.handle_key_gen_confirmed(state, log.block, &event)
+                    self.handle_key_gen_confirmed(state, log.block.number, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplained(event)) => {
-                    self.handle_key_gen_complained(state, log.block, &event)
+                    self.handle_key_gen_complained(state, log.block.number, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenComplaintResponded(
                     event,
-                )) => self.handle_key_gen_complaint_responded(state, log.block, &event),
+                )) => self.handle_key_gen_complaint_responded(state, log.block.number, &event),
                 Event::Coordinator(Coordinator::CoordinatorEvents::Sign(event)) => {
-                    self.handle_sign(state, log.block, &event)
+                    self.handle_sign(state, log.block.number, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::SignCommittedNonces(event)) => {
-                    self.handle_sign_committed_nonces(state, log.block, &event)
+                    self.handle_sign_committed_nonces(state, log.block.number, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::SignShared(event)) => {
                     self.handle_sign_shared(state, &event)
                 }
                 Event::Coordinator(Coordinator::CoordinatorEvents::SignCompleted(event)) => {
-                    self.handle_sign_completed(state, log.block, &event)
+                    self.handle_sign_completed(state, log.block.number, &event)
                 }
                 Event::Consensus(Consensus::ConsensusEvents::EpochStaged(event)) => {
                     self.handle_epoch_staged(state, &event)
                 }
                 Event::Consensus(Consensus::ConsensusEvents::TransactionProposed(event)) => {
-                    self.handle_transaction_proposed(state, log.block, &event)
+                    self.handle_transaction_proposed(state, log.block.number, &event)
                 }
                 Event::Consensus(Consensus::ConsensusEvents::TransactionAttested(event)) => {
                     self.handle_transaction_attested(state, &event)
                 }
                 Event::Oracle(Oracle::OracleEvents::OracleResult(event)) => {
-                    self.handle_oracle_result(state, log.block, log.address, &event)
+                    self.handle_oracle_result(state, log.block.number, log.address, &event)
                 }
                 // The remaining events are wired in as their handlers land.
                 _ => (state, Vec::new()),

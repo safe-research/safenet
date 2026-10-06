@@ -38,16 +38,23 @@ pub trait Events: Sized {
     fn decode_log(topics: &[B256], data: &[u8]) -> Option<Self>;
 }
 
-/// An event log, adding additional log position information (block number and
-/// log index) to event data.
+/// The block an event log was emitted in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EventBlock {
+    /// The block number.
+    pub number: u64,
+    /// The block timestamp, in seconds since the Unix epoch. `None` when the
+    /// node omits the (non-standard, but widely supported) `blockTimestamp`
+    /// field from its `eth_getLogs` response.
+    pub timestamp: Option<u64>,
+}
+
+/// An event log, adding additional log position information (block and log
+/// index) to event data.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EventLog<E> {
-    /// The block number the log is for.
-    pub block: u64,
-    /// The timestamp of the block the log is for. `None` when the node omits
-    /// the (non-standard, but widely supported) `blockTimestamp` field from
-    /// its `eth_getLogs` response.
-    pub block_timestamp: Option<u64>,
+    /// The block the log is for.
+    pub block: EventBlock,
     /// The index of the log within the block.
     pub index: u64,
     /// The address that emitted the event.
@@ -502,8 +509,10 @@ where
             E::decode_log(log.topics(), &log.data().data)
                 .and_then(|data| {
                     Some(EventLog {
-                        block: log.block_number?,
-                        block_timestamp: log.block_timestamp,
+                        block: EventBlock {
+                            number: log.block_number?,
+                            timestamp: log.block_timestamp,
+                        },
                         index: log.log_index?,
                         address: log.inner.address,
                         data,
@@ -519,7 +528,7 @@ where
                 })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    logs.sort_unstable_by_key(|log| (log.block, log.index));
+    logs.sort_unstable_by_key(|log| (log.block.number, log.index));
     Ok(logs)
 }
 
@@ -664,8 +673,10 @@ mod tests {
 
     fn event_log<E>((block, index): (u64, u64), data: E) -> EventLog<E> {
         EventLog {
-            block,
-            block_timestamp: Some(block_timestamp(block)),
+            block: EventBlock {
+                number: block,
+                timestamp: Some(block_timestamp(block)),
+            },
             index,
             address: WATCHED,
             data,

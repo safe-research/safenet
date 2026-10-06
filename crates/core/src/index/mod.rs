@@ -14,7 +14,7 @@ use events::{EventWatcher, Events};
 use serde::Deserialize;
 
 pub use blocks::{BlockStatus, BlockUpdate};
-pub use events::{EventLog, EventUpdate};
+pub use events::{EventBlock, EventLog, EventUpdate};
 
 /// Watcher configuration, aggregating the block and event watcher configs.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -464,8 +464,10 @@ mod tests {
                 .into_iter()
                 .enumerate()
                 .map(|(index, data)| EventLog {
-                    block,
-                    block_timestamp: None,
+                    block: EventBlock {
+                        number: block,
+                        timestamp: None,
+                    },
                     index: index.try_into().expect("test log index fits in u64"),
                     address: WATCHED,
                     data: Weth::WethEvents::Deposit(data),
