@@ -20,6 +20,7 @@ use std::{
     marker::PhantomData,
     num::{NonZeroU64, NonZeroUsize},
     range::RangeInclusive,
+    sync::atomic::{self, AtomicBool},
 };
 
 /// A typed set of EVM events that raw logs can be decoded into.
@@ -237,6 +238,7 @@ pub struct EventWatcher<E> {
     addresses: Vec<Address>,
     topics: Vec<B256>,
     step: Step,
+    warned_missing_timestamps: AtomicBool,
     _events: PhantomData<fn() -> E>,
 }
 
@@ -252,6 +254,7 @@ where
             addresses,
             topics: E::topics(),
             step: Step::Idle,
+            warned_missing_timestamps: AtomicBool::new(false),
             _events: PhantomData,
         }
     }
@@ -557,6 +560,24 @@ where
                     .collect()
             }
         };
+
+        // Only warn once per watcher, as a node that omits timestamps does so
+        // for every log and would otherwise warn on every fetch.
+        let warned = self
+            .warned_missing_timestamps
+            .load(atomic::Ordering::Relaxed);
+        if !warned
+            && logs.iter().any(|log| log.block_timestamp.is_none())
+            && !self
+                .warned_missing_timestamps
+                .swap(true, atomic::Ordering::Relaxed)
+        {
+            tracing::warn!(
+                "node does not include `blockTimestamp` in logs; falling back to block headers, \
+                 which requires additional RPC requests and degrades indexing performance"
+            );
+        }
+
         Ok(logs)
     }
 
