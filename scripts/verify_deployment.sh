@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
 # Verifies the contracts deployed by `just deployment_batch` (FROSTCoordinator, Consensus, the fee
-# token if one was deployed, and SentinelOracle) via `forge verify-contract`. Uses Etherscan when
-# ETHERSCAN_KEY is set in the env file, otherwise falls back to Sourcify (forge's own default
-# verifier) — no API key required either way.
+# token if one was deployed, SentinelOracle, and Safenet7702Executor) via `forge verify-contract`.
+# Uses Etherscan when ETHERSCAN_KEY is set in the env file, otherwise falls back to Sourcify
+# (forge's own default verifier) — no API key required either way.
 #
 # Run this only after the Safe has actually executed the batch on-chain: verification compares
 # against already-deployed bytecode, so it fails if the addresses predicted by
@@ -18,7 +18,7 @@
 # addresses-file defaults to contracts/build/safenet-deployment.addresses.env, written alongside
 # the batch by `just deployment_batch` — run that first. It supplies everything the env file
 # doesn't: CHAIN_ID, COORDINATOR, GROUP_ID, SENTINEL_CONSENSUS, SENTINEL_FEE_TOKEN,
-# and SENTINEL_ORACLE.
+# SENTINEL_ORACLE, and SAFENET_7702_EXECUTOR.
 
 set -euo pipefail
 
@@ -73,3 +73,5 @@ verify "$SENTINEL_ORACLE" src/SentinelOracle.sol:SentinelOracle \
     --constructor-args "$(cast abi-encode \
         "constructor((address,address,address,address,address,uint96,uint32,uint32,uint24,uint32,uint32,uint32,uint32,string))" \
         "($SENTINEL_ARBITRATOR,$SENTINEL_GOVERNANCE,$SENTINEL_PROTOCOL_FUNDS_RECEIVER,$SENTINEL_CONSENSUS,$SENTINEL_FEE_TOKEN,$SENTINEL_REQUEST_FEE,$SENTINEL_BOND_MULTIPLIER,$SENTINEL_INITIAL_SLASHING_MULTIPLIER,$SENTINEL_INITIAL_DAO_FEE_SHARE,$SENTINEL_COMMIT_WINDOW,$SENTINEL_REVEAL_WINDOW,$SENTINEL_GOVERNANCE_DELAY,$SENTINEL_ARBITRATION_TIMEOUT,\"$SENTINEL_CHARTER_ENS\")")"
+
+verify "$SAFENET_7702_EXECUTOR" src/Safenet7702Executor.sol:Safenet7702Executor
