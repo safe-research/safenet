@@ -473,7 +473,7 @@ mod tests {
                 .map(|(index, data)| EventLog {
                     block: EventBlock {
                         number: block,
-                        timestamp: Some(block_timestamp(block)),
+                        timestamp: block_timestamp(block),
                     },
                     index: index.try_into().expect("test log index fits in u64"),
                     address: WATCHED,

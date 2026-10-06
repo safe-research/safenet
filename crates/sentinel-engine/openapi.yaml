@@ -35,9 +35,9 @@ paths:
           required: false
           description: >-
             The timestamp, in seconds since the Unix epoch, of the
-            consensus-chain block the transaction was proposed in. Omitted
-            when the sentinel's node did not report it. An engine must not
-            treat a missing value as any particular time.
+            consensus-chain block the transaction was proposed in. The Safenet
+            sentinel always sends it, but other callers may omit it. An engine
+            must not treat a missing value as any particular time.
           schema:
             type: integer
             minimum: 0

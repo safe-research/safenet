@@ -102,12 +102,12 @@ impl SentinelTransition {
     /// Starts tracking a newly proposed oracle transaction and requests a
     /// verdict from the configured sentinel engine via
     /// [`effect::Effect::EngineCheck`]. `block_timestamp` is the timestamp of
-    /// the consensus-chain block the proposal was made in, if known.
+    /// the consensus-chain block the proposal was made in.
     fn handle_oracle_transaction_proposed(
         &self,
         mut state: State,
         block: u64,
-        block_timestamp: Option<u64>,
+        block_timestamp: u64,
         event: Consensus::TransactionProposed,
     ) -> (State, Commands<State, Self>) {
         if event.oracle != self.oracle {
@@ -1146,7 +1146,7 @@ mod tests {
         Command::Effect(effect::Effect::EngineCheck {
             request_id: id,
             transaction: safe_tx(to),
-            proposal_timestamp: Some(block_timestamp(block)),
+            proposal_timestamp: block_timestamp(block),
             block,
         })
     }
@@ -1295,7 +1295,7 @@ mod tests {
         EventLog {
             block: EventBlock {
                 number: block,
-                timestamp: Some(block_timestamp(block)),
+                timestamp: block_timestamp(block),
             },
             index: 0,
             address: Address::ZERO,

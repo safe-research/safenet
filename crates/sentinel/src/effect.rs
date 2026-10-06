@@ -19,7 +19,7 @@ pub enum Effect {
     /// Defer the approve/deny decision for `request_id` (a proposed
     /// `transaction` on `safe`) to the configured sentinel engine.
     /// `proposal_timestamp` is the timestamp of the consensus-chain block the
-    /// transaction was proposed in, if the node reported it.
+    /// transaction was proposed in.
     ///
     /// Performing this again for the same `request_id` (e.g. when a restart or
     /// reorg replays the proposal) resumes with the verdict recorded the first
@@ -30,7 +30,7 @@ pub enum Effect {
     EngineCheck {
         request_id: B256,
         transaction: SafeTransaction,
-        proposal_timestamp: Option<u64>,
+        proposal_timestamp: u64,
         block: u64,
     },
 }
@@ -73,7 +73,7 @@ impl Handler {
         &self,
         request_id: B256,
         transaction: SafeTransaction,
-        proposal_timestamp: Option<u64>,
+        proposal_timestamp: u64,
         block: u64,
     ) -> CheckOutcome {
         match self.verdicts.get(request_id, block).await {
@@ -95,15 +95,14 @@ impl Handler {
         // The sentinel only follows the consensus chain, so it has no block of
         // its own on the chain `transaction` executes on: defer to the
         // engine's view of that chain's latest block.
-        let mut check = self
+        let outcome = self
             .engine
             .security_check(BlockNumberOrTag::Latest, &transaction)
             .request_id(request_id)
-            .timeout(self.engine_timeout);
-        if let Some(timestamp) = proposal_timestamp {
-            check = check.proposal_timestamp(timestamp);
-        }
-        let outcome = check.execute().await;
+            .proposal_timestamp(proposal_timestamp)
+            .timeout(self.engine_timeout)
+            .execute()
+            .await;
         // A concurrent check for the same request may have recorded its
         // verdict first, in which case that one is returned instead.
         match self.verdicts.record(request_id, block, outcome).await {
@@ -223,7 +222,7 @@ mod tests {
                     safe: SAFE,
                     ..Default::default()
                 },
-                proposal_timestamp: Some(1_700_000_000),
+                proposal_timestamp: 1_700_000_000,
                 block: 1,
             })
             .await;
