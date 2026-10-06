@@ -14,6 +14,7 @@
 #                               deployed, so sentinels can actually afford to post bonds
 #   3. DeploySentinelOracleScript
 #   4. addSentinel(...) for each address in SENTINEL_ADDRESSES
+#   5. DeploySafenet7702ExecutorScript (via the FACTORY-selected factory)
 #
 # Each forge script dry-run still needs a live --rpc-url (read-only) to see the target chain's
 # deployed CREATE2 factory and to predict each contract's deterministic address; it never signs or
@@ -213,7 +214,13 @@ for sentinel in "${SENTINELS[@]}"; do
     }')")
 done
 
-echo "--- 5. Assemble the Safe Transaction Builder batch ---"
+echo "--- 5. Deploy Safenet7702Executor ---"
+
+EXECUTOR_OUTPUT="$(dry_run DeploySafenet7702ExecutorScript)"
+add_deploy_txs "$(artifact_path DeploySafenet7702Executor)"
+forge_return SAFENET_7702_EXECUTOR "$EXECUTOR_OUTPUT" account
+
+echo "--- 6. Assemble the Safe Transaction Builder batch ---"
 
 mkdir -p "$(dirname "$OUT_FILE")"
 TRANSACTIONS_JSON="$(printf '%s\n' "${TXS[@]}" | jq -s '.')"
@@ -234,6 +241,7 @@ GROUP_ID=$GROUP_ID
 SENTINEL_CONSENSUS=$SENTINEL_CONSENSUS
 SENTINEL_FEE_TOKEN=$SENTINEL_FEE_TOKEN
 SENTINEL_ORACLE=$SENTINEL_ORACLE
+SAFENET_7702_EXECUTOR=$SAFENET_7702_EXECUTOR
 EOF
 
 echo >&2
