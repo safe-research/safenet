@@ -92,18 +92,22 @@ code {
 		source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
-/* HTML content of the in-app legal pages (terms, privacy, imprint) */
+/* HTML content of the in-app legal pages (terms, privacy, imprint).
+ * Muted body text with title-colored headings and emphasis, matching the safenet-beta legal pages. */
 .legal-content {
-	@apply space-y-4 text-sm leading-relaxed text-title;
+	@apply space-y-3 text-sm leading-relaxed text-sub-title;
 
 	/* Headings sit below the page title and match BoxTitle */
 	& h1,
 	& h2 {
-		@apply text-lg font-semibold pt-2;
+		@apply text-lg font-semibold text-title pt-4;
 	}
 	& h3,
 	& h4 {
-		@apply text-base font-semibold pt-2;
+		@apply text-base font-semibold text-title pt-2;
+	}
+	& strong {
+		@apply text-title;
 	}
 	& ul {
 		@apply list-disc pl-6 space-y-1;
@@ -112,11 +116,16 @@ code {
 		@apply list-decimal pl-6 space-y-1;
 	}
 	& a {
-		@apply underline hover:text-sub-title;
+		@apply text-title hover:underline;
 	}
 	& hr {
 		@apply border-surface-outline;
 	}
+}
+
+/* Green links only in dark mode — the primary green is unreadable on white */
+.dark .legal-content a {
+	@apply text-primary;
 }
 
 :root {
