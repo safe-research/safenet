@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, normalizePath } from "vite";
 
 const ETHEREUM_ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
 
@@ -67,7 +67,7 @@ export default defineConfig(({ mode }) => {
 		}
 	}
 
-	// Legal links: VITE_<KEY>_URL is either a full URL (linked externally) or a path to an HTML
+	// Legal links: VITE_<KEY>_URL is either a full URL or #anchor (linked as-is) or a path to an HTML
 	// fragment file, which is inlined at build time and served at the matching route (e.g. #/terms).
 	// The content is trusted operator input (like the env vars themselves), so it is not sanitized.
 	const legalFiles = {};
@@ -76,11 +76,12 @@ export default defineConfig(({ mode }) => {
 		if (!value) {
 			return { url: placeholder, html: "" };
 		}
-		if (URL.canParse(value)) {
+		if (value.startsWith("#") || URL.canParse(value)) {
 			return { url: value, html: "" };
 		}
 		const path = resolve(process.cwd(), value);
-		legalFiles[key] = path;
+		// Normalized so it matches the watcher's paths on Windows
+		legalFiles[key] = normalizePath(path);
 		try {
 			return { url: "", html: readFileSync(path, "utf8") };
 		} catch (error) {
@@ -119,7 +120,7 @@ export default defineConfig(({ mode }) => {
 					const files = Object.values(legalFiles);
 					server.watcher.add(files);
 					server.watcher.on("change", (file) => {
-						if (files.includes(file)) {
+						if (files.includes(normalizePath(file))) {
 							server.restart();
 						}
 					});
