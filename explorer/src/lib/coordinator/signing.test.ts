@@ -260,4 +260,21 @@ describe("loadLatestAttestationStatus — participation fields", () => {
 		expect(result).not.toBeNull();
 		expect(result?.signed.map((s) => s.address)).toEqual([PARTICIPANT_A]);
 	});
+
+	it("reports a signing round with no progress yet as pending", async () => {
+		const provider = makeFullProvider({ progressLogs: [] });
+		const load = await loadModule();
+
+		const result = await load({ provider, ...baseArgs });
+
+		expect(result).toEqual({
+			status: "pending",
+			sid: SID,
+			groupId: `0x${"00".repeat(32)}`,
+			sequence: 0n,
+			lastUpdate: 1n,
+			committed: [],
+			signed: [],
+		});
+	});
 });

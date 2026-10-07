@@ -183,7 +183,7 @@ export const loadLatestAttestationStatus = async ({
 			agg[log.args.sid] = status;
 			return agg;
 		},
-		{} as Record<string, StatusAggregation>,
+		{} as Partial<Record<string, StatusAggregation>>,
 	);
 	// There is always at least one entry, due to the check on signingEvents before
 	const [attestationStatus, signature] = signingEvents
@@ -196,14 +196,14 @@ export const loadLatestAttestationStatus = async ({
 			const signed = getSigned(status);
 			return [
 				{
-					lastUpdate: status.lastUpdate ?? signingEvent.blockNumber,
+					lastUpdate: status?.lastUpdate ?? signingEvent.blockNumber,
 					sid,
 					groupId,
 					sequence,
 					committed,
 					signed,
 				},
-				status.signature,
+				status?.signature,
 			];
 		})
 		.sort((left, right) => {
