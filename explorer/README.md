@@ -76,9 +76,9 @@ Set them in a `.env` file inside the `explorer/` directory, or as build-time env
 | --- | --- | --- |
 | `VITE_BASE_PATH` | `/` | Base path when the app is served from a sub-path (e.g. `/explorer/`). |
 | `VITE_DOCS_URL` | `https://docs.safefoundation.org/safenet` | URL for the "Docs" link in the footer. |
-| `VITE_TERMS_URL` | `#tos` | URL for the "Terms" link in the footer. |
-| `VITE_PRIVACY_URL` | `#privacy` | URL for the "Privacy" link in the footer. |
-| `VITE_IMPRINT_URL` | `#imprint` | URL for the "Imprint" link in the footer. |
+| `VITE_TERMS_URL` | `#terms` | Target of the "Terms" footer link: a full URL, or an HTML fragment file (relative to `explorer/`) shown in-app at `#/terms`. |
+| `VITE_PRIVACY_URL` | `#privacy` | Target of the "Privacy" footer link: a full URL, or an HTML fragment file (relative to `explorer/`) shown in-app at `#/privacy`. |
+| `VITE_IMPRINT_URL` | `#imprint` | Target of the "Imprint" footer link: a full URL, or an HTML fragment file (relative to `explorer/`) shown in-app at `#/imprint`. |
 | `VITE_PLAUSIBLE_DOMAIN` | — | Plausible site domain (e.g. `explorer.safenet.io`). When set, Plausible tracking is initialized. When unset, no analytics run. |
 | `VITE_PLAUSIBLE_ENDPOINT` | `https://plausible.io/api/event` | Full URL of the Plausible API endpoint. Override for self-hosted Plausible instances. |
 

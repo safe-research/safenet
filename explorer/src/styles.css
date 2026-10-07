@@ -92,6 +92,33 @@ code {
 		source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
+/* HTML content of the in-app legal pages (terms, privacy, imprint) */
+.legal-content {
+	@apply space-y-4 text-sm leading-relaxed text-title;
+
+	/* Headings sit below the page title and match BoxTitle */
+	& h1,
+	& h2 {
+		@apply text-lg font-semibold pt-2;
+	}
+	& h3,
+	& h4 {
+		@apply text-base font-semibold pt-2;
+	}
+	& ul {
+		@apply list-disc pl-6 space-y-1;
+	}
+	& ol {
+		@apply list-decimal pl-6 space-y-1;
+	}
+	& a {
+		@apply underline hover:text-sub-title;
+	}
+	& hr {
+		@apply border-surface-outline;
+	}
+}
+
 :root {
 	/* Surfaces */
 	--color-surface-0: #ffffff;

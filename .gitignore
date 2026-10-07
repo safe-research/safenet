@@ -17,3 +17,6 @@ sentinel*.toml
 !/crates/sentinel/sentinel.sample.toml
 !/crates/sentinel-engine/sentinel-engine.sample.toml
 *_logs.txt
+
+# Local legal page content for the explorer (see VITE_*_URL in explorer/.env.sample)
+/explorer/legal/

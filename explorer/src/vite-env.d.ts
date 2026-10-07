@@ -6,6 +6,10 @@ declare const __DOCS_URL__: string;
 declare const __TERMS_URL__: string;
 declare const __PRIVACY_URL__: string;
 declare const __IMPRINT_URL__: string;
+// Pre-rendered HTML for the in-app legal pages — empty when not configured
+declare const __TERMS_HTML__: string;
+declare const __PRIVACY_HTML__: string;
+declare const __IMPRINT_HTML__: string;
 
 // Default explorer settings — configurable per deployment via VITE_DEFAULT_* env vars
 declare const __DEFAULT_CONSENSUS__: string;
