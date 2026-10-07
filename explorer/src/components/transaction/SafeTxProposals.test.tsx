@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Address, Hex } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Arbitration, SafeTransaction, TransactionProposalWithStatus } from "@/lib/consensus";
+import type { VotingStatus } from "@/lib/oracle";
 import { SafeTxProposals } from "./SafeTxProposals";
 
 const mockQueryResult = (data: TransactionProposalWithStatus[], isFetching = false) =>
@@ -287,6 +288,63 @@ describe("SafeTxProposals", () => {
 			} as never);
 			renderArbitration(makeArbitration());
 			expect(rowText("Arbitrator:")).toBe("Arbitrator:0xE682…5cC8");
+		});
+	});
+
+	describe("a vote that closed with nothing revealed", () => {
+		afterEach(() => {
+			vi.mocked(useVotingStatus).mockReturnValue({ data: null } as never);
+		});
+
+		const NO_VOTES: VotingStatus = {
+			kind: "sentinel",
+			state: "PENDING",
+			approveCount: 0n,
+			denyCount: 0n,
+			noVotes: true,
+		};
+
+		const renderTimedOut = (votingStatus: VotingStatus) => {
+			vi.mocked(useAttestationStatus).mockClear();
+			vi.mocked(SafeTxAttestationStatus).mockClear();
+			vi.mocked(useVotingStatus).mockReturnValue({ data: votingStatus } as never);
+			vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal({ status: "TIMED_OUT" })]));
+			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+		};
+
+		it("does not load the signing progress of a proposal nobody voted on in time", () => {
+			renderTimedOut(NO_VOTES);
+			expect(useAttestationStatus).not.toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).not.toHaveBeenCalled();
+			expect(rowText("Attested:")).toBe(
+				"Attested:No sentinel voted on this transaction in time. It will not be attested.",
+			);
+		});
+
+		it("labels the oracle badge NO VOTES", () => {
+			renderTimedOut(NO_VOTES);
+			expect(screen.getByText("NO VOTES").className).toContain("bg-warning-surface");
+		});
+
+		it("keeps loading the signing progress of a timed-out proposal the oracle approved", () => {
+			renderTimedOut({ kind: "sentinel", state: "RESOLVED_APPROVED", approveCount: 1n, denyCount: 0n, noVotes: false });
+			expect(useAttestationStatus).toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).toHaveBeenCalled();
+			expect(rowText("Attested:")).toBe("Attested:-");
+		});
+
+		it("reads each proposal's own vote", () => {
+			vi.mocked(useVotingStatus).mockImplementation(
+				(_oracle, epoch) => ({ data: epoch === 2n ? NO_VOTES : null }) as never,
+			);
+			vi.mocked(useProposalsForTransaction).mockReturnValue(
+				mockQueryResult([makeProposal({ status: "TIMED_OUT" }), makeProposal({ epoch: 2n, status: "TIMED_OUT" })]),
+			);
+			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+			expect(screen.getAllByText("Attested:").map((label) => label.parentElement?.textContent)).toEqual([
+				"Attested:-",
+				"Attested:No sentinel voted on this transaction in time. It will not be attested.",
+			]);
 		});
 	});
 });

@@ -54,12 +54,12 @@ export type TransactionProposal = {
 
 // Lifecycle of a proposal, as far as the explorer can observe it on-chain:
 //
-//   PROPOSED ──no oracle verdict in time──────────────────────────────> TIMED_OUT (final)
+//   PROPOSED ──no oracle verdict in time──────────────────────────────> TIMED_OUT (until a late verdict)
 //     │
 //     ├──`OracleResult(approved: false)`──────────────────────────────> DENIED (final)
 //     │
 //     ├──`OracleResult(approved: true)`─> APPROVED ──`TransactionAttested`──> ATTESTED (final)
-//     │                                      └──no attestation in time──────> TIMED_OUT (final)
+//     │                                      └──no attestation in time──────> TIMED_OUT (until a late attestation)
 //     │
 //     └──`DisputeTriggered`──> ARBITRATING ──`DisputeResolved`──> SECURE | INSECURE (final)
 //                                   └──`DisputeOutOfScope` / `ArbitrationTimedOut`──> NO_RULING (final)

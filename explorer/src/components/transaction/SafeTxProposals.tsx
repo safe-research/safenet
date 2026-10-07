@@ -100,20 +100,27 @@ function SafeTxProposalVoting({ oracle, proposal }: { oracle: Address; proposal:
 }
 
 // Why a proposal will not be attested, for the proposals that never are; null for any other.
-function noAttestationReason({ arbitration, status }: TransactionProposalWithStatus): string | null {
+function noAttestationReason({ arbitration, status }: TransactionProposalWithStatus, noVotes: boolean): string | null {
 	if (arbitration !== null) {
 		return arbitration.outcome === null
 			? "Sentinels disagreed, this transaction is under review by the Security Council."
 			: "Sentinels disagreed, so this transaction went to arbitration. It will not be attested.";
 	}
-	return status === "DENIED" ? "Sentinels denied this transaction. It will not be attested." : null;
+	if (status === "DENIED") {
+		return "Sentinels denied this transaction. It will not be attested.";
+	}
+	return noVotes ? "No sentinel voted on this transaction in time. It will not be attested." : null;
 }
 
 function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWithStatus; number: number }) {
 	const disputed = proposal.arbitration !== null;
-	// A disputed or denied proposal is never attested, so its signing progress is not loaded: it
-	// would never complete, and the page would keep polling for it.
-	const neverAttested = disputed || proposal.status === "DENIED";
+	// Same query as the oracle row below, so no extra request.
+	const votingStatus = useVotingStatus(proposal.oracle, proposal.epoch, proposal.safeTxHash, proposal.oracleData);
+	const noVotes = votingStatus.data?.kind === "sentinel" && votingStatus.data.noVotes;
+	// A disputed or denied proposal, or one whose vote closed with nothing revealed, is never
+	// attested, so its signing progress is not loaded: it would never complete, and the page would
+	// keep polling for it.
+	const neverAttested = disputed || proposal.status === "DENIED" || noVotes;
 	return (
 		<Box className="space-y-2">
 			<div className="flex items-center gap-2">
@@ -144,7 +151,7 @@ function SafeTxProposal({ proposal, number }: { proposal: TransactionProposalWit
 							<InlineExplorerTxLink txHash={proposal.attestedAt.tx}>Explorer Tx</InlineExplorerTxLink>
 						</>
 					) : (
-						(noAttestationReason(proposal) ?? "-")
+						(noAttestationReason(proposal, noVotes) ?? "-")
 					)}
 				</p>
 			</div>
