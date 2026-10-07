@@ -87,7 +87,7 @@ impl ValidatorConfig {
     }
 
     const fn default_oracle_timeout() -> NonZeroU64 {
-        NonZeroU64::new(12).unwrap()
+        NonZeroU64::new(24).unwrap()
     }
 }
 

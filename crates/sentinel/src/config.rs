@@ -44,8 +44,8 @@ pub struct Config {
 pub struct SentinelConfig {
     /// The ERC-20 fee token approved for bonds.
     pub fee_token: Address,
-    /// The number of blocks a `Preparing` request is kept alive for before
-    /// being cleaned up.
+    /// The number of blocks a request without an onchain commit deadline is
+    /// kept alive for before being cleaned up.
     pub voting_window: u64,
     /// Base URL of the transaction-verification engine used by this sentinel.
     pub engine: Url,

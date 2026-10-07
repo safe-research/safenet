@@ -87,7 +87,7 @@ log_filter = "info"
 | `observability.log_filter` | No | `tracing` filter; defaults to `info`. |
 | `observability.metrics_address` | No | Prometheus listener; defaults to an ephemeral loopback port. |
 
-The reference engine has one RPC endpoint. Configure it for the same chain as the transactions it receives. The address-poisoning check (the only check backed by RPC-derived state) abstains on a `chainId` mismatch between a transaction and the configured RPC; other checks make no onchain calls and so have nothing to validate against the RPC's chain.
+The reference engine has one RPC endpoint. Configure it for the same chain as the transactions it receives. The address-poisoning check, and the refund check that delegates to it, are the only checks backed by RPC-derived state; they abstain on a `chainId` mismatch between a transaction and the configured RPC. Other checks make no onchain calls and so have nothing to validate against the RPC's chain.
 
 ## Running the Reference Engine
 
@@ -139,7 +139,7 @@ The engine's fold works as follows: any check's denial is the engine's verdict i
 
 Not every aspect is required for every call. An aspect a call cannot actually exercise is trivially covered and dropped from the requirement — a `value` of zero (or a `DELEGATECALL`, which takes no value argument) needs no `Value` voucher, a `gasPrice` of zero needs no `Refund` voucher (`Safe.sol` only calls `handlePayment` `if (gasPrice > 0)`), and empty `data` needs no `Data` voucher. `To` and `Operation` are always required.
 
-**What a `To` claim does and does not assert.** `To` coverage means "no rule in scope forbids this destination." It does not mean "this destination is trustworthy." The reference engine's `BaseChecker` is the sole supplier of `To` (and `Operation`) coverage for an ordinary call, on the strength of that restriction rather than a positive statement about the destination — the destination has been checked against every Charter `to`-restriction currently enforced (a self-call confined to an allow-listed settings function; a delegatecall confined to a known migration, signing-library, `CreateCall` or MultiSend contract) and given the blocklist check its chance to deny. A destination-reputation check that makes `To` a positive statement is a possible future addition, not something the current engine does.
+**What a `To` claim does and does not assert.** `To` coverage means "no rule in scope forbids this destination." It does not mean "this destination is trustworthy." The reference engine's `BaseChecker` supplies `To` (and `Operation`) coverage for every call it does not deny, on the strength of that restriction rather than a positive statement about the destination — the destination has been checked against every Charter `to`-restriction currently enforced (a self-call confined to an allow-listed settings function; a delegatecall confined to a known migration, signing-library, `CreateCall` or MultiSend contract) and given the blocklist check its chance to deny. A destination-reputation check that makes `To` a positive statement is a possible future addition, not something the current engine does.
 
 The consequence for an operator: **an engine answering `secure` is asserting that it examined every aspect every call in the transaction has** — not merely that some check liked part of it and nothing else objected. An `abstain` from the reference engine most often means some aspect (frequently `Refund`, on a relayed transaction none of the affirming checks look at) had no voucher, not that a check actively distrusted the transaction. This is also why implementing a custom engine's own composition rule matters as much as implementing its individual checks: a custom engine that returns the first non-`abstain` verdict from its own checks reintroduces the exact ordering-dependence problem described above.
 
@@ -152,7 +152,7 @@ A MultiSend batch is a single Safe transaction whose `data` packs many calls tog
 - A plain `CALL` to a MultiSend contract makes the MultiSend contract the sender of the sub-calls, not the Safe — under this model it is just an ordinary call to an unrelated contract.
 - A nested `execTransaction` executes as the _child_ Safe, against the child's own funds and under the child's own guard. It stays opaque regardless of what its inner call does, because flattening it would apply this Safe's rules to another Safe's action.
 - `execTransactionFromModule` and `CreateCall` likewise stay opaque.
-- A delegatecall to something other than a known MultiSend deployment, or to one carrying a malformed payload, is denied as an unrecognized delegatecall rather than flattened.
+- A delegatecall to a known MultiSend deployment carrying a malformed payload, or to a contract outside the Charter's delegatecall allow-list, is denied as an unrecognized delegatecall rather than flattened.
 
 **Recursion is bounded.** A MultiSend deployment that itself allows delegatecalls can carry a sub-call that is itself a further batch. The engine flattens depth-first — so `calls` stays in execution order, which matters to checks whose verdict depends on call order — up to a fixed recursion depth. A batch nested deeper than that bound cannot be turned into a usable `Proposal` at all; the engine abstains without running any check, rather than guessing.
 

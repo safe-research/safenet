@@ -2,6 +2,7 @@
 .certora_internal
 .env
 .env.testnet
+.env.aegis
 build/
 snapshots/
 coverage-report.md

@@ -88,6 +88,10 @@ IFS=',' read -ra SENTINELS <<< "${SENTINEL_ADDRESSES:-}"
 dry_run() {
     local contract="$1"
     local output
+    # Forge doesn't write an artifact when a script records zero transactions, so remove any
+    # leftover one from a previous run: artifact_path would otherwise pick it up and add
+    # transactions for contracts that are already deployed.
+    rm -f "$CONTRACTS_DIR/build/broadcast/${contract%Script}.s.sol/$CHAIN_ID/dry-run/run-latest.json"
     output="$(cd "$CONTRACTS_DIR" && forge script "$contract" --rpc-url "$RPC_URL" --sender "$SAFE_ADDRESS" 2>&1)"
     echo "$output" >&2
     echo "$output"
@@ -163,7 +167,9 @@ export SENTINEL_CONSENSUS
 
 echo "--- 2. Deploy test token (skipped if SENTINEL_FEE_TOKEN is already set) ---"
 
+SENTINEL_FEE_TOKEN_DEPLOYED=false
 if [[ -z "${SENTINEL_FEE_TOKEN:-}" ]]; then
+    SENTINEL_FEE_TOKEN_DEPLOYED=true
     ERC20_OUTPUT="$(dry_run DeployERC20Script)"
     add_deploy_txs "$(artifact_path DeployERC20)"
     forge_return SENTINEL_FEE_TOKEN "$ERC20_OUTPUT" erc20
@@ -240,6 +246,7 @@ COORDINATOR=$COORDINATOR
 GROUP_ID=$GROUP_ID
 SENTINEL_CONSENSUS=$SENTINEL_CONSENSUS
 SENTINEL_FEE_TOKEN=$SENTINEL_FEE_TOKEN
+SENTINEL_FEE_TOKEN_DEPLOYED=$SENTINEL_FEE_TOKEN_DEPLOYED
 SENTINEL_ORACLE=$SENTINEL_ORACLE
 SAFENET_7702_EXECUTOR=$SAFENET_7702_EXECUTOR
 EOF

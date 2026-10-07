@@ -18,7 +18,7 @@
 # addresses-file defaults to contracts/build/safenet-deployment.addresses.env, written alongside
 # the batch by `just deployment_batch` — run that first. It supplies everything the env file
 # doesn't: CHAIN_ID, COORDINATOR, GROUP_ID, SENTINEL_CONSENSUS, SENTINEL_FEE_TOKEN,
-# SENTINEL_ORACLE, and SAFENET_7702_EXECUTOR.
+# SENTINEL_FEE_TOKEN_DEPLOYED, SENTINEL_ORACLE, and SAFENET_7702_EXECUTOR.
 
 set -euo pipefail
 
@@ -66,8 +66,13 @@ verify "$COORDINATOR" src/FROSTCoordinator.sol:FROSTCoordinator
 verify "$SENTINEL_CONSENSUS" src/Consensus.sol:Consensus \
     --constructor-args "$(cast abi-encode "constructor(address,bytes32)" "$COORDINATOR" "$GROUP_ID")"
 
-verify "$SENTINEL_FEE_TOKEN" script/util/MyToken.sol:MyToken \
-    --constructor-args "$(cast abi-encode "constructor(address)" "$SAFE_ADDRESS")"
+# An existing fee token (SENTINEL_FEE_TOKEN set in the env file) wasn't deployed by the batch, so
+# it isn't a MyToken and there is nothing of ours to verify. Addresses files written before this
+# flag existed always deployed one.
+if [[ "${SENTINEL_FEE_TOKEN_DEPLOYED:-true}" == true ]]; then
+    verify "$SENTINEL_FEE_TOKEN" script/util/MyToken.sol:MyToken \
+        --constructor-args "$(cast abi-encode "constructor(address)" "$SAFE_ADDRESS")"
+fi
 
 verify "$SENTINEL_ORACLE" src/SentinelOracle.sol:SentinelOracle \
     --constructor-args "$(cast abi-encode \

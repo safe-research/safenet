@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
 			throw new Error(`${key} is not a valid integer: ${env[key]}`);
 		}
 	}
-	const defaultOracles = (env.VITE_DEFAULT_ORACLES || "0xB83c4b66e752D947c1F55fd703b7937e21e401E4")
+	const defaultOracles = (env.VITE_DEFAULT_ORACLES || "0x4F61B8832978e83b80D69551AEf07557DBE41d03")
 		.split(",")
 		.map((address) => address.trim())
 		.filter(Boolean);
@@ -106,7 +106,7 @@ export default defineConfig(({ mode }) => {
 			__PRIVACY_URL__: JSON.stringify(env.VITE_PRIVACY_URL || "#privacy"),
 			__IMPRINT_URL__: JSON.stringify(env.VITE_IMPRINT_URL || "#imprint"),
 			// Default explorer settings — configurable per deployment, users can still override in the UI
-			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0x73b4BDc3112Dfb86085cDD84f26Ab908B20A4A84"),
+			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0xc855761D619f6002923507cE68B84d7689C2aa96"),
 			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://rpc.gnosischain.com"),
 			__DEFAULT_DECODER__: JSON.stringify(
 				env.VITE_DEFAULT_DECODER || "https://calldata.swiss-knife.xyz/decoder?calldata=",
@@ -125,8 +125,8 @@ export default defineConfig(({ mode }) => {
 					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/testnet/assets/sentinel-info.json",
 			),
 			__DEFAULT_REFETCH_INTERVAL__: Number(env.VITE_DEFAULT_REFETCH_INTERVAL) || 10000,
-			__DEFAULT_BLOCKS_PER_EPOCH__: Number(env.VITE_DEFAULT_BLOCKS_PER_EPOCH) || 300,
-			__DEFAULT_SIGNING_TIMEOUT__: Number(env.VITE_DEFAULT_SIGNING_TIMEOUT) || 12,
+			__DEFAULT_BLOCKS_PER_EPOCH__: Number(env.VITE_DEFAULT_BLOCKS_PER_EPOCH) || 1440,
+			__DEFAULT_SIGNING_TIMEOUT__: Number(env.VITE_DEFAULT_SIGNING_TIMEOUT) || 24,
 			__DEFAULT_ORACLES__: JSON.stringify(defaultOracles),
 		},
 	};

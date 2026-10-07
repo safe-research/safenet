@@ -35,9 +35,10 @@ consensus = "0x0000000000000000000000000000000000000000"
 # The ERC-20 fee token approved for bonds.
 fee_token = "0x0000000000000000000000000000000000000000"
 
-# The number of blocks a `Preparing` request is kept alive for before being
-# cleaned up.
-voting_window = 100
+# The number of blocks a request without an onchain commit deadline is kept
+# alive for before being cleaned up. The engine request timeout is derived
+# from it, so set it to the oracle's commit window.
+voting_window = 6
 
 # Base URL of this sentinel's transaction-verification engine. The sentinel
 # appends the versioned security-check path itself.

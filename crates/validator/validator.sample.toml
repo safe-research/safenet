@@ -48,7 +48,7 @@ genesis_salt = "0x00000000000000000000000000000000000000000000000000000000000000
 # blocks_per_epoch = 1440   # default: 1440 (~2 hours on Gnosis Chain)
 # key_gen_timeout = 120     # default: 120
 # signing_timeout = 6       # default: 6 (~30 seconds on Gnosis Chain)
-# oracle_timeout = 12       # default: 12
+# oracle_timeout = 24       # default: 24
 
 # The validator set participating in key generation and signing, one
 # `[[validator.participants]]` table per member. `active_from`/

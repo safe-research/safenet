@@ -58,7 +58,7 @@ use alloy::{
 };
 
 /// Safenet's canonical SAFE-token staking contract on Ethereum mainnet (see
-/// `docs/configuration.md`'s `STAKER_ADDRESS` section for the Etherscan
+/// `docs/configuration.md`'s Staking section for the Etherscan
 /// link).
 const STAKING: Address = address!("115E78f160e1E3eF163B05C84562Fa16fA338509");
 

@@ -1,12 +1,12 @@
-# Safenet Testnet Validator Handbook
+# Safenet Aegis Validator Handbook
 
-This document provides a brief guide to operating a Safenet Testnet validator.
+This document provides a brief guide to operating a Safenet Aegis validator.
 
 ## Introduction
 
-Safenet Testnet is a decentralized Safe transaction security network where validators coordinate to generate cryptographic attestations for Safe transactions. Validators are run by independent parties to maintain decentralization and prevent a single entity from producing invalid attestations that could compromise Safenet’s security guarantees.
+Safenet Aegis is a decentralized Safe transaction security network where validators coordinate to generate cryptographic attestations for Safe transactions. Validators are run by independent parties to maintain decentralization and prevent a single entity from producing invalid attestations that could compromise Safenet’s security guarantees.
 
-In the initial testnet release, Safenet validators communicate entirely onchain. This simplifies validator operations: only a stable RPC node connection is required, and the system does not need to be exposed to the public internet.
+In the Aegis release, Safenet validators communicate entirely onchain. This simplifies validator operations: only a stable RPC node connection is required, and the system does not need to be exposed to the public internet.
 
 For more information on Safenet, consult the [technical overview](./overview.md) as well as the [general public docs](https://docs.safefoundation.org/safenet). See the [sentinel handbook](./sentinel-handbook.md) for the sentinel side of the protocol.
 
@@ -14,7 +14,7 @@ For more information on Safenet, consult the [technical overview](./overview.md)
 
 ### System
 
-The Safenet Testnet validator node is distributed as an OCI container image that can run on any OCI-compatible runtime (Docker, Podman, etc.). The validator is lean and can run on a single core (with average CPU usage under 5%) and less than 500 MB of RAM (1 GB is recommended to handle spikes). Currently, only Linux x86-64 images are distributed.
+The Safenet Aegis validator node is distributed as an OCI container image that can run on any OCI-compatible runtime (Docker, Podman, etc.). The validator is lean and can run on a single core (with average CPU usage under 5%) and less than 500 MB of RAM (1 GB is recommended to handle spikes). Linux x86-64 and arm64 images are distributed (the arm64 image is published as `ghcr.io/safe-research/safenet-validator-arm64`).
 
 Additionally, the validator node stores intermediate state in a SQLite database file. This file contains critical runtime information and should be backed up. Loss of this data would prevent the validator from correctly participating in consensus for the duration of an epoch.
 
@@ -24,7 +24,7 @@ Additionally, the validator node stores intermediate state in a SQLite database 
 
 To run a validator, you need a reliable Ethereum RPC node that can accommodate a peak of 100.000 requests per day. The following table shows the approximate breakdown by RPC method (exact ratios depend on Safenet activity):
 
-| eth_getBlockByNumber | eth_sendRawTransaction | eth_maxPriorityFeePerGas | eth_getLogs | eth_getProof |
+| eth_getBlockByNumber | eth_sendRawTransaction | eth_feeHistory | eth_getLogs | eth_getProof |
 | --- | --- | --- | --- | --- |
 | 42% | 8% | 11% | 11% | 28% |
 
@@ -56,7 +56,7 @@ metrics_address = "0.0.0.0:3555"
 
 #### `secp256k1` Validator Key
 
-Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet Testnet. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication.
+Each validator must be provisioned with a `secp256k1` private key. This key is used to authenticate the validator onchain for participation in Safenet Aegis. It must be funded with sufficient gas for the EVM transactions required for onchain consensus-related communication.
 
 > [!TIP]
 >
@@ -66,13 +66,15 @@ Each validator must be provisioned with a `secp256k1` private key. This key is u
 
 The exact amount varies by chain, but you can expect the account to consume roughly 1.000.000.000 gas per day under peak load. The actual cost of that gas depends on network congestion.
 
-Safenet Testnet’s onchain components are planned for deployment on Gnosis Chain. In a six-month sample window (Aug 25, 2025 – Feb 25, 2026), the average base fee per gas was approximately 0.042 Gwei, translating to just under $0.05 per day in gas costs. However, daily average base fee per gas reached as high as 3.4 Gwei. Based on these figures, validators should expect to need roughly $10 in tokens to cover gas costs over a comparable six-month period; treat this as a rough, dated estimate rather than a current guarantee, and recheck prevailing Gnosis Chain gas prices before funding a validator. It is recommended to overfund the validator to account for base gas fee variability.
+Safenet Aegis’s onchain components are deployed on Gnosis Chain. In a six-month sample window (Aug 25, 2025 – Feb 25, 2026), the average base fee per gas was approximately 0.042 Gwei, translating to just under $0.05 per day in gas costs. However, daily average base fee per gas reached as high as 3.4 Gwei. Based on these figures, validators should expect to need roughly $10 in tokens to cover gas costs over a comparable six-month period; treat this as a rough, dated estimate rather than a current guarantee, and recheck prevailing Gnosis Chain gas prices before funding a validator. It is recommended to overfund the validator to account for base gas fee variability.
 
 > [!TIP]
 >
-> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/validator/validator.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
+> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC's fee history occasionally yields an inflated priority fee estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/validator/validator.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
 
-> [!TIP] To reduce gas costs and improve throughput, the validator can batch its transactions through an EIP-7702 executor implementing `ISafenet7702Executor`, such as [`Safenet7702Executor`](../contracts/src/Safenet7702Executor.sol). Set `executor` (and optionally `max_batch_gas`) in the `[transactions]` table: every transaction is then sent as a self-call to the executor, batching all actions queued while the previous transaction was pending, so many actions can get onchain in a single transaction. The validator's first transaction also delegates its account to the executor. EIP-7702 mempools accept only one pending transaction from a delegated account, so the validator keeps a single transaction in flight while its account is delegated. Removing `executor` does not undelegate the account immediately: the validator's next transaction removes the delegation, and until it executes, only one transaction is in flight.
+> [!TIP]
+>
+> To reduce gas costs and improve throughput, the validator can batch its transactions through an EIP-7702 executor implementing `ISafenet7702Executor`, such as [`Safenet7702Executor`](../contracts/src/Safenet7702Executor.sol). Set `executor` (and optionally `max_batch_gas`) in the `[transactions]` table: every transaction is then sent as a self-call to the executor, batching all actions queued while the previous transaction was pending, so many actions can get onchain in a single transaction. The validator's first transaction also delegates its account to the executor. EIP-7702 mempools accept only one pending transaction from a delegated account, so the validator keeps a single transaction in flight while its account is delegated. Removing `executor` does not undelegate the account immediately: the validator's next transaction removes the delegation, and until it executes, only one transaction is in flight.
 
 #### Consensus Secrets
 
@@ -134,11 +136,11 @@ There are a few things you can do to verify your validator is running as expecte
   ```sh
   docker logs --follow safenet-validator
   ```
-- Check the validator EVM account on a block explorer. There should be recent transactions to the `Consensus` and `FROSTCoordinator` contracts.
+- Check the validator EVM account on a block explorer. There should be recent transactions to the `Consensus` and `FROSTCoordinator` contracts. With `executor` set, these appear as internal calls of transactions the validator sends to its own account.
 
 ### Common Problems
 
 - Ethereum node RPC issues:
-  - Rate limits. While the validator implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Testnet.
+  - Rate limits. While the validator retries failed RPC requests, rate limits can still prevent full participation in Safenet Aegis.
   - Missing logs. Some RPC providers do not reliably return all logs for `eth_getLogs` requests. This issue can be mitigated with the appropriate configuration (see [`eth_getLogs` Reliability](#eth_getlogs-reliability)).
-- Insufficient funds on the validator account to submit onchain transactions. Logs will show that `actions` could not be submitted because of insufficient gas.
+- Insufficient funds on the validator account to submit onchain transactions. Logs will show transaction submissions failing (`submission failed, will retry without bumping fees`, with the RPC's insufficient-funds error).

@@ -1,10 +1,10 @@
-# Safenet Testnet Sentinel Handbook
+# Safenet Aegis Sentinel Handbook
 
-This document provides a brief guide to operating a Safenet Testnet sentinel.
+This document provides a brief guide to operating a Safenet Aegis sentinel.
 
 ## Introduction
 
-Sentinels watch the `SentinelOracle` and `Consensus` contracts for proposed transactions, ask their configured [sentinel engine](./sentinel-engine.md) to assess each proposal, and commit/reveal a bond-backed approve-or-deny vote onchain. Once enough sentinels have revealed, the request resolves and bonds/fees are settled. Sentinels are run by independent parties, the same way validators are, to maintain decentralization and prevent a single entity from controlling which transactions get approved.
+Sentinels watch the `SentinelOracle` and `Consensus` contracts for proposed transactions, ask their configured [sentinel engine](./sentinel-engine.md) to assess each proposal, and commit/reveal a bond-backed approve-or-deny vote onchain. Once every committed sentinel has revealed, or the reveal window closes, the request is finalized: a unanimous vote resolves it, a split vote escalates it to arbitration, and each sentinel then claims its bond and fee share. Sentinels are run by independent parties, the same way validators are, to maintain decentralization and prevent a single entity from controlling which transactions get approved.
 
 Like validators, sentinels communicate with the protocol entirely onchain. They additionally call their engine over HTTP, but neither service needs to be exposed to the public internet: keep that connection on the same host, in the same pod, or on a private network.
 
@@ -16,7 +16,7 @@ For more information on Safenet, consult the [technical overview](./overview.md)
 
 #### Ethereum RPC
 
-To run a sentinel, you need a reliable Ethereum RPC node, able to keep up with `eth_getLogs`/`eth_getBlockByNumber` polling plus the `commit`/`reveal`/`finalize`/`claim` transactions described under [Running](#running) below.
+To run a sentinel, you need a reliable Ethereum RPC node, able to keep up with `eth_getLogs`/`eth_getBlockByNumber` polling plus the `commit`/`reveal`/`finalize`/`claim`/`timeoutArbitration` transactions described under [Running](#running) below.
 
 ##### `eth_getProof` Support
 
@@ -50,7 +50,7 @@ metrics_address = "0.0.0.0:3555"
 
 #### `secp256k1` Sentinel Key
 
-Each sentinel must be provisioned with a `secp256k1` private key. This key is used to authenticate the sentinel onchain for participation in Safenet Testnet. It must be funded with sufficient gas for the EVM transactions required for onchain commit/reveal communication, and with enough of the fee token to put up bonds on the requests it votes on.
+Each sentinel must be provisioned with a `secp256k1` private key. This key is used to authenticate the sentinel onchain for participation in Safenet Aegis. It must be funded with sufficient gas for the EVM transactions required for onchain commit/reveal communication, and with enough of the fee token to put up bonds on the requests it votes on.
 
 > [!TIP]
 >
@@ -58,13 +58,15 @@ Each sentinel must be provisioned with a `secp256k1` private key. This key is us
 
 ##### Gas Costs
 
-The exact amount varies by chain and by how many requests a sentinel votes on, since gas is spent on `commit`/`reveal`/`finalize`/`claim` calls (plus an ERC-20 `approve` for the bond token) rather than on a fixed per-epoch schedule like the validator's. The actual cost of that gas depends on network congestion.
+The exact amount varies by chain and by how many requests a sentinel votes on, since gas is spent on `commit`/`reveal`/`finalize`/`claim`/`timeoutArbitration` calls (plus an ERC-20 `approve` of the fee token for each bond) rather than on a fixed per-epoch schedule like the validator's. The actual cost of that gas depends on network congestion.
 
 > [!TIP]
 >
-> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC occasionally returns an inflated `eth_maxPriorityFeePerGas` estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/sentinel/sentinel.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
+> On Gnosis Chain, the base fee is very low relative to the priority fee, so the priority fee makes up the bulk of gas costs. If your RPC's fee history occasionally yields an inflated priority fee estimate, you can cap how much of the total fee cap can be a tip using the `[transactions]` table of your [configuration file](../crates/sentinel/sentinel.sample.toml). For example, setting `priority_fee_cap_percentage = 95` ensures the tip never exceeds 95% of `maxFeePerGas`, protecting against runaway estimates while still allowing normal inclusion.
 
-> [!TIP] To reduce gas costs and improve throughput, the sentinel can batch its transactions through an EIP-7702 executor implementing `ISafenet7702Executor`, such as [`Safenet7702Executor`](../contracts/src/Safenet7702Executor.sol). Set `executor` (and optionally `max_batch_gas`) in the `[transactions]` table: every transaction is then sent as a self-call to the executor, batching all actions queued while the previous transaction was pending, so many actions can get onchain in a single transaction. The sentinel's first transaction also delegates its account to the executor. EIP-7702 mempools accept only one pending transaction from a delegated account, so the sentinel keeps a single transaction in flight while its account is delegated. Removing `executor` does not undelegate the account immediately: the sentinel's next transaction removes the delegation, and until it executes, only one transaction is in flight.
+> [!TIP]
+>
+> To reduce gas costs and improve throughput, the sentinel can batch its transactions through an EIP-7702 executor implementing `ISafenet7702Executor`, such as [`Safenet7702Executor`](../contracts/src/Safenet7702Executor.sol). Set `executor` (and optionally `max_batch_gas`) in the `[transactions]` table: every transaction is then sent as a self-call to the executor, batching all actions queued while the previous transaction was pending, so many actions can get onchain in a single transaction. The sentinel's first transaction also delegates its account to the executor. EIP-7702 mempools accept only one pending transaction from a delegated account, so the sentinel keeps a single transaction in flight while its account is delegated. Removing `executor` does not undelegate the account immediately: the sentinel's next transaction removes the delegation, and until it executes, only one transaction is in flight.
 
 ## Running
 
@@ -97,12 +99,12 @@ There are a few things you can do to verify your sentinel is running as expected
   docker logs --follow safenet-sentinel
   docker logs --follow safenet-sentinel-engine
   ```
-- Check the sentinel EVM account on a block explorer. There should be recent transactions to the `SentinelOracle` contract (`commit`/`reveal`/`finalize`/`claim`) and, when bonding, an `approve` call to the fee token.
+- Check the sentinel EVM account on a block explorer. There should be recent transactions to the `SentinelOracle` contract (`commit`/`reveal`/`finalize`/`claim`/`timeoutArbitration`) and an `approve` call to the fee token before each `commit`. With `executor` set, these appear as internal calls of transactions the sentinel sends to its own account.
 
 ### Common Problems
 
 - Ethereum node RPC issues:
-  - Rate limits. While the sentinel implements exponential backoff for some RPC requests, rate limits can still prevent full participation in Safenet Testnet.
+  - Rate limits. While the sentinel retries failed RPC requests, rate limits can still prevent full participation in Safenet Aegis.
   - Missing logs. Some RPC providers do not reliably return all logs for `eth_getLogs` requests. This issue can be mitigated with the appropriate configuration (see [`eth_getLogs` Reliability](#eth_getlogs-reliability)).
 - An unreachable engine or a request that exceeds the sentinel's timeout makes the sentinel abstain instead of guessing. Check both services' logs and connectivity over the configured `sentinel.engine` URL.
-- Insufficient funds on the sentinel account to submit onchain transactions. Logs will show that `actions` could not be submitted because of insufficient gas, or that a bond commitment failed because of insufficient fee-token balance/allowance.
+- Insufficient funds on the sentinel account to submit onchain transactions. Logs will show transaction submissions failing (`submission failed, will retry without bumping fees`, with the RPC's insufficient-funds error). An account without enough of the fee token instead has its `commit` transactions revert onchain, which shows on a block explorer.
