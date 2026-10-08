@@ -1,0 +1,25 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.71s
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 14 tests
+[excerpt: only this finding's tests are shown; the complete 14-test run is poc/F2-CORE-060/output-full-run.txt]
+test tx::tests::qa_f2_core_062_first_submission_underpriced_wordings_are_not_recognised ... "transaction underpriced" -> is_transaction_underpriced = false
+"underpriced" -> is_transaction_underpriced = false
+"FeeTooLow" -> is_transaction_underpriced = false
+"fee too low" -> is_transaction_underpriced = false
+"max priority fee per gas below minimum" -> is_transaction_underpriced = false
+ok
+test tx::tests::qa_f2_core_062_unrecognised_first_submission_rejection_retries_identically_forever ... after 11 blocks: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x01\",\"gas\":21000}", None, Some(0), None, None), (2, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x02\",\"gas\":21000}", None, Some(1), None, None)]
+ok
+test tx::tests::qa_f2_core_062_zero_priority_fee_is_never_bumped ... cap 0%  : Eip1559Estimation { max_fee_per_gas: 210, max_priority_fee_per_gas: 10 } -> Eip1559Estimation { max_fee_per_gas: 200, max_priority_fee_per_gas: 0 }
+cap NaN : Eip1559Estimation { max_fee_per_gas: 210, max_priority_fee_per_gas: 10 } -> Eip1559Estimation { max_fee_per_gas: 200, max_priority_fee_per_gas: 0 }
+replacement 1: Eip1559Estimation { max_fee_per_gas: 220, max_priority_fee_per_gas: 0 }
+replacement 2: Eip1559Estimation { max_fee_per_gas: 242, max_priority_fee_per_gas: 0 }
+replacement 3: Eip1559Estimation { max_fee_per_gas: 267, max_priority_fee_per_gas: 0 }
+replacement 4: Eip1559Estimation { max_fee_per_gas: 294, max_priority_fee_per_gas: 0 }
+replacement 5: Eip1559Estimation { max_fee_per_gas: 324, max_priority_fee_per_gas: 0 }
+ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.20s
+

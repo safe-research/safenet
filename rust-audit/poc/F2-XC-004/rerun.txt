@@ -1,0 +1,172 @@
+# QA2-XC (resume) re-run of the F2-XC-004 dependency queries on the current tree; HEAD fe9e84cc59b65367b31d5a3121774383cc422234; Cargo.lock differs from 3ec8bc5 only by bitflags/metrics in the sentinel-engine block (out of scope)
+# every command: cargo tree --offline --locked <args>
+
+=================== --workspace -i h2 --depth 8
+h2 v0.4.14
+└── hyper v1.10.1
+    ├── axum v0.8.9
+    ├── hyper-rustls v0.27.9
+    │   ├── metrics-exporter-prometheus v0.18.3
+    │   │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    │   │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   │       [dev-dependencies]
+    │   │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │   │       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │   └── reqwest v0.13.4
+    │       ├── alloy-provider v2.0.5
+    │       │   ├── alloy v2.0.5
+    │       │   │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+    │       │   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    │       │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    │       │   └── alloy-contract v2.0.5
+    │       │       └── alloy v2.0.5 (*)
+    │       ├── alloy-rpc-client v2.0.5
+    │       │   ├── alloy v2.0.5 (*)
+    │       │   └── alloy-provider v2.0.5 (*)
+    │       ├── alloy-transport-http v2.0.5
+    │       │   ├── alloy v2.0.5 (*)
+    │       │   ├── alloy-provider v2.0.5 (*)
+    │       │   └── alloy-rpc-client v2.0.5 (*)
+    │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    ├── hyper-util v0.1.20
+    │   ├── axum v0.8.9 (*)
+    │   ├── hyper-rustls v0.27.9 (*)
+    │   ├── metrics-exporter-prometheus v0.18.3 (*)
+    │   └── reqwest v0.13.4 (*)
+    ├── metrics-exporter-prometheus v0.18.3 (*)
+    └── reqwest v0.13.4 (*)
+
+=================== --workspace -i quinn-proto --depth 8
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+
+=================== --workspace -i rustls --depth 3
+rustls v0.23.40
+├── alloy-transport-ws v2.0.5
+│   ├── alloy v2.0.5
+│   │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│   │   │   [dev-dependencies]
+│   │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   ├── alloy-provider v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   └── alloy-contract v2.0.5
+│   └── alloy-rpc-client v2.0.5
+│       ├── alloy v2.0.5 (*)
+│       └── alloy-provider v2.0.5 (*)
+├── hyper-rustls v0.27.9
+│   ├── metrics-exporter-prometheus v0.18.3
+│   │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   └── reqwest v0.13.4
+│       ├── alloy-provider v2.0.5 (*)
+│       ├── alloy-rpc-client v2.0.5 (*)
+│       ├── alloy-transport-http v2.0.5
+│       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+├── metrics-exporter-prometheus v0.18.3 (*)
+├── reqwest v0.13.4 (*)
+├── rustls-platform-verifier v0.7.0
+│   └── reqwest v0.13.4 (*)
+├── tokio-rustls v0.26.4
+│   ├── hyper-rustls v0.27.9 (*)
+│   ├── reqwest v0.13.4 (*)
+│   └── tokio-tungstenite v0.28.0
+│       └── alloy-transport-ws v2.0.5 (*)
+├── tokio-tungstenite v0.28.0 (*)
+└── tungstenite v0.28.0
+    └── tokio-tungstenite v0.28.0 (*)
+
+=================== -p sentinel -e features -i reqwest --depth 1
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+└── alloy-rpc-client v2.0.5
+├── reqwest feature "__rustls"
+├── reqwest feature "__rustls-aws-lc-rs"
+├── reqwest feature "__tls"
+├── reqwest feature "json"
+└── reqwest feature "rustls"
+
+=================== -p validator -e features -i reqwest --depth 1
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+└── alloy-rpc-client v2.0.5
+├── reqwest feature "__rustls"
+├── reqwest feature "__rustls-aws-lc-rs"
+├── reqwest feature "__tls"
+├── reqwest feature "json"
+└── reqwest feature "rustls"
+
+=================== -p sentinel -e features -i hyper --depth 1
+hyper v1.10.1
+└── hyper-rustls v0.27.9
+├── hyper feature "client"
+├── hyper feature "default"
+├── hyper feature "http1"
+├── hyper feature "http2"
+└── hyper feature "server"
+
+=================== -p sentinel -e features -i hyper-util --depth 1
+hyper-util v0.1.20
+├── hyper-util feature "client"
+├── hyper-util feature "client-legacy"
+├── hyper-util feature "client-proxy"
+├── hyper-util feature "default"
+├── hyper-util feature "http1"
+├── hyper-util feature "http2"
+├── hyper-util feature "server"
+├── hyper-util feature "server-auto"
+├── hyper-util feature "service"
+└── hyper-util feature "tokio"
+
+=================== -p sentinel -e features -i ruint --depth 1
+ruint v1.18.0
+├── ruint feature "alloc"
+├── ruint feature "alloy-rlp"
+├── ruint feature "serde"
+└── ruint feature "std"
+
+ruint v1.18.0
+├── ruint feature "alloc"
+└── ruint feature "serde"
+
+=================== the pinned exporter serves HTTP/1 only (metrics-exporter-prometheus-0.18.3/src/exporter/http_listener.rs)
+9:    server::conn::http1::Builder as HyperHttpBuilder,
+77:                HyperHttpBuilder::new().serve_connection(TokioIo::new(stream), service).await
+122:                HyperHttpBuilder::new().serve_connection(TokioIo::new(stream), service).await
+
+=================== reqwest-0.13.4 features that pull h2
+130:http2 = [
+131:    "dep:h2",
+169:rustls = [
+
+=================== locked versions
+name = "argh"
+version = "0.1.19"
+name = "crossbeam-epoch"
+version = "0.9.18"
+name = "event-listener"
+version = "5.4.1"
+name = "h2"
+version = "0.4.14"
+name = "libsqlite3-sys"
+version = "0.37.0"
+name = "lru"
+version = "0.16.4"
+name = "quinn-proto"
+version = "0.11.14"
+name = "ruint"
+version = "1.18.0"
+name = "rustls"
+version = "0.23.40"
+name = "sqlx-sqlite"
+version = "0.9.0"
+name = "toml"
+version = "1.1.2+spec-1.1.0"
+
+=================== CI still runs no audit gate
+37:      - run: just deps
+38:      - run: just check
+39:      - run: just test
+Justfile:24:    (cd contracts && test "$(forge --version | head -1)" = "forge Version: 1.5.1-v1.5.1" && forge fmt --check && forge lint --deny notes)
+(grep exit above: no matches means no gate)

@@ -1,0 +1,942 @@
+alloy-json-abi v1.6.0
+├── alloy-contract v2.0.5
+│   └── alloy v2.0.5
+│       ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+│       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│       │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│       │   [dev-dependencies]
+│       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│       │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│       ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+├── alloy-core v1.6.0
+│   └── alloy v2.0.5 (*)
+├── alloy-dyn-abi v1.6.0
+│   ├── alloy-contract v2.0.5 (*)
+│   └── alloy-core v1.6.0 (*)
+└── alloy-sol-types v1.6.0
+    ├── alloy-contract v2.0.5 (*)
+    ├── alloy-core v1.6.0 (*)
+    ├── alloy-dyn-abi v1.6.0 (*)
+    ├── alloy-json-rpc v2.0.5
+    │   ├── alloy v2.0.5 (*)
+    │   ├── alloy-network v2.0.5
+    │   │   ├── alloy v2.0.5 (*)
+    │   │   ├── alloy-contract v2.0.5 (*)
+    │   │   ├── alloy-provider v2.0.5
+    │   │   │   ├── alloy v2.0.5 (*)
+    │   │   │   └── alloy-contract v2.0.5 (*)
+    │   │   └── alloy-signer-local v2.0.5
+    │   │       └── alloy v2.0.5 (*)
+    │   ├── alloy-provider v2.0.5 (*)
+    │   ├── alloy-pubsub v2.0.5
+    │   │   ├── alloy v2.0.5 (*)
+    │   │   ├── alloy-contract v2.0.5 (*)
+    │   │   ├── alloy-provider v2.0.5 (*)
+    │   │   ├── alloy-rpc-client v2.0.5
+    │   │   │   ├── alloy v2.0.5 (*)
+    │   │   │   └── alloy-provider v2.0.5 (*)
+    │   │   ├── alloy-transport-ipc v2.0.5
+    │   │   │   ├── alloy v2.0.5 (*)
+    │   │   │   ├── alloy-provider v2.0.5 (*)
+    │   │   │   └── alloy-rpc-client v2.0.5 (*)
+    │   │   └── alloy-transport-ws v2.0.5
+    │   │       ├── alloy v2.0.5 (*)
+    │   │       ├── alloy-provider v2.0.5 (*)
+    │   │       └── alloy-rpc-client v2.0.5 (*)
+    │   ├── alloy-rpc-client v2.0.5 (*)
+    │   ├── alloy-transport v2.0.5
+    │   │   ├── alloy v2.0.5 (*)
+    │   │   ├── alloy-contract v2.0.5 (*)
+    │   │   ├── alloy-provider v2.0.5 (*)
+    │   │   ├── alloy-pubsub v2.0.5 (*)
+    │   │   ├── alloy-rpc-client v2.0.5 (*)
+    │   │   ├── alloy-transport-http v2.0.5
+    │   │   │   ├── alloy v2.0.5 (*)
+    │   │   │   ├── alloy-provider v2.0.5 (*)
+    │   │   │   └── alloy-rpc-client v2.0.5 (*)
+    │   │   ├── alloy-transport-ipc v2.0.5 (*)
+    │   │   └── alloy-transport-ws v2.0.5 (*)
+    │   ├── alloy-transport-http v2.0.5 (*)
+    │   └── alloy-transport-ipc v2.0.5 (*)
+    ├── alloy-network v2.0.5 (*)
+    ├── alloy-provider v2.0.5 (*)
+    └── alloy-rpc-types-eth v2.0.5
+        ├── alloy-contract v2.0.5 (*)
+        ├── alloy-network v2.0.5 (*)
+        ├── alloy-provider v2.0.5 (*)
+        ├── alloy-rpc-types v2.0.5
+        │   └── alloy v2.0.5 (*)
+        ├── alloy-rpc-types-anvil v2.0.5
+        │   ├── alloy-provider v2.0.5 (*)
+        │   └── alloy-rpc-types v2.0.5 (*)
+        ├── alloy-rpc-types-any v2.0.5
+        │   └── alloy-network v2.0.5 (*)
+        ├── alloy-rpc-types-trace v2.0.5
+        │   ├── alloy-provider v2.0.5 (*)
+        │   └── alloy-rpc-types v2.0.5 (*)
+        └── alloy-rpc-types-txpool v2.0.5
+            ├── alloy-provider v2.0.5 (*)
+            └── alloy-rpc-types v2.0.5 (*)
+
+alloy-json-abi v1.6.0
+├── alloy-sol-macro-expander v1.6.0
+│   └── alloy-sol-macro v1.6.0 (proc-macro)
+│       └── alloy-sol-types v1.6.0 (*)
+└── alloy-sol-macro-input v1.6.0
+    ├── alloy-sol-macro v1.6.0 (proc-macro) (*)
+    └── alloy-sol-macro-expander v1.6.0 (*)
+
+alloy-primitives v1.6.0
+├── alloy-chains v0.2.34
+│   └── alloy-provider v2.0.5 (*)
+├── alloy-consensus v2.0.5
+│   ├── alloy v2.0.5 (*)
+│   ├── alloy-consensus-any v2.0.5
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   └── alloy-rpc-types-eth v2.0.5 (*)
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── alloy-network v2.0.5 (*)
+│   ├── alloy-network-primitives v2.0.5
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-provider v2.0.5 (*)
+│   │   ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   └── alloy-rpc-types-eth v2.0.5 (*)
+│   ├── alloy-provider v2.0.5 (*)
+│   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   └── alloy-signer-local v2.0.5 (*)
+├── alloy-consensus-any v2.0.5 (*)
+├── alloy-contract v2.0.5 (*)
+├── alloy-core v1.6.0 (*)
+├── alloy-dyn-abi v1.6.0 (*)
+├── alloy-eip2124 v0.2.0
+│   └── alloy-eips v2.0.5
+│       ├── alloy v2.0.5 (*)
+│       ├── alloy-consensus v2.0.5 (*)
+│       ├── alloy-consensus-any v2.0.5 (*)
+│       ├── alloy-network v2.0.5 (*)
+│       ├── alloy-network-primitives v2.0.5 (*)
+│       ├── alloy-provider v2.0.5 (*)
+│       └── alloy-rpc-types-eth v2.0.5 (*)
+├── alloy-eip2930 v0.2.3
+│   └── alloy-eips v2.0.5 (*)
+├── alloy-eip7702 v0.6.3
+│   └── alloy-eips v2.0.5 (*)
+├── alloy-eip7928 v0.3.7
+│   └── alloy-eips v2.0.5 (*)
+├── alloy-eips v2.0.5 (*)
+├── alloy-json-abi v1.6.0 (*)
+├── alloy-json-rpc v2.0.5 (*)
+├── alloy-network v2.0.5 (*)
+├── alloy-network-primitives v2.0.5 (*)
+├── alloy-provider v2.0.5 (*)
+├── alloy-pubsub v2.0.5 (*)
+├── alloy-rpc-client v2.0.5 (*)
+├── alloy-rpc-types v2.0.5 (*)
+├── alloy-rpc-types-anvil v2.0.5 (*)
+├── alloy-rpc-types-any v2.0.5 (*)
+├── alloy-rpc-types-debug v2.0.5
+│   ├── alloy-provider v2.0.5 (*)
+│   └── alloy-rpc-types v2.0.5 (*)
+├── alloy-rpc-types-eth v2.0.5 (*)
+├── alloy-rpc-types-trace v2.0.5 (*)
+├── alloy-rpc-types-txpool v2.0.5 (*)
+├── alloy-serde v2.0.5
+│   ├── alloy v2.0.5 (*)
+│   ├── alloy-consensus v2.0.5 (*)
+│   ├── alloy-consensus-any v2.0.5 (*)
+│   ├── alloy-eips v2.0.5 (*)
+│   ├── alloy-network v2.0.5 (*)
+│   ├── alloy-network-primitives v2.0.5 (*)
+│   ├── alloy-rpc-types v2.0.5 (*)
+│   ├── alloy-rpc-types-anvil v2.0.5 (*)
+│   ├── alloy-rpc-types-any v2.0.5 (*)
+│   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   ├── alloy-rpc-types-trace v2.0.5 (*)
+│   └── alloy-rpc-types-txpool v2.0.5 (*)
+├── alloy-signer v2.0.5
+│   ├── alloy v2.0.5 (*)
+│   ├── alloy-network v2.0.5 (*)
+│   ├── alloy-provider v2.0.5 (*)
+│   └── alloy-signer-local v2.0.5 (*)
+├── alloy-signer-local v2.0.5 (*)
+├── alloy-sol-types v1.6.0 (*)
+└── alloy-trie v0.9.5
+    └── alloy-consensus v2.0.5 (*)
+
+alloy-primitives v1.6.0
+└── alloy-json-abi v1.6.0 (*)
+
+alloy-sol-type-parser v1.6.0
+└── alloy-json-abi v1.6.0 (*)
+
+alloy-sol-type-parser v1.6.0
+├── alloy-dyn-abi v1.6.0 (*)
+└── alloy-json-abi v1.6.0 (*)
+
+argh_shared v0.1.19
+└── argh_derive v0.1.19 (proc-macro)
+    └── argh v0.1.19
+        ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+        ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+        └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+
+argh_shared v0.1.19
+└── argh v0.1.19 (*)
+
+block-buffer v0.10.4
+├── digest v0.10.7
+│   ├── ecdsa v0.16.9
+│   │   └── k256 v0.13.4
+│   │       ├── alloy-consensus v2.0.5 (*)
+│   │       ├── alloy-eip7702 v0.6.3 (*)
+│   │       ├── alloy-primitives v1.6.0 (*)
+│   │       ├── alloy-signer v2.0.5 (*)
+│   │       ├── alloy-signer-local v2.0.5 (*)
+│   │       ├── frost-secp256k1 v3.0.0
+│   │       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   │       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   ├── elliptic-curve v0.13.8
+│   │   ├── alloy-signer v2.0.5 (*)
+│   │   ├── ecdsa v0.16.9 (*)
+│   │   └── k256 v0.13.4 (*)
+│   ├── hmac v0.12.1
+│   │   └── rfc6979 v0.4.0
+│   │       └── ecdsa v0.16.9 (*)
+│   ├── sha1 v0.10.6
+│   │   └── tungstenite v0.28.0
+│   │       └── tokio-tungstenite v0.28.0
+│   │           └── alloy-transport-ws v2.0.5 (*)
+│   ├── sha2 v0.10.9
+│   │   ├── alloy-eips v2.0.5 (*)
+│   │   ├── frost-secp256k1 v3.0.0 (*)
+│   │   ├── k256 v0.13.4 (*)
+│   │   └── sqlx-core v0.9.0
+│   │       ├── sqlx v0.9.0
+│   │       │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   │       │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │       │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │       ├── sqlx-macros v0.9.0 (proc-macro)
+│   │       │   └── sqlx v0.9.0 (*)
+│   │       ├── sqlx-macros-core v0.9.0
+│   │       │   └── sqlx-macros v0.9.0 (proc-macro) (*)
+│   │       ├── sqlx-sqlite v0.9.0
+│   │       │   └── sqlx v0.9.0 (*)
+│   │       └── sqlx-sqlite v0.9.0
+│   │           └── sqlx-macros-core v0.9.0 (*)
+│   └── signature v2.2.0
+│       ├── ecdsa v0.16.9 (*)
+│       └── k256 v0.13.4 (*)
+└── digest v0.10.7
+    └── sha2 v0.10.9
+        └── sqlx-macros-core v0.9.0 (*)
+
+block-buffer v0.12.0
+└── digest v0.11.3
+    ├── hmac v0.13.0
+    │   └── hkdf v0.13.0
+    │       └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+    ├── sha2 v0.11.0
+    │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+    └── sha3 v0.11.0
+        ├── alloy-primitives v1.6.0 (*)
+        ├── alloy-primitives v1.6.0 (*)
+        └── alloy-sol-macro-expander v1.6.0 (*)
+
+const-hex v1.19.1
+├── alloy-primitives v1.6.0 (*)
+├── alloy-sol-macro-expander v1.6.0 (*)
+└── alloy-sol-macro-input v1.6.0 (*)
+
+const-hex v1.19.1
+└── alloy-primitives v1.6.0 (*)
+
+const-oid v0.9.6
+├── der v0.7.10
+│   ├── ecdsa v0.16.9 (*)
+│   ├── pkcs8 v0.10.2
+│   │   └── elliptic-curve v0.13.8 (*)
+│   ├── sec1 v0.7.3
+│   │   └── elliptic-curve v0.13.8 (*)
+│   └── spki v0.7.3
+│       ├── ecdsa v0.16.9 (*)
+│       └── pkcs8 v0.10.2 (*)
+└── digest v0.10.7 (*)
+
+const-oid v0.10.2
+└── digest v0.11.3 (*)
+
+cpufeatures v0.2.17
+├── sha1 v0.10.6 (*)
+├── sha2 v0.10.9 (*)
+└── sha2 v0.10.9 (*)
+
+cpufeatures v0.3.0
+├── keccak v0.2.0
+│   └── sha3 v0.11.0 (*)
+└── sha2 v0.11.0 (*)
+
+crypto-common v0.1.6
+├── digest v0.10.7 (*)
+└── digest v0.10.7 (*)
+
+crypto-common v0.2.2
+└── digest v0.11.3 (*)
+
+derive_more v2.1.1
+└── alloy-primitives v1.6.0 (*)
+
+derive_more v2.1.1
+├── alloy-consensus v2.0.5 (*)
+├── alloy-eips v2.0.5 (*)
+├── alloy-network v2.0.5 (*)
+├── alloy-primitives v1.6.0 (*)
+├── alloy-rpc-types-debug v2.0.5 (*)
+├── alloy-transport v2.0.5 (*)
+└── alloy-trie v0.9.5 (*)
+
+digest v0.10.7 (*)
+
+digest v0.10.7 (*)
+
+digest v0.11.3 (*)
+
+futures-channel v0.3.32
+├── futures v0.3.32
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── alloy-provider v2.0.5 (*)
+│   ├── alloy-pubsub v2.0.5 (*)
+│   ├── alloy-rpc-client v2.0.5 (*)
+│   ├── alloy-transport v2.0.5 (*)
+│   ├── alloy-transport-ipc v2.0.5 (*)
+│   ├── alloy-transport-ws v2.0.5 (*)
+│   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+├── futures-util v0.3.32
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── axum v0.8.9
+│   │   └── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   ├── futures v0.3.32 (*)
+│   ├── futures-executor v0.3.32
+│   │   ├── futures v0.3.32 (*)
+│   │   ├── sqlx-sqlite v0.9.0 (*)
+│   │   └── sqlx-sqlite v0.9.0 (*)
+│   ├── hyper-util v0.1.20
+│   │   ├── axum v0.8.9 (*)
+│   │   ├── hyper-rustls v0.27.9
+│   │   │   ├── metrics-exporter-prometheus v0.18.3
+│   │   │   │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   │   │   └── reqwest v0.13.4
+│   │   │       ├── alloy-provider v2.0.5 (*)
+│   │   │       ├── alloy-rpc-client v2.0.5 (*)
+│   │   │       ├── alloy-transport-http v2.0.5 (*)
+│   │   │       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │   │       └── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   │   └── reqwest v0.13.4 (*)
+│   ├── sqlx-core v0.9.0 (*)
+│   ├── sqlx-sqlite v0.9.0 (*)
+│   ├── tokio-metrics v0.5.2
+│   │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   ├── tokio-tungstenite v0.28.0 (*)
+│   ├── tower v0.5.3
+│   │   ├── alloy-pubsub v2.0.5 (*)
+│   │   ├── alloy-rpc-client v2.0.5 (*)
+│   │   ├── alloy-transport v2.0.5 (*)
+│   │   ├── alloy-transport-http v2.0.5 (*)
+│   │   ├── axum v0.8.9 (*)
+│   │   ├── reqwest v0.13.4 (*)
+│   │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   │   └── tower-http v0.6.11
+│   │       └── reqwest v0.13.4 (*)
+│   └── tower-http v0.6.11 (*)
+├── hyper v1.10.1
+│   ├── axum v0.8.9 (*)
+│   ├── hyper-rustls v0.27.9 (*)
+│   ├── hyper-util v0.1.20 (*)
+│   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   └── reqwest v0.13.4 (*)
+├── hyper-util v0.1.20 (*)
+└── sqlx-sqlite v0.9.0 (*)
+
+futures-channel v0.3.32
+└── sqlx-sqlite v0.9.0 (*)
+
+futures-sink v0.3.32
+├── flume v0.12.0
+│   ├── sqlx-sqlite v0.9.0 (*)
+│   └── sqlx-sqlite v0.9.0 (*)
+├── futures-channel v0.3.32 (*)
+└── futures-util v0.3.32
+    └── sqlx-sqlite v0.9.0 (*)
+
+futures-sink v0.3.32
+├── futures v0.3.32 (*)
+├── futures-channel v0.3.32 (*)
+├── futures-util v0.3.32 (*)
+├── h2 v0.4.14
+│   └── hyper v1.10.1 (*)
+└── tokio-util v0.7.18
+    ├── alloy-transport-ipc v2.0.5 (*)
+    ├── h2 v0.4.14 (*)
+    └── tokio-stream v0.1.18
+        ├── alloy-pubsub v2.0.5 (*)
+        ├── alloy-rpc-client v2.0.5 (*)
+        ├── sqlx-core v0.9.0 (*)
+        └── tokio-metrics v0.5.2 (*)
+
+futures-util v0.3.32 (*)
+
+futures-util v0.3.32 (*)
+
+getrandom v0.2.17
+└── rand_core v0.6.4
+    ├── crypto-bigint v0.5.5
+    │   └── elliptic-curve v0.13.8 (*)
+    ├── elliptic-curve v0.13.8 (*)
+    ├── ff v0.13.1
+    │   ├── elliptic-curve v0.13.8 (*)
+    │   └── group v0.13.0
+    │       └── elliptic-curve v0.13.8 (*)
+    ├── frost-core v3.0.0
+    │   ├── frost-rerandomized v3.0.0
+    │   │   └── frost-secp256k1 v3.0.0 (*)
+    │   ├── frost-secp256k1 v3.0.0 (*)
+    │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    ├── frost-rerandomized v3.0.0 (*)
+    ├── frost-secp256k1 v3.0.0 (*)
+    ├── group v0.13.0 (*)
+    ├── rand v0.8.6
+    │   ├── alloy-signer-local v2.0.5 (*)
+    │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    ├── rand_chacha v0.3.1
+    │   ├── rand v0.8.6 (*)
+    │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    └── signature v2.2.0 (*)
+
+getrandom v0.3.4
+└── rand_core v0.9.5
+    ├── rand v0.9.4
+    │   ├── metrics-util v0.20.4
+    │   │   └── metrics-exporter-prometheus v0.18.3 (*)
+    │   └── tungstenite v0.28.0 (*)
+    ├── rand_chacha v0.9.0
+    │   └── rand v0.9.4 (*)
+    └── rand_xoshiro v0.7.0
+        └── metrics-util v0.20.4 (*)
+
+hashbrown v0.14.5
+└── dashmap v6.2.1
+    └── alloy-provider v2.0.5 (*)
+
+hashbrown v0.16.1
+├── hashlink v0.11.1
+│   └── sqlx-core v0.9.0 (*)
+├── lru v0.16.4
+│   └── alloy-provider v2.0.5 (*)
+├── metrics-util v0.20.4 (*)
+└── sqlx-core v0.9.0 (*)
+
+hashbrown v0.17.1
+└── indexmap v2.14.0
+    ├── alloy-sol-macro-expander v1.6.0 (*)
+    ├── h2 v0.4.14 (*)
+    ├── metrics-exporter-prometheus v0.18.3 (*)
+    └── sqlx-core v0.9.0 (*)
+
+hashbrown v0.17.1
+└── alloy-primitives v1.6.0 (*)
+
+hex v0.4.3
+└── sqlx-macros-core v0.9.0 (*)
+
+hex v0.4.3
+├── c-kzg v2.1.7
+│   ├── alloy-consensus v2.0.5 (*)
+│   └── alloy-eips v2.0.5 (*)
+├── frost-core v3.0.0 (*)
+└── frost-rerandomized v3.0.0 (*)
+
+hmac v0.12.1 (*)
+
+hmac v0.13.0 (*)
+
+libc v0.2.186
+├── c-kzg v2.1.7 (*)
+├── cpufeatures v0.2.17 (*)
+├── cpufeatures v0.3.0 (*)
+├── errno v0.3.14
+│   └── signal-hook-registry v1.4.8
+│       └── tokio v1.52.3
+│           ├── alloy-provider v2.0.5 (*)
+│           ├── alloy-pubsub v2.0.5 (*)
+│           ├── alloy-rpc-client v2.0.5 (*)
+│           ├── alloy-transport v2.0.5 (*)
+│           ├── alloy-transport-ipc v2.0.5 (*)
+│           ├── alloy-transport-ws v2.0.5 (*)
+│           ├── axum v0.8.9 (*)
+│           ├── h2 v0.4.14 (*)
+│           ├── hyper v1.10.1 (*)
+│           ├── hyper-rustls v0.27.9 (*)
+│           ├── hyper-util v0.1.20 (*)
+│           ├── interprocess v2.4.2
+│           │   └── alloy-transport-ipc v2.0.5 (*)
+│           ├── metrics-exporter-prometheus v0.18.3 (*)
+│           ├── reqwest v0.13.4 (*)
+│           ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│           ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│           ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│           ├── sqlx-core v0.9.0 (*)
+│           ├── tokio-metrics v0.5.2 (*)
+│           ├── tokio-rustls v0.26.4
+│           │   ├── hyper-rustls v0.27.9 (*)
+│           │   ├── reqwest v0.13.4 (*)
+│           │   └── tokio-tungstenite v0.28.0 (*)
+│           ├── tokio-stream v0.1.18 (*)
+│           ├── tokio-tungstenite v0.28.0 (*)
+│           ├── tokio-util v0.7.18 (*)
+│           ├── tower v0.5.3 (*)
+│           └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│           [dev-dependencies]
+│           ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│           └── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+├── getrandom v0.2.17 (*)
+├── getrandom v0.3.4 (*)
+├── hyper-util v0.1.20 (*)
+├── interprocess v2.4.2 (*)
+├── mio v1.2.1
+│   ├── tokio v1.52.3 (*)
+│   └── tokio v1.52.3
+│       └── sqlx-macros-core v0.9.0 (*)
+├── num_cpus v1.17.0
+│   └── threadpool v1.8.1
+│       └── blst v0.3.16
+│           └── c-kzg v2.1.7 (*)
+├── parking_lot_core v0.9.12
+│   ├── dashmap v6.2.1 (*)
+│   └── parking_lot v0.12.5
+│       ├── alloy-provider v2.0.5 (*)
+│       ├── alloy-pubsub v2.0.5 (*)
+│       ├── alloy-transport v2.0.5 (*)
+│       ├── futures-intrusive v0.5.0
+│       │   ├── sqlx-core v0.9.0 (*)
+│       │   ├── sqlx-sqlite v0.9.0 (*)
+│       │   └── sqlx-sqlite v0.9.0 (*)
+│       └── tokio v1.52.3 (*)
+├── quanta v0.12.6
+│   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   └── metrics-util v0.20.4 (*)
+├── rand v0.8.6 (*)
+├── signal-hook-registry v1.4.8 (*)
+├── socket2 v0.6.4
+│   ├── hyper-util v0.1.20 (*)
+│   ├── tokio v1.52.3 (*)
+│   └── tokio v1.52.3 (*)
+└── tokio v1.52.3 (*)
+
+libc v0.2.186
+├── cc v1.2.63
+│   └── cmake v0.1.58
+│       [build-dependencies]
+│       └── aws-lc-sys v0.41.0
+│           └── aws-lc-rs v1.17.0
+│               ├── rustls v0.23.40
+│               │   ├── alloy-transport-ws v2.0.5 (*)
+│               │   ├── hyper-rustls v0.27.9 (*)
+│               │   ├── metrics-exporter-prometheus v0.18.3 (*)
+│               │   ├── reqwest v0.13.4 (*)
+│               │   ├── rustls-platform-verifier v0.7.0
+│               │   │   └── reqwest v0.13.4 (*)
+│               │   ├── tokio-rustls v0.26.4 (*)
+│               │   ├── tokio-tungstenite v0.28.0 (*)
+│               │   └── tungstenite v0.28.0 (*)
+│               └── rustls-webpki v0.103.13
+│                   ├── rustls v0.23.40 (*)
+│                   └── rustls-platform-verifier v0.7.0 (*)
+│   [build-dependencies]
+│   ├── aws-lc-sys v0.41.0 (*)
+│   ├── blst v0.3.16 (*)
+│   ├── c-kzg v2.1.7 (*)
+│   ├── libsqlite3-sys v0.37.0
+│   │   └── sqlx-sqlite v0.9.0 (*)
+│   └── libsqlite3-sys v0.37.0
+│       └── sqlx-sqlite v0.9.0 (*)
+├── jobserver v0.1.34
+│   └── cc v1.2.63 (*)
+└── tokio v1.52.3 (*)
+
+libsqlite3-sys v0.37.0 (*)
+
+libsqlite3-sys v0.37.0 (*)
+
+log v0.4.32
+└── sqlx-sqlite v0.9.0 (*)
+
+log v0.4.32
+├── reqwest v0.13.4 (*)
+├── rustls-platform-verifier v0.7.0 (*)
+├── sqlx-core v0.9.0 (*)
+├── sqlx-sqlite v0.9.0 (*)
+├── tokio-tungstenite v0.28.0 (*)
+├── tracing v0.1.44
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── alloy-json-rpc v2.0.5 (*)
+│   ├── alloy-provider v2.0.5 (*)
+│   ├── alloy-pubsub v2.0.5 (*)
+│   ├── alloy-rpc-client v2.0.5 (*)
+│   ├── alloy-transport v2.0.5 (*)
+│   ├── alloy-transport-http v2.0.5 (*)
+│   ├── alloy-transport-ipc v2.0.5 (*)
+│   ├── alloy-transport-ws v2.0.5 (*)
+│   ├── alloy-trie v0.9.5 (*)
+│   ├── axum v0.8.9 (*)
+│   ├── axum-core v0.5.6
+│   │   └── axum v0.8.9 (*)
+│   ├── h2 v0.4.14 (*)
+│   ├── hyper-util v0.1.20 (*)
+│   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   ├── sqlx-core v0.9.0 (*)
+│   ├── sqlx-sqlite v0.9.0 (*)
+│   ├── sqlx-sqlite v0.9.0 (*)
+│   ├── tower v0.5.3 (*)
+│   ├── tower-http v0.7.0
+│   │   └── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   ├── tracing-subscriber v0.3.23
+│   │   └── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+├── tracing-log v0.2.0
+│   └── tracing-subscriber v0.3.23 (*)
+└── tungstenite v0.28.0 (*)
+
+rand v0.8.6 (*)
+
+rand v0.9.4 (*)
+
+rand_chacha v0.3.1 (*)
+
+rand_chacha v0.9.0 (*)
+
+rand_core v0.6.4 (*)
+
+rand_core v0.9.5 (*)
+
+ruint v1.18.0
+├── alloy-primitives v1.6.0 (*)
+└── nybbles v0.4.8
+    └── alloy-trie v0.9.5 (*)
+
+ruint v1.18.0
+└── alloy-primitives v1.6.0 (*)
+
+rustc-hash v2.1.2
+└── alloy-primitives v1.6.0 (*)
+
+rustc-hash v2.1.2
+└── alloy-primitives v1.6.0 (*)
+
+serde_core v1.0.228
+├── axum v0.8.9 (*)
+├── const-hex v1.19.1 (*)
+├── hashbrown v0.17.1 (*)
+├── ruint v1.18.0 (*)
+├── serde v1.0.228
+│   ├── alloy-consensus v2.0.5 (*)
+│   ├── alloy-consensus-any v2.0.5 (*)
+│   ├── alloy-eip2124 v0.2.0 (*)
+│   ├── alloy-eip2930 v0.2.3 (*)
+│   ├── alloy-eip7702 v0.6.3 (*)
+│   ├── alloy-eip7928 v0.3.7 (*)
+│   ├── alloy-eips v2.0.5 (*)
+│   ├── alloy-json-abi v1.6.0 (*)
+│   ├── alloy-json-abi v1.6.0 (*)
+│   ├── alloy-json-rpc v2.0.5 (*)
+│   ├── alloy-network v2.0.5 (*)
+│   ├── alloy-network-primitives v2.0.5 (*)
+│   ├── alloy-primitives v1.6.0 (*)
+│   ├── alloy-primitives v1.6.0 (*)
+│   ├── alloy-provider v2.0.5 (*)
+│   ├── alloy-pubsub v2.0.5 (*)
+│   ├── alloy-rpc-client v2.0.5 (*)
+│   ├── alloy-rpc-types v2.0.5 (*)
+│   ├── alloy-rpc-types-anvil v2.0.5 (*)
+│   ├── alloy-rpc-types-any v2.0.5 (*)
+│   ├── alloy-rpc-types-debug v2.0.5 (*)
+│   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   ├── alloy-rpc-types-trace v2.0.5 (*)
+│   ├── alloy-rpc-types-txpool v2.0.5 (*)
+│   ├── alloy-serde v2.0.5 (*)
+│   ├── alloy-sol-type-parser v1.6.0 (*)
+│   ├── alloy-sol-type-parser v1.6.0 (*)
+│   ├── alloy-transport v2.0.5 (*)
+│   ├── alloy-transport-ipc v2.0.5 (*)
+│   ├── alloy-trie v0.9.5 (*)
+│   ├── argh_shared v0.1.19 (*)
+│   ├── bytes v1.11.1
+│   │   ├── alloy-primitives v1.6.0 (*)
+│   │   ├── alloy-primitives v1.6.0 (*)
+│   │   ├── alloy-rlp v0.3.15
+│   │   │   ├── alloy-consensus v2.0.5 (*)
+│   │   │   ├── alloy-consensus-any v2.0.5 (*)
+│   │   │   ├── alloy-core v1.6.0 (*)
+│   │   │   ├── alloy-eip2124 v0.2.0 (*)
+│   │   │   ├── alloy-eip2930 v0.2.3 (*)
+│   │   │   ├── alloy-eip7702 v0.6.3 (*)
+│   │   │   ├── alloy-eip7928 v0.3.7 (*)
+│   │   │   ├── alloy-eips v2.0.5 (*)
+│   │   │   ├── alloy-primitives v1.6.0 (*)
+│   │   │   ├── alloy-rpc-types-debug v2.0.5 (*)
+│   │   │   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   │   │   ├── alloy-trie v0.9.5 (*)
+│   │   │   └── ruint v1.18.0 (*)
+│   │   ├── alloy-transport-ipc v2.0.5 (*)
+│   │   ├── axum v0.8.9 (*)
+│   │   ├── axum-core v0.5.6 (*)
+│   │   ├── h2 v0.4.14 (*)
+│   │   ├── http v1.4.2
+│   │   │   ├── alloy-json-rpc v2.0.5 (*)
+│   │   │   ├── alloy-transport-ws v2.0.5 (*)
+│   │   │   ├── axum v0.8.9 (*)
+│   │   │   ├── axum-core v0.5.6 (*)
+│   │   │   ├── h2 v0.4.14 (*)
+│   │   │   ├── http-body v1.0.1
+│   │   │   │   ├── axum v0.8.9 (*)
+│   │   │   │   ├── axum-core v0.5.6 (*)
+│   │   │   │   ├── http-body-util v0.1.3
+│   │   │   │   │   ├── axum v0.8.9 (*)
+│   │   │   │   │   ├── axum-core v0.5.6 (*)
+│   │   │   │   │   ├── metrics-exporter-prometheus v0.18.3 (*)
+│   │   │   │   │   └── reqwest v0.13.4 (*)
+│   │   │   │   ├── hyper v1.10.1 (*)
+│   │   │   │   ├── hyper-util v0.1.20 (*)
+│   │   │   │   ├── reqwest v0.13.4 (*)
+│   │   │   │   ├── tower-http v0.6.11 (*)
+│   │   │   │   └── tower-http v0.7.0 (*)
+│   │   │   ├── http-body-util v0.1.3 (*)
+│   │   │   ├── hyper v1.10.1 (*)
+│   │   │   ├── hyper-rustls v0.27.9 (*)
+│   │   │   ├── hyper-util v0.1.20 (*)
+│   │   │   ├── reqwest v0.13.4 (*)
+│   │   │   ├── tower-http v0.6.11 (*)
+│   │   │   ├── tower-http v0.7.0 (*)
+│   │   │   └── tungstenite v0.28.0 (*)
+│   │   ├── http-body v1.0.1 (*)
+│   │   ├── http-body-util v0.1.3 (*)
+│   │   ├── hyper v1.10.1 (*)
+│   │   ├── hyper-util v0.1.20 (*)
+│   │   ├── reqwest v0.13.4 (*)
+│   │   ├── sqlx-core v0.9.0 (*)
+│   │   ├── tokio v1.52.3 (*)
+│   │   ├── tokio v1.52.3 (*)
+│   │   ├── tokio-util v0.7.18 (*)
+│   │   ├── tower-http v0.6.11 (*)
+│   │   ├── tower-http v0.7.0 (*)
+│   │   └── tungstenite v0.28.0 (*)
+│   ├── c-kzg v2.1.7 (*)
+│   ├── darling_core v0.23.0
+│   │   ├── darling v0.23.0
+│   │   │   ├── alloy-tx-macros v2.0.5 (proc-macro)
+│   │   │   │   └── alloy-consensus v2.0.5 (*)
+│   │   │   └── serde_with_macros v3.21.0 (proc-macro)
+│   │   │       └── serde_with v3.21.0
+│   │   │           ├── alloy-eips v2.0.5 (*)
+│   │   │           └── alloy-rpc-types-debug v2.0.5 (*)
+│   │   └── darling_macro v0.23.0 (proc-macro)
+│   │       └── darling v0.23.0 (*)
+│   ├── either v1.16.0
+│   │   ├── alloy-consensus v2.0.5 (*)
+│   │   ├── alloy-eips v2.0.5 (*)
+│   │   ├── alloy-provider v2.0.5 (*)
+│   │   ├── alloy-signer v2.0.5 (*)
+│   │   ├── itertools v0.14.0
+│   │   │   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   │   │   ├── alloy-transport-http v2.0.5 (*)
+│   │   │   └── frost-core v3.0.0 (*)
+│   │   ├── rayon v1.12.0
+│   │   │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │   ├── sqlx-core v0.9.0 (*)
+│   │   └── sqlx-macros-core v0.9.0 (*)
+│   ├── frost-core v3.0.0 (*)
+│   ├── heapless v0.7.17
+│   │   └── postcard v1.1.3
+│   │       └── frost-core v3.0.0 (*)
+│   ├── nybbles v0.4.8 (*)
+│   ├── postcard v1.1.3 (*)
+│   ├── reqwest v0.13.4 (*)
+│   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   ├── serde_urlencoded v0.7.1
+│   │   └── axum v0.8.9 (*)
+│   ├── serdect v0.2.0
+│   │   ├── ecdsa v0.16.9 (*)
+│   │   ├── elliptic-curve v0.13.8 (*)
+│   │   ├── frost-core v3.0.0 (*)
+│   │   ├── k256 v0.13.4 (*)
+│   │   └── sec1 v0.7.3 (*)
+│   ├── smallvec v1.15.1
+│   │   ├── alloy-trie v0.9.5 (*)
+│   │   ├── evmap v11.0.0
+│   │   │   └── metrics-exporter-prometheus v0.18.3 (*)
+│   │   ├── hyper v1.10.1 (*)
+│   │   ├── icu_normalizer v2.2.0
+│   │   │   └── idna_adapter v1.2.2
+│   │   │       └── idna v1.1.0
+│   │   │           ├── url v2.5.8
+│   │   │           │   ├── alloy-provider v2.0.5 (*)
+│   │   │           │   ├── alloy-rpc-client v2.0.5 (*)
+│   │   │           │   ├── alloy-transport v2.0.5 (*)
+│   │   │           │   ├── alloy-transport-http v2.0.5 (*)
+│   │   │           │   ├── alloy-transport-ws v2.0.5 (*)
+│   │   │           │   ├── reqwest v0.13.4 (*)
+│   │   │           │   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   │   │           │   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   │   │           │   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   │   │           │   ├── sqlx-core v0.9.0 (*)
+│   │   │           │   ├── sqlx-sqlite v0.9.0 (*)
+│   │   │           │   ├── tower-http v0.6.11 (*)
+│   │   │           │   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+│   │   │           └── url v2.5.8
+│   │   │               ├── sqlx-macros-core v0.9.0 (*)
+│   │   │               └── sqlx-sqlite v0.9.0 (*)
+│   │   ├── idna v1.1.0 (*)
+│   │   ├── nybbles v0.4.8 (*)
+│   │   ├── parking_lot_core v0.9.12 (*)
+│   │   ├── sqlx-core v0.9.0 (*)
+│   │   └── tracing-subscriber v0.3.23 (*)
+│   ├── sqlx-core v0.9.0 (*)
+│   ├── sqlx-macros-core v0.9.0 (*)
+│   ├── sqlx-sqlite v0.9.0 (*)
+│   ├── sqlx-sqlite v0.9.0 (*)
+│   ├── tracing-serde v0.2.0
+│   │   └── tracing-subscriber v0.3.23 (*)
+│   ├── tracing-subscriber v0.3.23 (*)
+│   ├── url v2.5.8 (*)
+│   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+├── serde_json v1.0.150
+│   ├── alloy-consensus v2.0.5 (*)
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── alloy-json-abi v1.6.0 (*)
+│   ├── alloy-json-rpc v2.0.5 (*)
+│   ├── alloy-network v2.0.5 (*)
+│   ├── alloy-provider v2.0.5 (*)
+│   ├── alloy-pubsub v2.0.5 (*)
+│   ├── alloy-rpc-client v2.0.5 (*)
+│   ├── alloy-rpc-types-any v2.0.5 (*)
+│   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   ├── alloy-rpc-types-trace v2.0.5 (*)
+│   ├── alloy-serde v2.0.5 (*)
+│   ├── alloy-sol-macro-input v1.6.0 (*)
+│   ├── alloy-transport v2.0.5 (*)
+│   ├── alloy-transport-http v2.0.5 (*)
+│   ├── alloy-transport-ipc v2.0.5 (*)
+│   ├── alloy-transport-ws v2.0.5 (*)
+│   ├── axum v0.8.9 (*)
+│   ├── reqwest v0.13.4 (*)
+│   ├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+│   ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│   ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│   ├── sqlx-core v0.9.0 (*)
+│   ├── sqlx-macros-core v0.9.0 (*)
+│   ├── tracing-subscriber v0.3.23 (*)
+│   └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+├── serde_path_to_error v0.1.20
+│   └── axum v0.8.9 (*)
+├── serde_spanned v1.1.1
+│   └── toml v1.1.2+spec-1.1.0
+│       ├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+│       ├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+│       └── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+├── serde_with v3.21.0 (*)
+├── toml v1.1.2+spec-1.1.0 (*)
+└── toml_datetime v1.1.1+spec-1.1.0
+    └── toml v1.1.2+spec-1.1.0 (*)
+
+serde_core v1.0.228
+├── const-hex v1.19.1 (*)
+└── ruint v1.18.0 (*)
+
+sha2 v0.10.9 (*)
+
+sha2 v0.10.9 (*)
+
+sha2 v0.11.0 (*)
+
+slab v0.4.12
+├── futures-util v0.3.32 (*)
+├── h2 v0.4.14 (*)
+└── left-right v0.11.7
+    └── evmap v11.0.0 (*)
+
+slab v0.4.12
+└── futures-util v0.3.32 (*)
+
+sqlx-sqlite v0.9.0 (*)
+
+sqlx-sqlite v0.9.0 (*)
+
+thiserror v2.0.18
+├── alloy-consensus v2.0.5 (*)
+├── alloy-contract v2.0.5 (*)
+├── alloy-eip2124 v0.2.0 (*)
+├── alloy-eip7702 v0.6.3 (*)
+├── alloy-eip7928 v0.3.7 (*)
+├── alloy-json-rpc v2.0.5 (*)
+├── alloy-network v2.0.5 (*)
+├── alloy-provider v2.0.5 (*)
+├── alloy-rpc-types-eth v2.0.5 (*)
+├── alloy-rpc-types-trace v2.0.5 (*)
+├── alloy-signer v2.0.5 (*)
+├── alloy-signer-local v2.0.5 (*)
+├── alloy-transport v2.0.5 (*)
+├── alloy-trie v0.9.5 (*)
+├── cobs v0.3.0
+│   └── postcard v1.1.3 (*)
+├── frost-core v3.0.0 (*)
+├── metrics-exporter-prometheus v0.18.3 (*)
+├── safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core) (*)
+├── sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+├── sentinel-engine v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel-engine)
+├── sqlx-core v0.9.0 (*)
+├── sqlx-sqlite v0.9.0 (*)
+├── tungstenite v0.28.0 (*)
+└── validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+
+thiserror v2.0.18
+├── sqlx-macros-core v0.9.0 (*)
+└── sqlx-sqlite v0.9.0 (*)
+
+tokio v1.52.3 (*)
+
+tokio v1.52.3 (*)
+
+tower-http v0.6.11 (*)
+
+tower-http v0.7.0 (*)
+
+url v2.5.8 (*)
+
+url v2.5.8 (*)
+
+webpki-roots v0.26.11
+└── tokio-tungstenite v0.28.0 (*)
+
+webpki-roots v1.0.7
+└── webpki-roots v0.26.11 (*)
+
+winnow v1.0.3
+└── alloy-sol-type-parser v1.6.0 (*)
+
+winnow v1.0.3
+├── alloy-dyn-abi v1.6.0 (*)
+├── alloy-sol-type-parser v1.6.0 (*)
+├── toml v1.1.2+spec-1.1.0 (*)
+└── toml_parser v1.1.2+spec-1.1.0
+    └── toml v1.1.2+spec-1.1.0 (*)

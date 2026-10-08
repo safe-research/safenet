@@ -1,0 +1,140 @@
+# R8 config parsing tests, commit 3ec8bc5
+# effective rpc in every scratch config: http://127.0.0.1:9 (loopback discard port); database sqlite::memory:
+# binaries: cargo run --offline --locked -p <bin> -- --config-file <scratch>
+-rwxrwxr-x 2 shebin shebin 222829648 Sep 15 16:06 /home/shebin.guest/.cache/safenet-run2/target/debug/sentinel
+-rwxrwxr-x 2 shebin shebin 252817216 Sep 15 16:06 /home/shebin.guest/.cache/safenet-run2/target/debug/validator
+
+=================== validator val-unknown-toplevel.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+    | database = "sqlite::memory:"
+    | this_key_does_not_exist = 1
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+--- output:
+Error: Parse(Error { message: "unknown field `this_key_does_not_exist`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0000000000000000000000000000000000000000000000000000000000000001\"\ndatabase = \"sqlite::memory:\"\nthis_key_does_not_exist = 1\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\n"), keys: [], span: Some(0..0) })
+--- exit=1
+
+=================== validator val-typo-table.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+    | database = "sqlite::memory:"
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+    | [transaction]
+    | max_in_flight_transactions = 1
+--- output:
+Error: Parse(Error { message: "unknown field `transaction`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0000000000000000000000000000000000000000000000000000000000000001\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\n\n[transaction]\nmax_in_flight_transactions = 1\n"), keys: [], span: Some(0..0) })
+--- exit=1
+
+=================== validator val-unknown-in-index.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+    | database = "sqlite::memory:"
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+    | [index]
+    | use_client_filtering = true
+    | max_reorg_dept = 3
+--- output:
+Error: Parse(Error { message: "unknown field `max_reorg_dept`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0000000000000000000000000000000000000000000000000000000000000001\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\n\n[index]\nuse_client_filtering = true\nmax_reorg_dept = 3\n"), keys: [], span: Some(0..0) })
+--- exit=1
+
+=================== validator val-control.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+    | database = "sqlite::memory:"
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+    | [index]
+    | use_client_filtering = true
+    | max_reorg_depth = 3
+--- output:
+{"timestamp":"2026-09-15T10:59:24.028597Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:45027"},"target":"safenet_core::observability"}
+Error: Transport(Custom(reqwest::Error { kind: Request, url: "http://127.0.0.1:9/", source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+--- exit=1
+
+=================== sentinel sen-unknown-toplevel.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+    | database = "sqlite::memory:"
+    | oracle = "0x0101010101010101010101010101010101010101"
+    | consensus = "0x0202020202020202020202020202020202020202"
+    | this_key_does_not_exist = 1
+    | [sentinel]
+    | fee_token = "0x0303030303030303030303030303030303030303"
+    | voting_window = 100
+    | engine = "http://127.0.0.1:9"
+--- output:
+Error: Parse(Error { message: "unknown field `this_key_does_not_exist`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0000000000000000000000000000000000000000000000000000000000000001\"\ndatabase = \"sqlite::memory:\"\noracle = \"0x0101010101010101010101010101010101010101\"\nconsensus = \"0x0202020202020202020202020202020202020202\"\nthis_key_does_not_exist = 1\n\n[sentinel]\nfee_token = \"0x0303030303030303030303030303030303030303\"\nvoting_window = 100\nengine = \"http://127.0.0.1:9\"\n"), keys: [], span: Some(0..0) })
+--- exit=1
+
+=================== sentinel sen-typo-table.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+    | database = "sqlite::memory:"
+    | oracle = "0x0101010101010101010101010101010101010101"
+    | consensus = "0x0202020202020202020202020202020202020202"
+    | [sentinel]
+    | fee_token = "0x0303030303030303030303030303030303030303"
+    | voting_window = 100
+    | engine = "http://127.0.0.1:9"
+    | [transaction]
+    | max_in_flight_transactions = 1
+--- output:
+Error: Parse(Error { message: "unknown field `transaction`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0000000000000000000000000000000000000000000000000000000000000001\"\ndatabase = \"sqlite::memory:\"\noracle = \"0x0101010101010101010101010101010101010101\"\nconsensus = \"0x0202020202020202020202020202020202020202\"\n\n[sentinel]\nfee_token = \"0x0303030303030303030303030303030303030303\"\nvoting_window = 100\nengine = \"http://127.0.0.1:9\"\n\n[transaction]\nmax_in_flight_transactions = 1\n"), keys: [], span: Some(0..0) })
+--- exit=1
+
+# appended: malformed signer (31 bytes) and zero NonZeroU64 -- does the error echo the signer line?
+
+=================== validator val-bad-signer.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbe"
+    | database = "sqlite::memory:"
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+--- output:
+Error: Parse(Error { message: "invalid string length", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbe\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\n"), keys: ["signer"], span: Some(36..102) })
+--- exit=1
+
+=================== validator val-bad-window.toml
+    | rpc = "http://127.0.0.1:9"
+    | signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+    | database = "sqlite::memory:"
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+    | blocks_per_epoch = 0
+--- output:
+Error: Parse(Error { message: "invalid value: integer `0`, expected a nonzero u64", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0000000000000000000000000000000000000000000000000000000000000001\"\ndatabase = \"sqlite::memory:\"\n\n[validator]\nconsensus = \"0x1111111111111111111111111111111111111111\"\nblocks_per_epoch = 0\n"), keys: ["validator", "blocks_per_epoch"], span: Some(223..224) })
+--- exit=1
+
+=================== Display form of the same toml error (cargo test output is Debug; show Display via a one-off: python not applicable). Debug shown above is what main() prints.
+
+# appended: fresh-volume database test. rpc = http://127.0.0.1:8745 = a python stub (pid 2311972, started by R8) answering every JSON-RPC call with result 0x64; directory exists, file does not.
+
+=================== validator val-fresh-volume.toml
+    | rpc = "http://127.0.0.1:8745"
+    | signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+    | database = "sqlite:<scratch>/fresh-volume/storage.db"
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+--- ls before:
+--- output:
+{"timestamp":"2026-09-15T11:03:35.692674Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:34965"},"target":"safenet_core::observability"}
+Error: Database(SqliteError { code: 14, message: "unable to open database file" })
+--- exit=1
+--- ls after:
+
+=================== validator val-fresh-volume-rwc.toml
+    | rpc = "http://127.0.0.1:8745"
+    | signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+    | database = "sqlite:<scratch>/fresh-volume/storage-rwc.db?mode=rwc"
+    | [validator]
+    | consensus = "0x1111111111111111111111111111111111111111"
+--- ls before:
+--- output:
+{"timestamp":"2026-09-15T11:03:35.971753Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:38385"},"target":"safenet_core::observability"}
+Error: AbiError(SolTypes(Overrun))
+--- exit=1
+--- ls after:
+    storage-rwc.db

@@ -1,0 +1,98 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.71s
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 14 tests
+test index::events::tests::qa_f2_core_002_client_filtering_is_abandoned_after_the_retry_budget ... attempt 1 (ClientFiltered, node serves []): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 2 (ClientFiltered, node serves []): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 3 (ClientFiltered, node serves []): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 4 (MultipleQueries, node serves [] per topic): Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+ok
+test index::events::tests::qa_f2_core_002_transient_errors_spend_the_client_filtering_budget ... attempt 1 (ClientFiltered, transport error): Err(Rpc(ErrorResp(ErrorPayload { code: -32603, message: "429 Too Many Requests", data: None })))
+attempt 2 (ClientFiltered, transport error): Err(Rpc(ErrorResp(ErrorPayload { code: -32603, message: "429 Too Many Requests", data: None })))
+attempt 3 (ClientFiltered, transport error): Err(Rpc(ErrorResp(ErrorPayload { code: -32603, message: "429 Too Many Requests", data: None })))
+attempt 4 (MultipleQueries, node serves []): Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+ok
+test index::tests::qa_f2_core_005_max_logs_per_query_reached_within_one_block_stalls_forever ... attempt 1 (SingleQuery): Err(Events(TooManyLogs))
+attempt 2 (SingleQuery): Err(Events(TooManyLogs))
+attempt 3 (SingleQuery): Err(Events(TooManyLogs))
+attempt 4 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 5 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 6 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 7 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 8 (MultipleQueries): Err(Events(TooManyLogs))
+ok
+test index::tests::qa_f2_core_005_undecodable_log_stalls_the_watcher_and_starves_the_block_watcher ... attempt  1 (SingleQuery): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  2 (SingleQuery): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  3 (SingleQuery): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  4 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  5 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  6 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  7 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  8 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  9 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt 10 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt 11 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt 12 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+after 12 attempts: block watcher status BlockStatus { latest: 1000, safe: 999 }; unconsumed mock responses: 1
+ok
+test tx::tests::qa_f2_core_060_accepted_but_unmined_transaction_compounds_fees_without_ceiling ... bump  0 at block  10: maxFeePerGas=210 maxPriorityFeePerGas=10
+bump  1 at block  12: maxFeePerGas=231 maxPriorityFeePerGas=11  (x1.1 / x1.1 of the estimate)
+bump  2 at block  14: maxFeePerGas=255 maxPriorityFeePerGas=13  (x1.2 / x1.3 of the estimate)
+bump  3 at block  16: maxFeePerGas=281 maxPriorityFeePerGas=15  (x1.3 / x1.5 of the estimate)
+bump  6 at block  22: maxFeePerGas=376 maxPriorityFeePerGas=21  (x1.8 / x2.1 of the estimate)
+bump 12 at block  34: maxFeePerGas=670 maxPriorityFeePerGas=41  (x3.2 / x4.1 of the estimate)
+bump 18 at block  46: maxFeePerGas=1191 maxPriorityFeePerGas=77  (x5.7 / x7.7 of the estimate)
+bump 24 at block  58: maxFeePerGas=2115 maxPriorityFeePerGas=140  (x10.1 / x14.0 of the estimate)
+bump 30 at block  70: maxFeePerGas=3749 maxPriorityFeePerGas=250  (x17.9 / x25.0 of the estimate)
+bump 36 at block  82: maxFeePerGas=6646 maxPriorityFeePerGas=446  (x31.6 / x44.6 of the estimate)
+bump 42 at block  94: maxFeePerGas=11778 maxPriorityFeePerGas=795  (x56.1 / x79.5 of the estimate)
+bump 48 at block 106: maxFeePerGas=20869 maxPriorityFeePerGas=1412  (x99.4 / x141.2 of the estimate)
+bump 54 at block 118: maxFeePerGas=36974 maxPriorityFeePerGas=2505  (x176.1 / x250.5 of the estimate)
+bump 60 at block 130: maxFeePerGas=65505 maxPriorityFeePerGas=4441  (x311.9 / x444.1 of the estimate)
+1.1^60 = 304.5
+ok
+test tx::tests::qa_f2_core_060_row_behind_a_generically_rejected_row_compounds ... nonce 0 data 0x01 maxFeePerGas=None maxPriorityFeePerGas=None
+nonce 1 data 0x02 maxFeePerGas=Some(553) maxPriorityFeePerGas=Some(33)
+ok
+test tx::tests::qa_f2_core_061_false_execution_mark_is_irrevocable_and_opens_a_nonce_gap ... after block 11 (reading 1): [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x01\",\"gas\":21000,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}", None, Some(0), Some(10), Some(11))]
+blocks 12..=15: no RPC issued, mark untouched
+second action allocated nonce 1 while the chain nonce reads 0
+after block 30: [(2, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x02\",\"gas\":21000,\"maxFeePerGas\":\"0x19e\",\"maxPriorityFeePerGas\":\"0x18\"}", None, Some(1), Some(29), None)]
+row 1 after 7 bumps: maxFeePerGas=Some(414) maxPriorityFeePerGas=Some(24)
+ok
+test tx::tests::qa_f2_core_061_gap_closes_when_nothing_is_queued_inside_the_retention_window ... after block 17 (safe 12): []
+next action allocated nonce 0
+ok
+test tx::tests::qa_f2_core_062_first_submission_underpriced_wordings_are_not_recognised ... "transaction underpriced" -> is_transaction_underpriced = false
+"underpriced" -> is_transaction_underpriced = false
+"FeeTooLow" -> is_transaction_underpriced = false
+"fee too low" -> is_transaction_underpriced = false
+"max priority fee per gas below minimum" -> is_transaction_underpriced = false
+ok
+test tx::tests::qa_f2_core_062_unrecognised_first_submission_rejection_retries_identically_forever ... after 11 blocks: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x01\",\"gas\":21000}", None, Some(0), None, None), (2, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x02\",\"gas\":21000}", None, Some(1), None, None)]
+ok
+test tx::tests::qa_f2_core_062_zero_priority_fee_is_never_bumped ... cap 0%  : Eip1559Estimation { max_fee_per_gas: 210, max_priority_fee_per_gas: 10 } -> Eip1559Estimation { max_fee_per_gas: 200, max_priority_fee_per_gas: 0 }
+cap NaN : Eip1559Estimation { max_fee_per_gas: 210, max_priority_fee_per_gas: 10 } -> Eip1559Estimation { max_fee_per_gas: 200, max_priority_fee_per_gas: 0 }
+replacement 1: Eip1559Estimation { max_fee_per_gas: 220, max_priority_fee_per_gas: 0 }
+replacement 2: Eip1559Estimation { max_fee_per_gas: 242, max_priority_fee_per_gas: 0 }
+replacement 3: Eip1559Estimation { max_fee_per_gas: 267, max_priority_fee_per_gas: 0 }
+replacement 4: Eip1559Estimation { max_fee_per_gas: 294, max_priority_fee_per_gas: 0 }
+replacement 5: Eip1559Estimation { max_fee_per_gas: 324, max_priority_fee_per_gas: 0 }
+ok
+test tx::tests::qa_f2_core_063_replayed_action_is_enqueued_and_broadcast_again_with_a_new_nonce ... rows after the replay: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x5afe\",\"gas\":21000,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}", None, Some(0), Some(10), Some(11)), (2, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x5afe\",\"gas\":21000,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}", None, Some(1), Some(11), None)]
+ok
+test tx::tests::qa_f2_core_064_never_accepted_row_is_broadcast_after_its_expiry ... block 11: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0xc0\",\"gas\":21000}", Some(12), Some(0), None, None)]
+block 14: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0xc0\",\"gas\":21000,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}", Some(12), Some(0), Some(14), None)]
+ok
+test tx::tests::qa_f2_core_065_degenerate_config_values_are_accepted_and_misbehave_silently ... parsed: Config { max_in_flight_transactions: 0, blocks_before_resubmit: 0, priority_fee_cap_percentage: None }
+cap NaN: Eip1559Estimation { max_fee_per_gas: 40, max_priority_fee_per_gas: 0 }
+max_in_flight_transactions = 0: 3 blocks, 3 nonce RPCs, 0 submissions
+blocks_before_resubmit = 0: block 10: maxFeePerGas=Some(210) maxPriorityFeePerGas=Some(10)
+blocks_before_resubmit = 0: block 11: maxFeePerGas=Some(231) maxPriorityFeePerGas=Some(11)
+blocks_before_resubmit = 0: block 12: maxFeePerGas=Some(255) maxPriorityFeePerGas=Some(13)
+blocks_before_resubmit = 0: block 13: maxFeePerGas=Some(281) maxPriorityFeePerGas=Some(15)
+ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.20s
+

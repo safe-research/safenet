@@ -1,0 +1,55 @@
+fe9e84cc59b65367b31d5a3121774383cc422234
+   Compiling sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.35s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/sentinel-152a0c2d5ccd9f00)
+
+running 44 tests
+test config::tests::rejects_config_missing_a_deployment_specific_field ... ok
+test config::tests::deserializes_required_fields_and_defaults_the_rest ... ok
+test config::tests::parses_sample_config ... ok
+test config::tests::rejects_config_missing_the_engine_url ... ok
+test engine::tests::accepts_a_rule_not_known_to_the_sentinel ... ok
+test effect::tests::resumes_with_the_engine_outcome ... ok
+test engine::tests::approves_when_the_endpoint_approves ... ok
+test engine::tests::abstains_when_the_endpoint_abstains ... ok
+test engine::tests::denies_with_the_cited_rule ... ok
+test engine::tests::fails_on_a_malformed_rule_code ... ok
+test engine::tests::fails_when_the_endpoint_returns_an_error ... ok
+test engine::tests::rule_id_json_roundtrip ... ok
+test hashing::tests::commit_hash_parity ... ok
+test hashing::tests::oracle_tx_proposal_hash_parity ... ok
+test engine::tests::fails_when_the_endpoint_is_unreachable ... ok
+test hashing::tests::reveal_salt_is_bound_to_request_id ... ok
+test hashing::tests::reveal_salt_parity ... ok
+test hashing::tests::safe_tx_hash_parity ... ok
+test engine::tests::fails_when_the_request_times_out ... ok
+test engine::tests::forwards_request_headers ... ok
+test service::tests::claimed_event_never_mutates_state ... ok
+test service::tests::engine_check_denial_finalizes_with_the_engine_rule ... ok
+test service::tests::engine_check_failure_drops_a_stored_onchain_request ... ok
+test service::tests::engine_check_failure_drops_the_request_unanswered ... ok
+test service::tests::flow_claims_on_arbitration_timeout ... ok
+test service::tests::flow_claims_on_dispute_out_of_scope ... ok
+test service::tests::flow_defers_dropping_until_the_commit_deadline_block_is_indexed ... ok
+test service::tests::flow_finalizes_and_claims_on_genuine_reveal_timeout ... ok
+test service::tests::flow_dispute_claims_when_arbitration_matches_our_vote ... ok
+test service::tests::flow_dispute_still_claims_when_arbitration_contradicts_our_vote ... ok
+test service::tests::flow_reveals_on_the_commit_deadline_block ... ok
+test service::tests::oracle_result_recovers_a_slashed_bond_when_our_own_reveal_was_missed ... ok
+test service::tests::flow_unanimous_approve_finalizes_via_early_reveal_and_claims ... ok
+test service::tests::new_request_before_engine_check_denial_starts_voting_on_resume ... ok
+test service::tests::new_request_before_engine_check_approval_starts_voting_on_resume ... ok
+test state::tests::approve_and_slash_amount_is_none_before_any_bond_could_have_been_posted ... ok
+test state::tests::approve_and_slash_amount_recovers_the_real_values_once_a_bond_could_exist ... ok
+test state::tests::self_revealed_is_false_before_our_own_reveal_could_have_landed ... ok
+test state::tests::self_revealed_is_true_once_our_own_reveal_is_known_to_have_landed ... ok
+test state::tests::state_multiple_requests_in_different_phases ... ok
+test state::tests::state_serde_roundtrip ... ok
+test service::tests::waiting_engine_checks_expire_using_the_available_deadline ... ok
+test service::tests::stale_engine_check_resume_after_reorg_is_ignored ... ok
+test service::tests::stale_engine_check_resume_does_not_disturb_an_already_advanced_request ... ok
+
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+

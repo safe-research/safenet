@@ -1,0 +1,46 @@
+QA2-SEN-Δ PoC run for F2-SEN-010, audited commit fe9e84c, rustc/cargo 1.98.1.
+Source: poc/F2-SEN-010/poc.rs pasted into `mod tests` of crates/sentinel/src/service.rs (one hunk, 146 insertions), reverted with git checkout afterwards.
+Command: cargo test -p sentinel --bins qa2_sen_010 -- --nocapture --test-threads=1
+
+   Compiling sentinel v0.2.0 (/home/shebin.guest/safe/safenet/crates/sentinel)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.60s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/sentinel-152a0c2d5ccd9f00)
+
+running 3 tests
+test service::tests::qa2_sen_010::f2_sen_010a_own_reveal_first_emits_premature_finalize_then_parks ... [F2-SEN-010] state at NewBlock(20): Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+[F2-SEN-010] after Committed(OTHER)@20 (onchain committedCount=2): Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+[F2-SEN-010a] Revealed(self)@21 (onchain 1/2 revealed, block 21 <= revealDeadline 40 → finalize reverts FinalizeTooEarly): [Action(SentinelAction { kind: Finalize { id: 0x508c727651b87c655d0b573e1ce8a4a21b5c31aee823a3644277a91faec6158e }, expires_at: None })] state=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+[F2-SEN-010a] OTHER never reveals: NewBlock(41) → []; NewBlock(100040) → []; state=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+[F2-SEN-010a] third-party finalize → OracleResult → [Action(SentinelAction { kind: Claim { id: 0x508c727651b87c655d0b573e1ce8a4a21b5c31aee823a3644277a91faec6158e }, expires_at: None })]; tracked=false
+
+thread 'service::tests::qa2_sen_010::f2_sen_010a_own_reveal_first_emits_premature_finalize_then_parks' (21573) panicked at crates/sentinel/src/service.rs:2457:13:
+F2-SEN-010 outcome 2 reproduced: Finalize emitted at Revealed(self)@21 on local tally 1/1 while onchain 1/2 (FinalizeTooEarly, Requests.sol:172); WaitingForOutcome retained with no retry through block 100040
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test service::tests::qa2_sen_010::f2_sen_010b_other_reveal_first_drops_bonded_entry ... [F2-SEN-010] state at NewBlock(20): Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+[F2-SEN-010] after Committed(OTHER)@20 (onchain committedCount=2): Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+[F2-SEN-010b] Revealed(OTHER)@21 (local 1/1, onchain 1/2): commands=[] tracked=false
+[F2-SEN-010b] Revealed(self)@22 → []; OracleResult@45 → []; tracked=false
+
+thread 'service::tests::qa2_sen_010::f2_sen_010b_other_reveal_first_drops_bonded_entry' (21574) panicked at crates/sentinel/src/service.rs:2486:13:
+F2-SEN-010 outcome 1 reproduced: entry dropped at Revealed(OTHER)@21 with self_revealed=false; own reveal and OracleResult ignored; no Claim ever
+FAILED
+test service::tests::qa2_sen_010::f2_sen_010c_deadline_block_commit_is_tallied ... [F2-SEN-010] state at NewBlock(20): Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+[F2-SEN-010] after Committed(OTHER)@20 (onchain committedCount=2): Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+
+thread 'service::tests::qa2_sen_010::f2_sen_010c_deadline_block_commit_is_tallied' (21575) panicked at crates/sentinel/src/service.rs:2420:13:
+F2-SEN-010 reproduced: Committed(OTHER)@20 discarded ("ignoring unexpected commitment"); local state CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 40, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false } vs onchain committedCount=2
+FAILED
+
+failures:
+
+failures:
+    service::tests::qa2_sen_010::f2_sen_010a_own_reveal_first_emits_premature_finalize_then_parks
+    service::tests::qa2_sen_010::f2_sen_010b_other_reveal_first_drops_bonded_entry
+    service::tests::qa2_sen_010::f2_sen_010c_deadline_block_commit_is_tallied
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.06s
+
+error: test failed, to rerun pass `-p sentinel --bin sentinel`

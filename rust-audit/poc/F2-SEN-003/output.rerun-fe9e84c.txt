@@ -1,0 +1,40 @@
+QA2-SEN-Δ re-run for F2-SEN-003 at audited commit fe9e84c (previous run: 3ec8bc5, poc/F2-SEN-003/output.txt), rustc/cargo 1.98.1.
+Command: cargo test -p sentinel --bins qa2_sen -- --nocapture --test-threads=1
+Source: poc/F2-SEN-001/qa2_sen_all.rs pasted verbatim into `mod tests` of crates/sentinel/src/service.rs, reverted afterwards.
+Verbatim output of this finding's tests (full 12-test log: poc/F2-SEN-001/qa2_sen_all.rerun-fe9e84c.txt):
+
+test service::tests::qa2_sen::f2_sen_003a_finalize_drops_bonded_entry_when_own_reveal_unobserved ... [F2-SEN-003a] NewBlock(131): tracked=false commands=[]
+[F2-SEN-003a] OracleResult@132 → []; tracked=false
+
+thread 'service::tests::qa2_sen::f2_sen_003a_finalize_drops_bonded_entry_when_own_reveal_unobserved' (7102) panicked at crates/sentinel/src/service.rs:2746:13:
+F2-SEN-003 reproduced: bonded entry (self_committed) dropped at reveal_deadline + 1 with self_revealed=false and one reveal counted; no Finalize, no Claim, OracleResult ignored
+FAILED
+
+test service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops ... 
+thread 'service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops' (7103) panicked at crates/sentinel/src/service.rs:2773:13:
+assertion failed: has(&c, is_reveal)
+FAILED
+
+Run summary: test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 44 filtered out; finished in 2.73s
+
+--- Supplementary adapted re-run (qa2_sen_all.rerun-fe9e84c.adapted.rs): the setup precondition `assert!(has(&c, is_reveal))`
+--- that blocked the verbatim run above was moved from block 121 to 120, where PR #914 now emits the Reveal; the finding
+--- assertion is unchanged (diff: poc/F2-SEN-001/qa2_sen_all.rerun-fe9e84c.adapted.diff). Full log: qa2_sen_all.rerun-fe9e84c.adapted.txt
+
+test service::tests::qa2_sen::f2_sen_003a_finalize_drops_bonded_entry_when_own_reveal_unobserved ... [F2-SEN-003a] NewBlock(131): tracked=false commands=[]
+[F2-SEN-003a] OracleResult@132 → []; tracked=false
+
+thread 'service::tests::qa2_sen::f2_sen_003a_finalize_drops_bonded_entry_when_own_reveal_unobserved' (7779) panicked at crates/sentinel/src/service.rs:2749:13:
+F2-SEN-003 reproduced: bonded entry (self_committed) dropped at reveal_deadline + 1 with self_revealed=false and one reveal counted; no Finalize, no Claim, OracleResult ignored
+FAILED
+
+test service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops ... [F2-SEN-003b] after warp page carrying Revealed(self)@122: Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 120, reveal_deadline: 130, committed_count: 2, self_committed: true })
+[F2-SEN-003b] NewBlock(125) → [Action(SentinelAction { kind: Reveal { id: 0x512c9b96760a8b79e92d78c485699641e30204c6d8b9a3c6cb19f083d0d9c4cb, approve: true, salt: 0x6f694265eb8e13c4170f7656b6df2f7eecea23628daaca02185fdf15538dc36d, reason: "" }, expires_at: Some(130) })]
+[F2-SEN-003b] NewBlock(131): commands=[] tracked=false
+[F2-SEN-003b] OracleResult@132 → []
+
+thread 'service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops' (7780) panicked at crates/sentinel/src/service.rs:2822:13:
+F2-SEN-003 restart variant reproduced: own Revealed discarded inside the warp, duplicate Reveal emitted at 125, entry dropped at 131 after Revealed(OTHER); full bond + fee share never claimed
+FAILED
+
+Run summary: test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 44 filtered out; finished in 2.74s

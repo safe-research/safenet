@@ -1,0 +1,103 @@
+# QA2-XC PoC run for F2-XC-005; commit 3ec8bc5; host libsqlite3 = /lib/aarch64-linux-gnu/libsqlite3.so.0.8.6 (Version: 3.46.1-8ubuntu0.1)
+# PoC source: poc/F2-XC-005/qa2_xc_005_store_test.rs (module qa2_xc_005), pasted into crates/validator/src/secrets/store.rs 'mod tests', reverted afterwards
+# command: QA2_XC_DIR=<scratch> cargo test --offline --locked -p validator --bins secrets::store::tests::qa2_xc_005 -- --nocapture --test-threads=1
+# scratch database files: <scratch>/xc005-*.db (file-backed; the pool is opened through safenet_core::utils::connect_sqlite as the validator does)
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.87s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+running 2 tests
+test secrets::store::tests::qa2_xc_005::pruned_secret_bytes_survive_in_the_file_unless_secure_delete_is_on ... sqlite_version() = 3.51.3; compile_options mentioning SECURE/THREADSAFE/OMIT: ["THREADSAFE=1"]
+all compile_options: ["ATOMIC_INTRINSICS=1", "COMPILER=gcc-15.2.0", "DEFAULT_AUTOVACUUM", "DEFAULT_CACHE_SIZE=-2000", "DEFAULT_FILE_FORMAT=4", "DEFAULT_FOREIGN_KEYS", "DEFAULT_JOURNAL_SIZE_LIMIT=-1", "DEFAULT_MMAP_SIZE=0", "DEFAULT_PAGE_SIZE=4096", "DEFAULT_PCACHE_INITSZ=20", "DEFAULT_RECURSIVE_TRIGGERS", "DEFAULT_SECTOR_SIZE=4096", "DEFAULT_SYNCHRONOUS=2", "DEFAULT_WAL_AUTOCHECKPOINT=1000", "DEFAULT_WAL_SYNCHRONOUS=2", "DEFAULT_WORKER_THREADS=0", "DIRECT_OVERFLOW_READ", "ENABLE_API_ARMOR", "ENABLE_COLUMN_METADATA", "ENABLE_DBSTAT_VTAB", "ENABLE_FTS3", "ENABLE_FTS3_PARENTHESIS", "ENABLE_FTS5", "ENABLE_LOAD_EXTENSION", "ENABLE_MEMORY_MANAGEMENT", "ENABLE_RTREE", "ENABLE_STAT4", "ENABLE_UNLOCK_NOTIFY", "HAVE_ISNAN", "MALLOC_SOFT_LIMIT=1024", "MAX_ATTACHED=10", "MAX_COLUMN=2000", "MAX_COMPOUND_SELECT=500", "MAX_DEFAULT_PAGE_SIZE=8192", "MAX_EXPR_DEPTH=1000", "MAX_FUNCTION_ARG=1000", "MAX_LENGTH=1000000000", "MAX_LIKE_PATTERN_LENGTH=50000", "MAX_MMAP_SIZE=0x7fff0000", "MAX_PAGE_COUNT=0xfffffffe", "MAX_PAGE_SIZE=65536", "MAX_SQL_LENGTH=1000000000", "MAX_TRIGGER_DEPTH=1000", "MAX_VARIABLE_NUMBER=32766", "MAX_VDBE_OP=250000000", "MAX_WORKER_THREADS=8", "MUTEX_PTHREADS", "SOUNDEX", "SYSTEM_MALLOC", "TEMP_STORE=1", "THREADSAFE=1", "USE_URI"]
+[library default] PRAGMA secure_delete = 0, journal_mode = delete: stored JSON 674 bytes; after prune the secret's bytes are STILL PRESENT in the 36864-byte database file
+[secure_delete OFF] PRAGMA secure_delete = 0, journal_mode = delete: stored JSON 674 bytes; after prune the secret's bytes are STILL PRESENT in the 36864-byte database file
+[secure_delete ON] PRAGMA secure_delete = 1, journal_mode = delete: stored JSON 674 bytes; after prune the secret's bytes are absent (zeroed) in the 36864-byte database file
+erasure is decided by the library flag alone: default-build outcome on this host = bytes retained
+ok
+test secrets::store::tests::qa2_xc_005::the_rollback_journal_holds_the_secret_pre_image_during_the_prune ... during the prune: /tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/xc/xc005-journal.db-journal is 8720 bytes and CONTAINS the secret's bytes (secure_delete ON on the main file)
+after commit: journal unlinked = true (its blocks are released to the filesystem, not overwritten)
+ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.02s
+# exit=0
+
+=================== which SQLite do the binaries link? (cargo tree -e features -i libsqlite3-sys; ldd)
+libsqlite3-sys v0.37.0
+├── libsqlite3-sys feature "bundled"
+├── libsqlite3-sys feature "bundled_bindings"
+├── libsqlite3-sys feature "cc"
+├── libsqlite3-sys feature "pkg-config"
+├── libsqlite3-sys feature "unlock_notify"
+└── libsqlite3-sys feature "vcpkg"
+libsqlite3-sys v0.37.0
+├── libsqlite3-sys feature "bundled"
+├── libsqlite3-sys feature "bundled_bindings"
+├── libsqlite3-sys feature "cc"
+├── libsqlite3-sys feature "pkg-config"
+└── libsqlite3-sys feature "vcpkg"
+--- ldd $CARGO_TARGET_DIR/debug/validator | grep -i sqlite:
+(no libsqlite3 shared-object dependency: SQLite is statically linked into the binary)
+--- ldd $CARGO_TARGET_DIR/debug/sentinel | grep -i sqlite:
+(no libsqlite3 shared-object dependency: SQLite is statically linked into the binary)
+--- sqlx feature definitions (registry sqlx-0.9.0/Cargo.toml):
+181:sqlite = [
+187:sqlite-bundled = [
+192:sqlite-deserialize = ["sqlx-sqlite/deserialize"]
+193:sqlite-load-extension = [
+197:sqlite-preupdate-hook = ["sqlx-sqlite/preupdate-hook"]
+198:sqlite-unbundled = [
+203:sqlite-unlock-notify = ["sqlx-sqlite/unlock-notify"]
+--- sqlx-sqlite feature definitions (registry sqlx-sqlite-0.9.0/Cargo.toml):
+59:bundled = ["libsqlite3-sys/bundled"]
+75:preupdate-hook = ["libsqlite3-sys/preupdate_hook"]
+83:unbundled = ["libsqlite3-sys/buildtime_bindgen"]
+84:unlock-notify = ["libsqlite3-sys/unlock_notify"]
+141:[dependencies.libsqlite3-sys]
+--- libsqlite3-sys version and its bundled amalgamation:
+2999:name = "libsqlite3-sys"
+3000-version = "0.37.0"
+bindgen_bundled_version.rs
+bindgen_bundled_version_ext.rs
+sqlite3.c
+sqlite3.h
+sqlite3ext.h
+--- build flags in libsqlite3-sys build.rs (grep SECURE / -D flags):
+125:            .flag("-DSQLITE_CORE")
+126:            .flag("-DSQLITE_DEFAULT_FOREIGN_KEYS=1")
+127:            .flag("-DSQLITE_ENABLE_API_ARMOR")
+128:            .flag("-DSQLITE_ENABLE_COLUMN_METADATA")
+129:            .flag("-DSQLITE_ENABLE_DBSTAT_VTAB")
+130:            .flag("-DSQLITE_ENABLE_FTS3")
+131:            .flag("-DSQLITE_ENABLE_FTS3_PARENTHESIS")
+132:            .flag("-DSQLITE_ENABLE_FTS5")
+133:            .flag("-DSQLITE_ENABLE_JSON1")
+134:            .flag("-DSQLITE_ENABLE_LOAD_EXTENSION=1")
+135:            .flag("-DSQLITE_ENABLE_MEMORY_MANAGEMENT")
+136:            .flag("-DSQLITE_ENABLE_RTREE")
+137:            .flag("-DSQLITE_ENABLE_STAT4")
+138:            .flag("-DSQLITE_SOUNDEX")
+139:            .flag("-DSQLITE_THREADSAFE=1")
+140:            .flag("-DSQLITE_USE_URI")
+147:            cfg.flag("-DSQLITE_HAS_CODEC")
+148:                .flag("-DSQLITE_TEMP_STORE=2")
+149:                .flag("-DSQLITE_EXTRA_INIT=sqlcipher_extra_init")
+150:                .flag("-DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown")
+233:            cfg.flag("-DSQLITE_TEMP_STORE=3");
+254:                .flag("-DSQLITE_THREADSAFE=0")
+267:            cfg.flag("-DSQLITE_ENABLE_UNLOCK_NOTIFY");
+270:            cfg.flag("-DSQLITE_ENABLE_COLUMN_METADATA");
+273:            cfg.flag("-DSQLITE_ENABLE_PREUPDATE_HOOK");
+276:            cfg.flag("-DSQLITE_ENABLE_SESSION");
+--- workspace Cargo.toml sqlx line:
+19:sqlx = { version = "0.9", features = ["sqlite", "runtime-tokio"] }
+--- Dockerfile claim:
+crates/validator/Dockerfile:8:# `pkg-config`/`libsqlite3-dev` are needed to link against the system SQLite
+crates/validator/Dockerfile:9:# (the workspace's `sqlx` dependency does not enable the `bundled` feature).
+crates/validator/Dockerfile:11:	libsqlite3-dev \
+crates/validator/Dockerfile:22:# `ca-certificates` for TLS to the RPC endpoint, `libsqlite3-0` because the
+crates/validator/Dockerfile:29:	libsqlite3-0 \
+crates/sentinel/Dockerfile:8:# `pkg-config`/`libsqlite3-dev` are needed to link against the system SQLite
+crates/sentinel/Dockerfile:9:# (the workspace's `sqlx` dependency does not enable the `bundled` feature).
+crates/sentinel/Dockerfile:11:	libsqlite3-dev \
+crates/sentinel/Dockerfile:23:# `libsqlite3-0` because the binary links against the
+crates/sentinel/Dockerfile:30:	libsqlite3-0 \

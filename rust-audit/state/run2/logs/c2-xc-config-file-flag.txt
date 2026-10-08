@@ -1,0 +1,45 @@
+# C2-XC (supports F2-VAL-064, sentinel side): does argh accept the documented '--config-file=<path>' spelling? commit 3ec8bc5
+# binaries: $CARGO_TARGET_DIR/debug/{validator,sentinel} (already built; no config file exists at the given path, so a parsed flag must fail with an IO error, an unparsed one with an argh error)
+
+=================== validator --config-file=/nonexistent/validator.toml
+Unrecognized argument: --config-file=/nonexistent/validator.toml
+
+Run validator --help for more information.
+--- exit=1
+
+=================== validator --config-file /nonexistent/validator.toml
+Error: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+--- exit=1
+
+=================== sentinel --config-file=/nonexistent/sentinel.toml
+Unrecognized argument: --config-file=/nonexistent/sentinel.toml
+
+Run sentinel --help for more information.
+--- exit=1
+
+=================== sentinel --config-file /nonexistent/sentinel.toml
+Error: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+--- exit=1
+
+=================== argh version pinned
+811:name = "argh"
+812-version = "0.1.19"
+
+=================== where the '=' spelling is documented
+crates/validator/validator.sample.toml:4:# with `--config-file=/path/to/your/validator.toml` (the binary defaults to
+crates/sentinel/sentinel.sample.toml:4:# with `--config-file=/path/to/your/sentinel.toml` (the binary defaults to
+crates/validator/Dockerfile:35:# `args:` (e.g. `--config-file=...`) appends to the binary instead of
+crates/sentinel/Dockerfile:36:# `args:` (e.g. `--config-file=...`) appends to the binary instead of
+docs/validator-handbook.md:110:    --config-file=validator.toml
+docs/sentinel-handbook.md:76:    --config-file=sentinel.toml
+
+=================== spellings used by in-repo scripts
+scripts/run_devnet.sh:174:        - --config-file
+scripts/run_devnet.sh:190:        - --config-file
+scripts/run_devnet.sh:198:        - --config-file
+scripts/run_devnet.sh:290:# (`--config-file`), rather than environment variables. Generate one file per
+scripts/run_sentinel_engine_integration_test.sh:74:"$ROOT/target/debug/sentinel-engine" --config-file "$CONFIG_FILE" >"$ROOT/sentinel_engine_logs.txt" 2>&1 &
+scripts/run_sentinel_integration_test.sh:233:"$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_A_ENGINE_CONFIG" >"$ROOT/sentinel_engine_a_logs.txt" 2>&1 &
+scripts/run_sentinel_integration_test.sh:237:"$ROOT/target/debug/sentinel" --config-file "$SENTINEL_A_CONFIG" >"$ROOT/sentinel_a_logs.txt" 2>&1 &
+scripts/run_sentinel_integration_test.sh:241:"$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_B_ENGINE_CONFIG" >"$ROOT/sentinel_engine_b_logs.txt" 2>&1 &
+scripts/run_sentinel_integration_test.sh:245:"$ROOT/target/debug/sentinel" --config-file "$SENTINEL_B_CONFIG" >"$ROOT/sentinel_b_logs.txt" 2>&1 &

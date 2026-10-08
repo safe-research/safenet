@@ -1,0 +1,46 @@
+=== Git drift ===
+date: 2026-09-08T15:36:02+05:30
+--- git rev-parse HEAD ---
+2893917757ae518ebb91154712cf3e401cb68d33
+--- git log -1 --format=%H%n%an%n%aI%n%s ---
+2893917757ae518ebb91154712cf3e401cb68d33
+Shebin John
+2026-09-08T14:48:47+05:30
+AI review changes
+--- git rev-parse --abbrev-ref HEAD ---
+rust-audit
+--- git status --short ---
+?? rust-audit/state/STATE.md
+?? rust-audit/state/logs/
+(exit 0; empty output above means clean)
+--- git status --short --untracked-files=all | wc -l ---
+4
+--- git diff --stat 82b3e0d..HEAD ---
+ rust-audit/PROMPT.md                            | 231 +++++++++++
+ rust-audit/README.md                            |  57 +++
+ rust-audit/analysis/analysis-core.md            | 528 ++++++++++++++++++++++++
+ rust-audit/analysis/analysis-sentinel-engine.md | 440 ++++++++++++++++++++
+ rust-audit/analysis/analysis-sentinel.md        | 409 ++++++++++++++++++
+ rust-audit/analysis/analysis-validator.md       | 389 +++++++++++++++++
+ rust-audit/codebase-map.md                      | 393 ++++++++++++++++++
+ rust-audit/findings/.gitkeep                    |   0
+ rust-audit/poc/.gitkeep                         |   0
+ rust-audit/report/.gitkeep                      |   0
+ rust-audit/state/agents/.gitkeep                |   0
+ 11 files changed, 2447 insertions(+)
+--- git diff --name-only 82b3e0d..HEAD ---
+rust-audit/PROMPT.md
+rust-audit/README.md
+rust-audit/analysis/analysis-core.md
+rust-audit/analysis/analysis-sentinel-engine.md
+rust-audit/analysis/analysis-sentinel.md
+rust-audit/analysis/analysis-validator.md
+rust-audit/codebase-map.md
+rust-audit/findings/.gitkeep
+rust-audit/poc/.gitkeep
+rust-audit/report/.gitkeep
+rust-audit/state/agents/.gitkeep
+--- files changed outside rust-audit/ between 82b3e0d and HEAD ---
+(none)
+--- git diff --stat 82b3e0d..HEAD -- crates Cargo.toml Cargo.lock ---
+(empty means no drift in audited sources)

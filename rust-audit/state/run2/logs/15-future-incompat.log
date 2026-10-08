@@ -1,0 +1,39 @@
+# commit: fe9e84cc59b65367b31d5a3121774383cc422234
+# cmd: cargo report future-incompatibilities --id 1
+The following warnings were discovered during the build. These warnings are an
+indication that the packages contain code that will become an error in a
+future release of Rust. These warnings typically cover changes to close
+soundness problems, unintended or undocumented behavior, or critical problems
+that cannot be fixed in a backwards-compatible fashion, and are not expected
+to be in wide use.
+
+Each warning should contain a link for more information on what the warning
+means and how to resolve it.
+
+to solve this problem, you can try the following approaches:
+
+- ensure the maintainers know of this problem (e.g. creating a bug report if needed)
+or even helping with a fix (e.g. by creating a pull request)
+  - proc-macro-error2@2.0.1
+  - repository: https://github.com/GnomedDev/proc-macro-error-2
+  - detailed warning command: `cargo report future-incompatibilities --id 1 --package proc-macro-error2@2.0.1`
+
+- use your own version of the dependency with the `[patch]` section in `Cargo.toml`
+For more information, see:
+https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html#the-patch-section
+
+The package `proc-macro-error2 v2.0.1` currently triggers the following future incompatibility lints:
+> warning[E0365]: extern crate `proc_macro` is private and cannot be re-exported
+>    --> /home/shebin.guest/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-error2-2.0.1/src/lib.rs:494:13
+>     |
+> 494 |     pub use proc_macro;
+>     |             ^^^^^^^^^^
+>     |
+>     = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+>     = note: for more information, see issue #127909 <https://github.com/rust-lang/rust/issues/127909>
+> help: consider making the `extern crate` item publicly accessible
+>     |
+> 277 | pub extern crate proc_macro;
+>     | +++
+> 
+# exit=0

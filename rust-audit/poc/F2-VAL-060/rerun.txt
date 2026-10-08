@@ -1,0 +1,18 @@
+# QA2-VAL-B re-run for F2-VAL-060 on commit fe9e84cc59b65367b31d5a3121774383cc422234 (binary: /home/shebin.guest/.cache/safenet-run2/target/debug/validator, cargo build -p validator --bins --locked)
+# scratch config: copy of ../F2-VAL-060/val-typo.toml in the scratchpad; effective rpc line:
+10:rpc = "http://127.0.0.1:1"
+# misspelled key line:
+28:blocks_per_epoc = 1440
+# signer is the sample placeholder:
+15:signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+
+## stderr only (stdout discarded): the whole document, signer line included, is printed by the Debug rendering of toml::de::Error
+$ validator --config-file /tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/cfg/val-typo.toml 2>&1 1>/dev/null | cut -c1-400 ; echo exit=${PIPESTATUS[0]}
+Error: Parse(Error { message: "unknown field `blocks_per_epoc`, expected one of `consensus`, `staker`, `participants`, `oracles`, `genesis_salt`, `blocks_per_epoch`, `key_gen_timeout`, `signing_timeout`, `oracle_timeout`", input: Some("# Sample configuration for the `validator` binary.\n#\n# Copy this file, fill in the deployment-specific values below, and pass it\n# with `--config-file=/path/to/y
+exit=1
+
+## grep proves the signer value is inside the stderr text
+$ validator --config-file ... 2>&1 1>/dev/null | grep -o 'signer = [^n]*' 
+signer = \"0x0000000000000000000000000000000000000000000000000000000000000001\"\
+## full stderr length in bytes:
+3956
