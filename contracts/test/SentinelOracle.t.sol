@@ -704,16 +704,24 @@ contract SentinelOracleTest is Test {
         vm.expectEmit(true, true, false, true);
         emit SentinelOracleCommitmentMap.Revealed(REQUEST_ID, sentinel1, true, BOND_TARGET, "");
         _reveal(sentinel1, true, SALT_1);
-        _reveal(sentinel2, true, SALT_2);
 
-        // Both committers already revealed — finalize is callable well before revealDeadline.
         SentinelOracleRequest.T memory pending = oracle.getRequest(REQUEST_ID);
-        assertLt(block.number, pending.terms.revealDeadline, "should be finalizing early, before the reveal deadline");
+        assertEq(
+            uint256(pending.progress.state),
+            uint256(SentinelOracleRequest.State.PENDING),
+            "not every commit revealed yet"
+        );
 
         uint256 sponsorBalBefore = token.balanceOf(sponsor);
 
+        // The last reveal finalizes the request itself, well before revealDeadline.
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(REQUEST_ID, sponsor, "", true);
+        _reveal(sentinel2, true, SALT_2);
+        assertLt(block.number, pending.terms.revealDeadline, "should be finalized early, before the reveal deadline");
+
+        // Nothing is left to finalize.
+        vm.expectRevert(SentinelOracleRequest.RequestNotPending.selector);
         oracle.finalize(REQUEST_ID);
 
         // Sponsor's fee was NOT refunded (it's distributed to sentinels).
@@ -753,10 +761,10 @@ contract SentinelOracleTest is Test {
         _advancePastCommitDeadline();
         _reveal(sentinel1, true, SALT_1);
         _reveal(sentinel2, true, SALT_2);
-        _reveal(sentinel3, true, SALT_3);
 
         uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
-        oracle.finalize(REQUEST_ID);
+        // The last reveal finalizes the request.
+        _reveal(sentinel3, true, SALT_3);
         assertEq(token.balanceOf(protocolFundsReceiver), receiverBalBefore + 1, "1-unit remainder swept to protocol");
 
         uint96 perSentinelReward = REQUEST_FEE / 3;
@@ -792,12 +800,12 @@ contract SentinelOracleTest is Test {
         _commit(sentinel2, true, SALT_2);
         _advancePastCommitDeadline();
         _reveal(sentinel1, true, SALT_1);
-        _reveal(sentinel2, true, SALT_2);
 
         uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
         uint256 expectedCut = REQUEST_FEE * daoShare / oracle.FEE_SHARE_DENOMINATOR();
 
-        oracle.finalize(REQUEST_ID);
+        // The last reveal finalizes the request.
+        _reveal(sentinel2, true, SALT_2);
 
         assertEq(
             token.balanceOf(protocolFundsReceiver),
@@ -837,12 +845,11 @@ contract SentinelOracleTest is Test {
         _commit(sentinel1, false, SALT_1);
 
         _advancePastCommitDeadline();
-        _reveal(sentinel1, false, SALT_1);
 
+        // The sole commit's reveal finalizes the request.
         vm.expectEmit(true, true, false, true);
         emit IOracle.OracleResult(REQUEST_ID, sponsor, "", false);
-
-        oracle.finalize(REQUEST_ID);
+        _reveal(sentinel1, false, SALT_1);
 
         SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.RESOLVED_DENIED));
@@ -894,11 +901,11 @@ contract SentinelOracleTest is Test {
 
         _advancePastCommitDeadline();
         _reveal(sentinel1, true, SALT_1);
-        _reveal(sentinel2, false, SALT_2);
 
+        // The last reveal finalizes the request, finding both sides established.
         vm.expectEmit(true, false, false, true);
         emit SentinelOracle.DisputeTriggered(REQUEST_ID, uint64(block.number + ARBITRATION_TIMEOUT));
-        oracle.finalize(REQUEST_ID);
+        _reveal(sentinel2, false, SALT_2);
 
         SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
         assertEq(
@@ -957,10 +964,9 @@ contract SentinelOracleTest is Test {
         _commit(sentinel1, true, SALT_1);
         _commit(sentinel2, false, SALT_2);
         _advancePastCommitDeadline();
+        // The last reveal finalizes the request, freezing it.
         _reveal(sentinel1, true, SALT_1);
         _reveal(sentinel2, false, SALT_2);
-
-        oracle.finalize(REQUEST_ID);
 
         uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
         uint256 expectedCut = REQUEST_FEE * daoShare / oracle.FEE_SHARE_DENOMINATOR();
@@ -994,9 +1000,9 @@ contract SentinelOracleTest is Test {
         _commit(sentinel1, true, SALT_1);
         _commit(sentinel2, false, SALT_2);
         _advancePastCommitDeadline();
+        // The last reveal finalizes the request, freezing it.
         _reveal(sentinel1, true, SALT_1);
         _reveal(sentinel2, false, SALT_2);
-        oracle.finalize(REQUEST_ID);
 
         vm.prank(arbitrator);
         oracle.resolveDispute(REQUEST_ID, true, "");
@@ -1017,9 +1023,9 @@ contract SentinelOracleTest is Test {
         _commit(sentinel1, true, SALT_1);
         _commit(sentinel2, false, SALT_2);
         _advancePastCommitDeadline();
+        // The last reveal finalizes the request, freezing it.
         _reveal(sentinel1, true, SALT_1);
         _reveal(sentinel2, false, SALT_2);
-        oracle.finalize(REQUEST_ID);
 
         vm.prank(arbitrator);
         oracle.resolveDispute(REQUEST_ID, true, "sentinel1's evidence was conclusive");
@@ -1049,9 +1055,9 @@ contract SentinelOracleTest is Test {
         _commit(sentinel1, true, SALT_1);
         _commit(sentinel2, false, SALT_2);
         _advancePastCommitDeadline();
+        // The last reveal finalizes the request, freezing it.
         _reveal(sentinel1, true, SALT_1);
         _reveal(sentinel2, false, SALT_2);
-        oracle.finalize(REQUEST_ID);
 
         uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
         vm.prank(arbitrator);
@@ -1435,9 +1441,9 @@ contract SentinelOracleTest is Test {
         _commit(sentinel1, true, SALT_1);
         _commit(sentinel2, false, SALT_2);
         _advancePastCommitDeadline();
+        // The last reveal finalizes the request, freezing it.
         _reveal(sentinel1, true, SALT_1);
         _reveal(sentinel2, false, SALT_2);
-        oracle.finalize(REQUEST_ID);
 
         SentinelOracleRequest.T memory r = oracle.getRequest(REQUEST_ID);
         assertEq(uint256(r.progress.state), uint256(SentinelOracleRequest.State.FROZEN));
@@ -1758,10 +1764,9 @@ contract SentinelOracleTest is Test {
         hugeOracle.reveal(REQUEST_ID, true, SALT_1, "");
         vm.prank(sentinel2);
         hugeOracle.reveal(REQUEST_ID, false, SALT_2, "");
+        // The last reveal finalizes the request, freezing it.
         vm.prank(sentinel3);
         hugeOracle.reveal(REQUEST_ID, false, SALT_3, "");
-
-        hugeOracle.finalize(REQUEST_ID);
 
         uint256 receiverBalBefore = token.balanceOf(protocolFundsReceiver);
 

@@ -18,13 +18,13 @@ pub use self::{
     staking::StakingChecker,
 };
 
-use crate::engine::{CheckContext, Coverage, RuleId, SafeTransaction};
+use crate::engine::{CheckContext, Coverage, Proposal, RuleId};
 use std::sync::Arc;
 
 /// What a single check concluded. Distinct from [`crate::engine::Verdict`],
 /// which is the engine's own answer and the wire type — a check contributes
 /// evidence, the engine reaches the verdict.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Assessment {
     /// The check found a violation. Denials are final.
     Insecure {
@@ -34,7 +34,7 @@ pub enum Assessment {
     /// The check found nothing wrong in `coverage`, and vouches for exactly
     /// those aspects — no more.
     Secure {
-        /// The aspects of the transaction this check vouches for.
+        /// The calls (and/or refund leg) this check vouches for.
         coverage: Coverage,
     },
     /// No opinion.
@@ -42,15 +42,16 @@ pub enum Assessment {
 }
 
 /// A transaction check in the sentinel engine's checker chain.
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait Checker: Send + Sync {
     /// A short, log-friendly identifier for this checker.
     fn name(&self) -> &'static str;
 
-    /// Assesses `transaction` or abstains so the next checker can run.
+    /// Assesses `proposal` or abstains so the next checker can run.
     /// `context` carries caller-supplied hints outside the transaction
     /// itself (see [`CheckContext`]); most checks ignore it.
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment;
+    async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment;
 }
 
 /// Lets an [`Arc`]-shared checker (e.g. one both run directly and wrapped by
@@ -62,7 +63,7 @@ impl<T: Checker> Checker for Arc<T> {
         (**self).name()
     }
 
-    async fn check(&self, transaction: &SafeTransaction, context: &CheckContext) -> Assessment {
-        (**self).check(transaction, context).await
+    async fn check(&self, proposal: &Proposal, context: &CheckContext) -> Assessment {
+        (**self).check(proposal, context).await
     }
 }

@@ -1,4 +1,5 @@
 export * from "./abi";
+export * from "./arbitrator";
 export * from "./hashing";
 export * from "./votes";
 export * from "./votingStatus";

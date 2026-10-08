@@ -140,15 +140,36 @@ deploy_validator_contracts() {
     echo "    oracle:      $ORACLE_ADDR"
 }
 
+# Deploys a `Safenet7702Executor` via `DeploySafenet7702ExecutorScript`. Sets
+# `EXECUTOR_ADDR`.
+deploy_safenet_7702_executor() {
+    local rpc_url=$1 sender=$2 chain_id=$3
+
+    echo "==> Deploying the 7702 executor..."
+    env FACTORY=2 \
+        forge script --root "$REPO_ROOT/contracts" DeploySafenet7702ExecutorScript \
+        --rpc-url "$rpc_url" \
+        --unlocked \
+        --sender "$sender" \
+        --broadcast
+
+    local executor_json="$REPO_ROOT/contracts/build/broadcast/DeploySafenet7702Executor.s.sol/$chain_id/run-latest.json"
+    EXECUTOR_ADDR=$(jq -er '.returns.account.value' "$executor_json")
+
+    echo "    executor:    $EXECUTOR_ADDR"
+}
+
 # Prints the common prefix of a validator TOML config to stdout: connection,
 # signer, database, the `[validator]` table (consensus, blocks_per_epoch,
 # oracles, and one `[[validator.participants]]` entry per address in the
-# `participants_array_name` array), observability, and the `[index]` table's
-# `block_time`/`start_block`. Callers append any config specific to their own
+# `participants_array_name` array), the `[transactions]` table's `executor`
+# if one is given, observability, and the `[index]` table's block timings
+# and `start_block`. Callers append any config specific to their own
 # test (e.g. `max_reorg_depth`) after calling this.
 print_validator_config_base() {
     local rpc_url=$1 signer=$2 database=$3 consensus_addr=$4 oracle_addr=$5
     local blocks_per_epoch=$6 block_time_ms=$7 participants_array_name=$8
+    local executor_addr=${9:-}
     local -n participants="$participants_array_name"
 
     echo "rpc = \"$rpc_url\""
@@ -165,12 +186,20 @@ print_validator_config_base() {
         echo "[[validator.participants]]"
         echo "address = \"$address\""
     done
+    if [ -n "$executor_addr" ]; then
+        echo
+        echo "[transactions]"
+        echo "executor = \"$executor_addr\""
+    fi
     echo
     echo "[observability]"
     echo 'log_filter = "info,safenet_core=trace,validator=trace"'
     echo
     echo "[index]"
     echo "block_time = $block_time_ms"
+    # Anvil mines blocks locally, so there is no propagation to wait for.
+    echo "block_propagation_delay = 0"
+    echo "block_retry_delays = []"
     echo "start_block = 0"
 }
 

@@ -8,6 +8,8 @@ export function VotingStatusBadge({ status }: { status: VotingStatus }) {
 		return <Badge variant={status.approved ? "positive" : "error"}>{status.approved ? "APPROVED" : "DENIED"}</Badge>;
 	}
 
+	if (status.noVotes) return <Badge variant="warning">NO VOTES</Badge>;
+
 	switch (status.state) {
 		case "RESOLVED_APPROVED":
 			return <Badge variant="positive">APPROVED</Badge>;

@@ -1,14 +1,17 @@
 import type { Address, Hex, PublicClient } from "viem";
 import { encodeAbiParameters, encodeEventTopics, getAbiItem, numberToHex } from "viem";
 import { describe, expect, it, vi } from "vitest";
+import { oracleAbi, oracleOutcomeEventSelectors, sentinelOracleAbi } from "@/lib/oracle/abi";
+import { oracleRequestId } from "@/lib/oracle/hashing";
 import { consensusAbi } from "./abi";
 import { loadEpochRolloverHistory, loadEpochsState } from "./epochs";
-import { computeSafeId, loadProposedSafeTransaction, loadTransactionProposals } from "./transactions";
+import { computeSafeId, loadProposedSafeTransaction, loadTransactionProposals, type SafeId } from "./transactions";
 
 const CONSENSUS = "0x0000000000000000000000000000000000000001" as Address;
 const SAFE_TX_HASH = `0x${"ab".repeat(32)}` as Hex;
 const SAFE_ADDRESS = "0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF" as Address;
 const CURRENT_BLOCK = 10000n;
+const CHAIN_ID = 1;
 const MAX_BLOCK_RANGE = 1000n;
 const SIGNING_TIMEOUT = 12;
 
@@ -18,6 +21,7 @@ const GROUP_ID_B = `0x${"bb".repeat(32)}` as Hex;
 const makeProvider = (): PublicClient =>
 	({
 		getBlockNumber: vi.fn().mockResolvedValue(CURRENT_BLOCK),
+		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
 		request: vi.fn().mockResolvedValue([]),
 	}) as unknown as PublicClient;
 
@@ -254,6 +258,7 @@ const makeOracleAttestedLog = ({
 const makeProviderWithLogs = (logs: ReturnType<typeof makeRawConsensusLog>[]): PublicClient =>
 	({
 		getBlockNumber: vi.fn().mockResolvedValue(CURRENT_BLOCK),
+		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
 		request: vi.fn().mockResolvedValue(logs),
 	}) as unknown as PublicClient;
 
@@ -332,6 +337,431 @@ describe("loadTransactionProposals oracle recognition", () => {
 		expect(result.proposals).toHaveLength(1);
 		expect(result.proposals[0].oracle).toBe(ORACLE);
 		expect(result.proposals[0].status).toBe("ATTESTED");
+	});
+});
+
+const makeOracleResultLog = ({
+	oracle,
+	safeTxHash,
+	epoch,
+	approved,
+	blockNumber,
+}: {
+	oracle: Address;
+	safeTxHash: Hex;
+	epoch: bigint;
+	approved: boolean;
+	blockNumber: bigint;
+}) => {
+	const requestId = oracleRequestId({
+		chainId: CHAIN_ID,
+		consensus: CONSENSUS,
+		epoch,
+		oracle,
+		oracleData: "0x",
+		safeTxHash,
+	});
+	const abiItem = getAbiItem({ abi: oracleAbi, name: "OracleResult" }) as { inputs: readonly unknown[] };
+	return {
+		address: oracle,
+		topics: encodeEventTopics({ abi: oracleAbi, eventName: "OracleResult", args: { requestId, proposer: CONSENSUS } }),
+		data: encodeAbiParameters(nonIndexedInputs(abiItem.inputs), ["0x", approved]),
+		blockNumber: numberToHex(blockNumber),
+		logIndex: "0x0",
+		transactionHash: `0x${"11".repeat(32)}`,
+		blockHash: `0x${"00".repeat(32)}`,
+		transactionIndex: "0x0",
+		removed: false,
+	};
+};
+
+const DISPUTE_TX = `0x${"22".repeat(32)}` as Hex;
+
+const makeDisputeLog = ({
+	oracle,
+	safeTxHash,
+	epoch,
+	eventName,
+	nonIndexedValues,
+	blockNumber,
+}: {
+	oracle: Address;
+	safeTxHash: Hex;
+	epoch: bigint;
+	eventName: "DisputeTriggered" | "DisputeResolved" | "DisputeOutOfScope" | "ArbitrationTimedOut";
+	nonIndexedValues: unknown[];
+	blockNumber: bigint;
+}) => {
+	const requestId = oracleRequestId({
+		chainId: CHAIN_ID,
+		consensus: CONSENSUS,
+		epoch,
+		oracle,
+		oracleData: "0x",
+		safeTxHash,
+	});
+	const abiItem = getAbiItem({ abi: sentinelOracleAbi, name: eventName }) as { inputs: readonly unknown[] };
+	return {
+		address: oracle,
+		topics: encodeEventTopics({ abi: sentinelOracleAbi, eventName, args: { requestId } }),
+		data: encodeAbiParameters(nonIndexedInputs(abiItem.inputs), nonIndexedValues),
+		blockNumber: numberToHex(blockNumber),
+		logIndex: "0x0",
+		transactionHash: DISPUTE_TX,
+		blockHash: `0x${"00".repeat(32)}`,
+		transactionIndex: "0x0",
+		removed: false,
+	};
+};
+
+// `loadTransactionProposals` reads the consensus events and the oracle's outcome events with two
+// separate `eth_getLogs` calls; this dispatches on the event selectors in `topics[0]`.
+const makeOracleAwareProvider = ({
+	consensusLogs = [],
+	oracleLogs = [],
+}: {
+	consensusLogs?: ReturnType<typeof makeRawConsensusLog>[];
+	oracleLogs?: (ReturnType<typeof makeOracleResultLog> | ReturnType<typeof makeDisputeLog>)[];
+}): PublicClient =>
+	({
+		getBlockNumber: vi.fn().mockResolvedValue(CURRENT_BLOCK),
+		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
+		request: vi
+			.fn()
+			.mockImplementation(({ params }: { params: [{ topics: unknown[] }] }) =>
+				params[0].topics[0] === oracleOutcomeEventSelectors ? oracleLogs : consensusLogs,
+			),
+	}) as unknown as PublicClient;
+
+describe("loadTransactionProposals status", () => {
+	const ORACLE = "0x3333333333333333333333333333333333333333" as Address;
+
+	const loadProposal = async (
+		provider: PublicClient,
+		scope: { safeTxHash?: Hex; safeId?: SafeId; toBlock?: bigint } = {},
+	) => {
+		const result = await loadTransactionProposals({
+			provider,
+			consensus: CONSENSUS,
+			maxBlockRange: MAX_BLOCK_RANGE,
+			signingTimeout: SIGNING_TIMEOUT,
+			oracles: [ORACLE],
+			...scope,
+		});
+		expect(result.proposals).toHaveLength(1);
+		return result.proposals[0];
+	};
+
+	const loadStatus = async (provider: PublicClient, scope: { safeTxHash?: Hex; safeId?: SafeId } = {}) =>
+		(await loadProposal(provider, scope)).status;
+
+	const proposedLog = makeOracleProposedLog({
+		safeTxHash: SAFE_TX_HASH,
+		epoch: 1n,
+		oracle: ORACLE,
+		blockNumber: 9100n,
+	});
+	const disputeLog = (
+		eventName: Parameters<typeof makeDisputeLog>[0]["eventName"],
+		nonIndexedValues: unknown[],
+		blockNumber: bigint,
+	) =>
+		makeDisputeLog({ oracle: ORACLE, safeTxHash: SAFE_TX_HASH, epoch: 1n, eventName, nonIndexedValues, blockNumber });
+	const triggeredLog = disputeLog("DisputeTriggered", [9200n], 9105n);
+
+	it("reports PROPOSED while the oracle is still within its timeout", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK - 5n }),
+			],
+		});
+		expect(await loadStatus(provider)).toBe("PROPOSED");
+	});
+
+	it("reports TIMED_OUT when the oracle never returned a verdict", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9500n }),
+			],
+		});
+		expect(await loadStatus(provider)).toBe("TIMED_OUT");
+	});
+
+	it("reports DENIED for a rejecting verdict, however old the proposal is", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9100n }),
+			],
+			oracleLogs: [
+				makeOracleResultLog({
+					oracle: ORACLE,
+					safeTxHash: SAFE_TX_HASH,
+					epoch: 1n,
+					approved: false,
+					blockNumber: 9200n,
+				}),
+			],
+		});
+		expect(await loadStatus(provider)).toBe("DENIED");
+	});
+
+	it("reports APPROVED while the attestation is still outstanding", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: CURRENT_BLOCK - 5n }),
+			],
+			oracleLogs: [
+				makeOracleResultLog({
+					oracle: ORACLE,
+					safeTxHash: SAFE_TX_HASH,
+					epoch: 1n,
+					approved: true,
+					blockNumber: CURRENT_BLOCK - 2n,
+				}),
+			],
+		});
+		expect(await loadStatus(provider)).toBe("APPROVED");
+	});
+
+	it("measures the attestation timeout from the verdict, not from the proposal", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9100n }),
+			],
+			oracleLogs: [
+				makeOracleResultLog({
+					oracle: ORACLE,
+					safeTxHash: SAFE_TX_HASH,
+					epoch: 1n,
+					approved: true,
+					blockNumber: CURRENT_BLOCK - 1n,
+				}),
+			],
+		});
+		expect(await loadStatus(provider)).toBe("APPROVED");
+	});
+
+	it("reports TIMED_OUT when an approved proposal is not attested in time", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9100n }),
+			],
+			oracleLogs: [
+				makeOracleResultLog({
+					oracle: ORACLE,
+					safeTxHash: SAFE_TX_HASH,
+					epoch: 1n,
+					approved: true,
+					blockNumber: 9200n,
+				}),
+			],
+		});
+		expect(await loadStatus(provider)).toBe("TIMED_OUT");
+	});
+
+	it("ignores a verdict belonging to a different request", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9100n }),
+			],
+			oracleLogs: [
+				makeOracleResultLog({
+					oracle: ORACLE,
+					safeTxHash: SAFE_TX_HASH,
+					epoch: 2n,
+					approved: false,
+					blockNumber: 9200n,
+				}),
+			],
+		});
+		expect(await loadStatus(provider)).toBe("TIMED_OUT");
+	});
+
+	it("reports ATTESTED without querying the oracle", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9100n }),
+				makeOracleAttestedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9105n }),
+			],
+		});
+		expect(await loadStatus(provider)).toBe("ATTESTED");
+		expect((provider.request as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+	});
+
+	it("filters the oracle query by the oracle address and the request IDs of a scoped query", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9100n }),
+			],
+		});
+		await loadStatus(provider, { safeTxHash: SAFE_TX_HASH });
+		const oracleQuery = (provider.request as ReturnType<typeof vi.fn>).mock.calls[1][0].params[0];
+		expect(oracleQuery.address).toEqual([ORACLE]);
+		expect(oracleQuery.topics[0]).toEqual(oracleOutcomeEventSelectors);
+		expect(oracleQuery.topics[0]).toHaveLength(5);
+		expect(oracleQuery.topics[1]).toEqual([
+			oracleRequestId({
+				chainId: CHAIN_ID,
+				consensus: CONSENSUS,
+				epoch: 1n,
+				oracle: ORACLE,
+				oracleData: "0x",
+				safeTxHash: SAFE_TX_HASH,
+			}),
+		]);
+	});
+
+	it("filters the oracle query by request ID for a query scoped to a Safe", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9100n }),
+			],
+		});
+		await loadStatus(provider, { safeId: { chainId: 1n, safe: SAFE_ADDRESS } });
+		const oracleQuery = (provider.request as ReturnType<typeof vi.fn>).mock.calls[1][0].params[0];
+		expect(oracleQuery.topics[1]).toHaveLength(1);
+	});
+
+	// The overview isn't scoped to a Safe or a Safe transaction, so the request ID list would grow
+	// with every proposal in the block range — and it wants every verdict in that range anyway.
+	it("does not filter the oracle query by request ID for an unscoped overview query", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [
+				makeOracleProposedLog({ safeTxHash: SAFE_TX_HASH, epoch: 1n, oracle: ORACLE, blockNumber: 9100n }),
+			],
+		});
+		await loadStatus(provider);
+		const oracleQuery = (provider.request as ReturnType<typeof vi.fn>).mock.calls[1][0].params[0];
+		expect(oracleQuery.address).toEqual([ORACLE]);
+		expect(oracleQuery.topics[0]).toEqual(oracleOutcomeEventSelectors);
+		expect(oracleQuery.topics[1]).toBeNull();
+	});
+
+	it("reads oracle outcomes from the start of the range up to the latest block", async () => {
+		const provider = makeOracleAwareProvider({ consensusLogs: [proposedLog] });
+		await loadStatus(provider);
+		const oracleQuery = (provider.request as ReturnType<typeof vi.fn>).mock.calls[1][0].params[0];
+		expect(oracleQuery.fromBlock).toBe(numberToHex(CURRENT_BLOCK - MAX_BLOCK_RANGE));
+		expect(oracleQuery.toBlock).toBe("latest");
+	});
+
+	it("reports ARBITRATING for a triggered dispute, however far past the proposal and the deadline", async () => {
+		const provider = makeOracleAwareProvider({ consensusLogs: [proposedLog], oracleLogs: [triggeredLog] });
+		const proposal = await loadProposal(provider);
+		expect(proposal.status).toBe("ARBITRATING");
+		expect(proposal.arbitration).toEqual({
+			triggeredAt: { block: 9105n, tx: DISPUTE_TX },
+			deadline: 9200n,
+			outcome: null,
+		});
+	});
+
+	it.each([
+		{ outcome: 3, status: "SECURE", secure: true },
+		{ outcome: 4, status: "INSECURE", secure: false },
+	])("reports $status for a Council ruling with outcome $outcome", async ({ outcome, status, secure }) => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [proposedLog],
+			oracleLogs: [triggeredLog, disputeLog("DisputeResolved", [outcome, 0n, "ruling reason"], 9300n)],
+		});
+		const proposal = await loadProposal(provider);
+		expect(proposal.status).toBe(status);
+		expect(proposal.arbitration?.outcome).toEqual({
+			kind: "ruled",
+			secure,
+			context: "ruling reason",
+			at: { block: 9300n, tx: DISPUTE_TX },
+		});
+	});
+
+	it("ignores a ruling with an outcome other than approved or denied", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [proposedLog],
+			oracleLogs: [triggeredLog, disputeLog("DisputeResolved", [5, 0n, ""], 9300n)],
+		});
+		const proposal = await loadProposal(provider);
+		expect(proposal.status).toBe("ARBITRATING");
+		expect(proposal.arbitration?.outcome).toBeNull();
+	});
+
+	it("reports NO_RULING for a request declined as out of scope", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [proposedLog],
+			oracleLogs: [triggeredLog, disputeLog("DisputeOutOfScope", ["not a Charter matter"], 9300n)],
+		});
+		const proposal = await loadProposal(provider);
+		expect(proposal.status).toBe("NO_RULING");
+		expect(proposal.arbitration?.outcome).toEqual({
+			kind: "outOfScope",
+			context: "not a Charter matter",
+			at: { block: 9300n, tx: DISPUTE_TX },
+		});
+	});
+
+	it("reports NO_RULING for a dispute timed out without a ruling", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [proposedLog],
+			oracleLogs: [triggeredLog, disputeLog("ArbitrationTimedOut", [], 9300n)],
+		});
+		const proposal = await loadProposal(provider);
+		expect(proposal.status).toBe("NO_RULING");
+		expect(proposal.arbitration?.outcome).toEqual({ kind: "timedOut", at: { block: 9300n, tx: DISPUTE_TX } });
+	});
+
+	it("ignores a dispute belonging to a different request", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [proposedLog],
+			oracleLogs: [
+				makeDisputeLog({
+					oracle: ORACLE,
+					safeTxHash: SAFE_TX_HASH,
+					epoch: 2n,
+					eventName: "DisputeTriggered",
+					nonIndexedValues: [9200n],
+					blockNumber: 9105n,
+				}),
+			],
+		});
+		const proposal = await loadProposal(provider);
+		expect(proposal.status).toBe("TIMED_OUT");
+		expect(proposal.arbitration).toBeNull();
+	});
+
+	it("ignores a dispute resolution without its trigger", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [proposedLog],
+			oracleLogs: [disputeLog("DisputeResolved", [4, 0n, ""], 9300n)],
+		});
+		const proposal = await loadProposal(provider);
+		expect(proposal.status).toBe("TIMED_OUT");
+		expect(proposal.arbitration).toBeNull();
+	});
+
+	it("picks up a ruling emitted after an explicit past toBlock", async () => {
+		const provider = makeOracleAwareProvider({
+			consensusLogs: [proposedLog],
+			oracleLogs: [triggeredLog, disputeLog("DisputeResolved", [4, 0n, ""], 9900n)],
+		});
+		const proposal = await loadProposal(provider, { safeId: { chainId: 1n, safe: SAFE_ADDRESS }, toBlock: 9500n });
+		expect(proposal.status).toBe("INSECURE");
+		const oracleQuery = (provider.request as ReturnType<typeof vi.fn>).mock.calls[1][0].params[0];
+		expect(oracleQuery.fromBlock).toBe(numberToHex(9500n - MAX_BLOCK_RANGE));
+		expect(oracleQuery.toBlock).toBe("latest");
+	});
+
+	it("falls back to the page's own window when the RPC rejects the range up to the latest block", async () => {
+		const oracleLogs = [triggeredLog, disputeLog("DisputeResolved", [4, 0n, ""], 9300n)];
+		const request = vi.fn().mockImplementation(({ params }: { params: [{ topics: unknown[]; toBlock: string }] }) => {
+			if (params[0].topics[0] !== oracleOutcomeEventSelectors) {
+				return [proposedLog];
+			}
+			return params[0].toBlock === "latest" ? Promise.reject(new Error("block range too large")) : oracleLogs;
+		});
+		const provider = { ...makeOracleAwareProvider({}), request } as unknown as PublicClient;
+		const proposal = await loadProposal(provider, { safeId: { chainId: 1n, safe: SAFE_ADDRESS }, toBlock: 9500n });
+		expect(proposal.status).toBe("INSECURE");
+		const oracleQueries = request.mock.calls.slice(1).map(([args]) => args.params[0].toBlock);
+		expect(oracleQueries).toEqual(["latest", numberToHex(9500n)]);
 	});
 });
 

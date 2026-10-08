@@ -75,6 +75,31 @@ pub struct SafeTransaction {
     pub nonce: U256,
 }
 
+impl SafeTransaction {
+    /// This transaction's action — the four fields that determine what it
+    /// does — discarding the identity and refund fields that only make sense
+    /// for a top-level Safe transaction.
+    pub fn as_meta_transaction(&self) -> MetaTransaction {
+        MetaTransaction {
+            to: self.to,
+            value: self.value,
+            data: self.data.clone(),
+            operation: self.operation,
+        }
+    }
+}
+
+/// One call a Safe transaction makes: the four fields that determine its
+/// effect. A packed MultiSend sub-call has no `chainId`, `nonce` or refund
+/// leg of its own — those belong to the enclosing [`SafeTransaction`].
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct MetaTransaction {
+    pub to: Address,
+    pub value: U256,
+    pub data: Bytes,
+    pub operation: Operation,
+}
+
 /// Serde for an [`Address`], emitting the EIP-55 mixed-case checksum and
 /// accepting any case in order to be more lenient.
 mod checksummed_address {

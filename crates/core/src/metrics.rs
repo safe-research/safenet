@@ -1,6 +1,6 @@
 //! This crate's own Prometheus metrics.
 
-use metrics::{Counter, Gauge};
+use metrics::{Counter, Gauge, Histogram};
 use tokio_metrics::RuntimeMetricsReporterBuilder;
 
 /// The result of a JSON-RPC request, as recorded by
@@ -74,6 +74,23 @@ pub fn uncled_blocks_total() -> Counter {
     metrics::counter!(
         description: "Number of live blocks invalidated by chain reorgs.",
         "safenet_core_uncled_blocks_total",
+    )
+}
+
+/// Number of calls in each transaction batch sent through the executor.
+pub fn transaction_batch_size() -> Histogram {
+    metrics::histogram!(
+        description: "Number of calls per transaction batch sent through the executor.",
+        "safenet_core_transaction_batch_size",
+    )
+}
+
+/// Estimated gas of each transaction batch sent through the executor,
+/// excluding the gas of any authorization it carries.
+pub fn transaction_batch_gas() -> Histogram {
+    metrics::histogram!(
+        description: "Estimated gas per transaction batch sent through the executor, excluding authorization gas.",
+        "safenet_core_transaction_batch_gas",
     )
 }
 

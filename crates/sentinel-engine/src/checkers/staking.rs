@@ -46,14 +46,11 @@
 
 use super::{Assessment, Checker};
 use crate::{
-    contracts::{
-        bindings::{
-            erc20::approveCall,
-            staking::{claimCall, stakeCall},
-        },
-        multi_send::sub_transactions,
+    contracts::bindings::{
+        erc20::approveCall,
+        staking::{claimCall, stakeCall},
     },
-    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
+    engine::{AspectSet, CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, U256, address},
@@ -61,7 +58,7 @@ use alloy::{
 };
 
 /// Safenet's canonical SAFE-token staking contract on Ethereum mainnet (see
-/// `docs/configuration.md`'s `STAKER_ADDRESS` section for the Etherscan
+/// `docs/configuration.md`'s Staking section for the Etherscan
 /// link).
 const STAKING: Address = address!("115E78f160e1E3eF163B05C84562Fa16fA338509");
 
@@ -88,16 +85,15 @@ impl Checker for StakingChecker {
     /// An affirming result claims only `Data`: it vouches for the recognized
     /// claim/stake/approve payload, not the outer call's `to`/`operation` —
     /// that coverage comes from `BaseChecker`.
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
+    async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
+        let transaction = &proposal.transaction;
         if transaction.chain_id != U256::from(SUPPORTED_CHAIN_ID) {
             return Assessment::Abstain;
         }
 
-        let calls = sub_transactions(transaction);
-
-        let mut remaining = Vec::with_capacity(calls.len());
+        let mut remaining = Vec::with_capacity(proposal.calls.len());
         let mut claimed = false;
-        for call in &calls {
+        for call in &proposal.calls {
             match claim_account(call) {
                 Some(account) if account != transaction.safe => {
                     return Assessment::Insecure {
@@ -109,13 +105,23 @@ impl Checker for StakingChecker {
             }
         }
 
+        // The whole proposal's call count, not `remaining.len()`: any
+        // `claim` calls set aside above are covered by the claim too.
+        //
+        // TODO(follow-up): this widens the same claim across every call in
+        // the proposal rather than building it compositionally (one claim
+        // per independently-validated call, unioned together). The two are
+        // equivalent today only because this check still requires every
+        // call to be recognized before it affirms at all — not yet tracked
+        // as a named epic follow-up.
+        let total_calls = proposal.calls.len();
         match remaining.as_slice() {
             [] if claimed => Assessment::Secure {
-                coverage: Coverage::DATA,
+                coverage: Coverage::calls(total_calls, AspectSet::DATA),
             },
             [] => Assessment::Abstain,
-            [call] => check_lone_call(call),
-            [first, second] => check_pair(first, second),
+            [call] => check_lone_call(total_calls, call),
+            [first, second] => check_pair(total_calls, first, second),
             _ => Assessment::Abstain,
         }
     }
@@ -126,10 +132,15 @@ impl Checker for StakingChecker {
 /// A dangling, unused `approve` on [`STAKING`] is left to
 /// [`Assessment::Abstain`] — see the module docs for why this check doesn't
 /// deny it.
-fn check_lone_call(call: &SafeTransaction) -> Assessment {
+///
+/// `total_calls` is the *whole proposal's* call count, not `1` — it can
+/// exceed `remaining`'s length by the number of `claim` calls set aside
+/// before this ran, and the claim covers those too, since they were already
+/// validated in `check`'s own loop above.
+fn check_lone_call(total_calls: usize, call: &MetaTransaction) -> Assessment {
     if stake_amount(call).is_some() {
         return Assessment::Secure {
-            coverage: Coverage::DATA,
+            coverage: Coverage::calls(total_calls, AspectSet::DATA),
         };
     }
     Assessment::Abstain
@@ -143,7 +154,10 @@ fn check_lone_call(call: &SafeTransaction) -> Assessment {
 /// leaving the `approve` a dangling, un-consumed authorization — left to
 /// [`Assessment::Abstain`] for the same reason as [`check_lone_call`]'s
 /// standalone `approve` case, regardless of the amount approved.
-fn check_pair(first: &SafeTransaction, second: &SafeTransaction) -> Assessment {
+///
+/// `total_calls` is the *whole proposal's* call count, not `2` — see
+/// [`check_lone_call`]'s docs for why.
+fn check_pair(total_calls: usize, first: &MetaTransaction, second: &MetaTransaction) -> Assessment {
     if let (Some(approved), Some(staked)) = (staking_approval_amount(first), stake_amount(second)) {
         return if approved > staked {
             Assessment::Insecure {
@@ -151,7 +165,7 @@ fn check_pair(first: &SafeTransaction, second: &SafeTransaction) -> Assessment {
             }
         } else {
             Assessment::Secure {
-                coverage: Coverage::DATA,
+                coverage: Coverage::calls(total_calls, AspectSet::DATA),
             }
         };
     }
@@ -162,7 +176,7 @@ fn check_pair(first: &SafeTransaction, second: &SafeTransaction) -> Assessment {
 /// [`REWARDS_DISTRIBUTOR`]. Only a plain, valueless `CALL` is recognized — a
 /// `DELEGATECALL` executes the target's code in the Safe's own storage
 /// context rather than a real call to it, and `claim` is never payable.
-fn claim_account(tx: &SafeTransaction) -> Option<Address> {
+fn claim_account(tx: &MetaTransaction) -> Option<Address> {
     if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != REWARDS_DISTRIBUTOR {
         return None;
     }
@@ -173,7 +187,7 @@ fn claim_account(tx: &SafeTransaction) -> Option<Address> {
 /// naming [`STAKING`] as spender. See [`claim_account`] for why
 /// `DELEGATECALL` and nonzero `tx.value` are excluded even to a legitimate
 /// address.
-fn staking_approval_amount(tx: &SafeTransaction) -> Option<U256> {
+fn staking_approval_amount(tx: &MetaTransaction) -> Option<U256> {
     if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != SAFE_TOKEN {
         return None;
     }
@@ -184,7 +198,7 @@ fn staking_approval_amount(tx: &SafeTransaction) -> Option<U256> {
 /// The staked amount, if `tx` is a `stake` call against [`STAKING`]. See
 /// [`claim_account`] for why `DELEGATECALL` and nonzero `tx.value` are
 /// excluded even to a legitimate address.
-fn stake_amount(tx: &SafeTransaction) -> Option<U256> {
+fn stake_amount(tx: &MetaTransaction) -> Option<U256> {
     if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != STAKING {
         return None;
     }

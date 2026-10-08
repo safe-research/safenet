@@ -12,7 +12,7 @@ use alloy::{
         client::{ClientBuilder, NoParams},
         json_rpc::{RequestPacket, ResponsePacket},
     },
-    transports::{BoxTransport, TransportError, TransportFut},
+    transports::{BoxTransport, RpcError, TransportError, TransportErrorKind, TransportFut},
 };
 #[cfg(any(test, feature = "test-util"))]
 use alloy::{providers::ProviderBuilder, transports::mock::Asserter};
@@ -87,7 +87,7 @@ impl Service<RequestPacket> for ObservabilityTransport {
                 request = %Json(&request_packet),
                 "sending JSON-RPC request"
             );
-            let response_packet = inner.call(request_packet).await;
+            let response_packet = inner.call(request_packet).await.map_err(without_url);
             tracing::trace!(
                 response = ?response_packet.as_ref().map(ResponseJson),
                 "received JSON-RPC response"
@@ -114,6 +114,22 @@ impl Service<RequestPacket> for ObservabilityTransport {
             }
             response_packet
         })
+    }
+}
+
+/// Removes the URL from HTTP transport errors.
+///
+/// The RPC URL commonly includes an API key in its path or query, and
+/// [`reqwest`] includes it in its errors, which would leak it to the logs.
+fn without_url(err: TransportError) -> TransportError {
+    match err {
+        RpcError::Transport(TransportErrorKind::Custom(err)) => {
+            match err.downcast::<reqwest::Error>() {
+                Ok(err) => TransportErrorKind::custom(err.without_url()),
+                Err(err) => RpcError::Transport(TransportErrorKind::Custom(err)),
+            }
+        }
+        err => err,
     }
 }
 

@@ -49,8 +49,7 @@
 | **Group ID** | Deterministic identifier for a FROST group |
 | **Signature ID** | Identifier for a specific signing ceremony |
 | **Sequence** | Counter tracking signing ceremonies within a group |
-| **Chunk** | A batch of 1024 nonces committed together |
-| **Nonce Commitment** | Pre-committing nonces before messages are known |
+| **Nonce Commitment** | A participant's public commitment $(D, E)$ to its nonce pair for one signing ceremony |
 | **Complaint** | An accusation that a participant sent invalid data |
 | **Confirmation** | A participant's declaration that DKG succeeded for them |
 

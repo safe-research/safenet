@@ -18,7 +18,14 @@ const sentinelRequestStates = [
 export type SentinelRequestState = Exclude<(typeof sentinelRequestStates)[number], "NONE">;
 
 export type VotingStatus =
-	| { kind: "sentinel"; state: SentinelRequestState; approveCount: bigint; denyCount: bigint }
+	| {
+			kind: "sentinel";
+			state: SentinelRequestState;
+			approveCount: bigint;
+			denyCount: bigint;
+			// No vote was revealed and none can be any more.
+			noVotes: boolean;
+	  }
 	| { kind: "generic"; approved: boolean }
 	| null;
 
@@ -41,23 +48,35 @@ export const loadVotingStatus = async ({
 }): Promise<VotingStatus> => {
 	const chainId = await loadChainId(provider);
 	const requestId = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash, oracleData });
+	// Read before the request: once this block is past a deadline, the counts that deadline closes are final.
+	const block = await provider.getBlockNumber();
 
 	try {
-		const { progress } = await provider.readContract({
+		const { terms, progress } = await provider.readContract({
 			address: oracle,
 			abi: sentinelOracleAbi,
 			functionName: "getRequest",
 			args: [requestId],
 		});
 		if (progress.state === 0) return null;
+		const state = sentinelRequestStates[progress.state] as SentinelRequestState;
+		// `SentinelOracleRequest.finalize`'s guard and outcome: a `PENDING` request with nothing revealed
+		// and its window closed can only end `TIMED_OUT`, and a `TIMED_OUT` one without votes ended that
+		// way (a dispute that ended without a ruling has votes on both sides).
+		const noVotes =
+			(state === "PENDING" &&
+				progress.revealedCount === 0 &&
+				(block > terms.revealDeadline || (progress.committedCount === 0 && block > terms.commitDeadline))) ||
+			(state === "TIMED_OUT" && progress.approveSentinelCount === 0 && progress.denySentinelCount === 0);
 		return {
 			kind: "sentinel",
-			state: sentinelRequestStates[progress.state] as SentinelRequestState,
+			state,
 			approveCount: BigInt(progress.approveSentinelCount),
 			denyCount: BigInt(progress.denySentinelCount),
+			noVotes,
 		};
 	} catch {
-		const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange);
+		const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, block);
 		const logs = mostRecentFirst(
 			await provider.getLogs({
 				address: oracle,

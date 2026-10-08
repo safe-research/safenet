@@ -39,7 +39,7 @@ function AppInner() {
 		<Container>
 			<div className="text-center mb-12">
 				<h1 className="text-3xl font-bold text-title sm:text-4xl mb-4">Safenet Explorer</h1>
-				<p className="text-lg text-sub-title max-w-2xl mx-auto">Explore the future of transaction security!</p>
+				<p className="text-lg text-sub-title max-w-2xl mx-auto">Explore the onchain defence protocol</p>
 			</div>
 
 			<SearchBar className="mb-8" onSelectNetwork={updateSelectedNetwork} selectedNetwork={network} />

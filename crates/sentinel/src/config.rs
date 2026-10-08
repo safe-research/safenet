@@ -1,28 +1,21 @@
 use alloy::primitives::Address;
-use safenet_core::{driver, observability, tx::Signer};
+use safenet_core::{config, driver, observability, tx::Signer};
 use serde::Deserialize;
 use sqlx::sqlite::SqliteConnectOptions;
 use std::path::Path;
-use tokio::{fs, io};
 use url::Url;
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
-    Parse(#[from] toml::de::Error),
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// The RPC endpoint used to initialize the chain provider.
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub rpc: Url,
     /// The signer used to sign and submit transactions onchain.
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub signer: Signer,
     /// The database URL backing persistent state and transaction storage.
-    #[serde(with = "safenet_core::serialization::from_str")]
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub database: SqliteConnectOptions,
     /// The `SentinelOracle` contract watched and voted/committed on.
     pub oracle: Address,
@@ -51,18 +44,16 @@ pub struct Config {
 pub struct SentinelConfig {
     /// The ERC-20 fee token approved for bonds.
     pub fee_token: Address,
-    /// The number of blocks a `Preparing` request is kept alive for before
-    /// being cleaned up.
+    /// The number of blocks a request without an onchain commit deadline is
+    /// kept alive for before being cleaned up.
     pub voting_window: u64,
     /// Base URL of the transaction-verification engine used by this sentinel.
     pub engine: Url,
 }
 
 impl Config {
-    pub async fn load(file: &Path) -> Result<Self, Error> {
-        let contents = fs::read_to_string(file).await?;
-        let config = toml::from_str(&contents)?;
-        Ok(config)
+    pub async fn load(file: &Path) -> Result<Self, config::Error> {
+        config::load(file).await
     }
 }
 

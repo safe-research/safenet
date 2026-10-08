@@ -20,7 +20,7 @@ pub trait EffectHandler<Effect, Resume>: Send + Sync + 'static {
     /// effect error internally.
     ///
     /// The same effect may be performed more than once for the same chain
-    /// message. For consumptive resources such as pre-committed nonces, handlers
+    /// message. For consumptive resources such as signing nonces, handlers
     /// should encode outcomes like "already used" in `Resume`; state transitions
     /// remain pure because they consume only the resume value.
     fn perform_effect(&self, effect: Effect) -> impl Future<Output = Resume> + Send;

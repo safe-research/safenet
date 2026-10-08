@@ -30,7 +30,7 @@ jobs:
           # See <https://github.com/foundry-rs/foundry/issues/13362>
           version: v1.5.1
 
-      - uses: ./.github/actions/install-just
+      - uses: safe-research/actions/install-just@v1
 
       - run: scripts/generate_sentinel_engine_report.sh sentinel-test-vectors
         env:

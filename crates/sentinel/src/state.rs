@@ -83,7 +83,16 @@ pub enum SentinelRequestState {
     /// regardless of which side won, but `approve`/`slash_amount` are kept
     /// so it can also record whether *this* sentinel's vote matched the
     /// arbitrated outcome and, if not, how much of its bond was slashed.
-    WaitingForDisputeResolution { approve: bool, slash_amount: U96 },
+    ///
+    /// `arbitration_deadline` is `DisputeTriggered.deadline`: once it passes
+    /// without a ruling, `handle_block_advance` submits the permissionless
+    /// `timeoutArbitration()` together with `claim()` and drops the request,
+    /// rather than leaving the bond locked until someone else times it out.
+    WaitingForDisputeResolution {
+        approve: bool,
+        slash_amount: U96,
+        arbitration_deadline: u64,
+    },
 }
 
 impl SentinelRequestState {
@@ -136,6 +145,7 @@ impl SentinelRequestState {
             | Self::WaitingForDisputeResolution {
                 approve,
                 slash_amount,
+                ..
             } => Some((*approve, *slash_amount)),
         }
     }
@@ -251,6 +261,7 @@ mod tests {
             SentinelRequestState::WaitingForDisputeResolution {
                 approve: false,
                 slash_amount: U96::from(500),
+                arbitration_deadline: 60,
             }
             .approve_and_slash_amount(),
             Some((false, U96::from(500))),

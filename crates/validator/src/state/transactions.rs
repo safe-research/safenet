@@ -65,6 +65,7 @@ impl Transition {
                 group_id,
                 responsible: None,
                 packet,
+                oracle_approved: false,
                 signers,
                 deadline,
             });

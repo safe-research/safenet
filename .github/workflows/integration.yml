@@ -33,9 +33,24 @@ jobs:
             just-args: ""
             log-artifact: validator-integration-reorg-nonce-logs
 
+          - name: validator-signing-restart
+            just-target: test-integration-validator-signing-restart
+            just-args: ""
+            log-artifact: validator-integration-signing-restart-logs
+
+          - name: validator-nonce-commit-timeout
+            just-target: test-integration-validator-nonce-commit-timeout
+            just-args: ""
+            log-artifact: validator-integration-nonce-commit-timeout-logs
+
           - name: validator-deep-reorg
             just-target: test-integration-validator-deep-reorg
             log-artifact: validator-integration-deep-reorg-logs
+
+          - name: validator-7702
+            just-target: test-integration-validator-7702
+            just-args: ""
+            log-artifact: validator-integration-7702-logs
 
     steps:
       - uses: actions/checkout@v5
@@ -49,7 +64,7 @@ jobs:
           # See <https://github.com/foundry-rs/foundry/issues/13362>
           version: v1.5.1
 
-      - uses: ./.github/actions/install-just
+      - uses: safe-research/actions/install-just@v1
 
       - run: just ${{ matrix.just-target }} ${{ matrix.just-args }}
 

@@ -1,31 +1,21 @@
 use alloy::primitives::{Address, B256};
-use safenet_core::{driver, observability, tx::Signer};
+use safenet_core::{config, driver, observability, tx::Signer};
 use serde::Deserialize;
 use sqlx::sqlite::SqliteConnectOptions;
 use std::{collections::BTreeSet, num::NonZeroU64, path::Path};
-use tokio::{fs, io};
 use url::Url;
-
-/// Error produced when loading the configuration.
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    /// An IO error when interacting with the filesystem.
-    #[error(transparent)]
-    Io(#[from] io::Error),
-    /// Error when parsing the configuration.
-    #[error(transparent)]
-    Parse(#[from] toml::de::Error),
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// The RPC endpoint used to initialize the chain provider.
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub rpc: Url,
     /// The signer used to sign and submit transactions onchain.
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub signer: Signer,
     /// The database URL backing persistent state and transaction storage.
-    #[serde(with = "safenet_core::serialization::from_str")]
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
     pub database: SqliteConnectOptions,
     /// Configuration specific to the validator service and its consensus
     /// participation.
@@ -40,10 +30,8 @@ pub struct Config {
 
 impl Config {
     /// Loads a configuration from a file.
-    pub async fn load(file: &Path) -> Result<Self, Error> {
-        let contents = fs::read_to_string(file).await?;
-        let config = toml::from_str(&contents)?;
-        Ok(config)
+    pub async fn load(file: &Path) -> Result<Self, config::Error> {
+        config::load(file).await
     }
 }
 
@@ -99,7 +87,7 @@ impl ValidatorConfig {
     }
 
     const fn default_oracle_timeout() -> NonZeroU64 {
-        NonZeroU64::new(12).unwrap()
+        NonZeroU64::new(24).unwrap()
     }
 }
 
@@ -276,7 +264,10 @@ mod tests {
             "validator=debug,info"
         );
         assert_eq!(config.driver.index.blocks.max_reorg_depth, 12);
-        assert_eq!(config.driver.transactions.max_in_flight_transactions, 4);
+        assert_eq!(
+            config.driver.transactions.mode.max_in_flight_transactions(),
+            4
+        );
     }
 
     #[test]

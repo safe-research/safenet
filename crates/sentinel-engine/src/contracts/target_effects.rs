@@ -1,11 +1,8 @@
 //! Pure calldata decoding for the excessive-approval check.
 
 use crate::{
-    contracts::{
-        bindings::{erc20, erc721, erc1155},
-        multi_send::decode_multi_send_call,
-    },
-    engine::SafeTransaction,
+    contracts::bindings::{erc20, erc721, erc1155},
+    engine::MetaTransaction,
 };
 use alloy::{
     primitives::{Address, U256},
@@ -41,30 +38,25 @@ pub enum EffectKind {
     Erc1155BatchTransfer { ids: Vec<U256>, amounts: Vec<U256> },
 }
 
-/// Decodes the target effects of a Safe transaction, recursing through
-/// MultiSend so each batched sub-call is decoded individually.
-pub fn decode_target_effects(tx: &SafeTransaction) -> Vec<TargetEffect> {
-    if let Some((sub_txs, _)) = decode_multi_send_call(tx) {
-        return sub_txs.iter().flat_map(decode_target_effects).collect();
-    }
-
-    decode_call(tx)
-}
-
-/// Decodes a single (non-MultiSend) call into its target effects: a native
-/// value transfer (if `tx.value` is non-zero) plus, independently, whatever
-/// token effect `tx.data` decodes to — a call can carry both at once (e.g. a
-/// `payable` ERC-20 `transfer`), so neither is allowed to suppress the other.
-fn decode_call(tx: &SafeTransaction) -> Vec<TargetEffect> {
+/// Decodes a single call's target effects: a native value transfer (if
+/// `call.value` is non-zero) plus, independently, whatever token effect
+/// `call.data` decodes to — a call can carry both at once (e.g. a `payable`
+/// ERC-20 `transfer`), so neither is allowed to suppress the other.
+///
+/// Does not recurse through MultiSend: the engine's entry-point parser
+/// already flattens a recognized batch into `Proposal::calls` before any
+/// check runs, so by the time a check calls this, `call` is never itself a
+/// batch container — the caller maps this over `proposal.calls` instead.
+pub fn decode_target_effects(call: &MetaTransaction) -> Vec<TargetEffect> {
     let mut effects = Vec::new();
-    if !tx.value.is_zero() {
+    if !call.value.is_zero() {
         effects.push(TargetEffect {
-            recipient: tx.to,
-            kind: EffectKind::ValueTransfer { amount: tx.value },
+            recipient: call.to,
+            kind: EffectKind::ValueTransfer { amount: call.value },
         });
     }
 
-    let data = &tx.data;
+    let data = &call.data;
     if data.is_empty() {
         return effects;
     }
@@ -134,7 +126,7 @@ fn decode_call(tx: &SafeTransaction) -> Vec<TargetEffect> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{contracts::bindings::multi_send, engine::Operation};
+    use crate::engine::Operation;
     use alloy::primitives::{Bytes, address};
 
     fn tx(
@@ -142,34 +134,13 @@ mod tests {
         value: U256,
         data: impl Into<Bytes>,
         operation: Operation,
-    ) -> SafeTransaction {
-        SafeTransaction {
-            safe: address!("F01888f0677547Ec07cd16c8680e699c96588E6B"),
+    ) -> MetaTransaction {
+        MetaTransaction {
             to,
             value,
             data: data.into(),
             operation,
-            ..Default::default()
         }
-    }
-
-    fn pack(operation: Operation, to: Address, value: U256, data: &[u8]) -> Vec<u8> {
-        let mut out = vec![operation as u8];
-        out.extend_from_slice(to.as_slice());
-        out.extend_from_slice(&value.to_be_bytes::<32>());
-        out.extend_from_slice(&U256::from(data.len()).to_be_bytes::<32>());
-        out.extend_from_slice(data);
-        out
-    }
-
-    fn multisend(sub_txs: &[Vec<u8>]) -> Bytes {
-        let transactions: Vec<u8> = sub_txs.iter().flatten().cloned().collect();
-        Bytes::from(
-            multi_send::multiSendCall {
-                transactions: Bytes::from(transactions),
-            }
-            .abi_encode(),
-        )
     }
 
     const TOKEN: Address = address!("9C58BAcC331c9aa871AFD802DB6379a98e80CEdb");
@@ -413,42 +384,6 @@ mod tests {
                 recipient: RECIPIENT,
                 kind: EffectKind::Erc1155BatchTransfer { ids, amounts }
             }]
-        );
-    }
-
-    #[test]
-    fn recurses_through_multi_send() {
-        let approve_data = erc20::approveCall {
-            spender: RECIPIENT,
-            amount: U256::MAX,
-        }
-        .abi_encode();
-        let data = multisend(&[
-            pack(Operation::Call, RECIPIENT, U256::from(2u64), &[]),
-            pack(Operation::Call, TOKEN, U256::ZERO, &approve_data),
-        ]);
-
-        let effects = decode_target_effects(&tx(
-            address!("218543288004CD07832472D464648173c77D7eB7"),
-            U256::ZERO,
-            data,
-            Operation::DelegateCall,
-        ));
-
-        assert_eq!(
-            effects,
-            vec![
-                TargetEffect {
-                    recipient: RECIPIENT,
-                    kind: EffectKind::ValueTransfer {
-                        amount: U256::from(2u64)
-                    }
-                },
-                TargetEffect {
-                    recipient: RECIPIENT,
-                    kind: EffectKind::Erc20Approval { amount: U256::MAX }
-                },
-            ]
         );
     }
 }

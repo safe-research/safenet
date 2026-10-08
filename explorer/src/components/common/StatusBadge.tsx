@@ -7,6 +7,18 @@ export function StatusBadge({ status }: { status: ProposalStatus }) {
 			return <Badge variant="error">TIMED OUT</Badge>;
 		case "ATTESTED":
 			return <Badge variant="positive">ATTESTED</Badge>;
+		case "DENIED":
+			return <Badge variant="error">DENIED</Badge>;
+		case "APPROVED":
+			return <Badge variant="info">APPROVED</Badge>;
+		case "ARBITRATING":
+			return <Badge variant="pending">ARBITRATING</Badge>;
+		case "SECURE":
+			return <Badge variant="info">SECURE</Badge>;
+		case "INSECURE":
+			return <Badge variant="error">INSECURE</Badge>;
+		case "NO_RULING":
+			return <Badge variant="warning">NO RULING</Badge>;
 		default:
 			return <Badge variant="pending">PROPOSED</Badge>;
 	}

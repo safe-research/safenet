@@ -2,9 +2,9 @@
 //! rounds with address-derived identifiers and ECDH-encrypted secret shares.
 
 use super::{
-    ecdh::EncryptionKey,
+    ecdh::{self, EncryptionKey},
     error::{Culprit as _, Error},
-    marshal, participants,
+    marshal, participants, serialization,
 };
 use crate::{bindings, frost::ecdh::EncryptionPublicKey};
 use alloy::primitives::{Address, U256};
@@ -27,6 +27,7 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Secrets {
     encryption_key: EncryptionKey,
+    encryption_package: ecdh::Package,
     secret_package: round1::SecretPackage,
     proof_of_knowledge: Signature,
 }
@@ -39,7 +40,7 @@ impl Secrets {
             self.secret_package.commitment().clone(),
             self.proof_of_knowledge,
         );
-        marshal::solidity_commitment(&self.encryption_key.public_key(), &round1_package)
+        marshal::solidity_commitment(&self.encryption_package, &round1_package)
     }
 }
 
@@ -52,12 +53,16 @@ where
 {
     let identifier = participants::identifier(me);
     let encryption_key = EncryptionKey::generate(&mut *rng);
+    let encryption_package = encryption_key
+        .package(identifier, &mut *rng)
+        .err_unexpected()?;
     let (secret_package, package) =
         dkg::part1(identifier, count, threshold, &mut *rng).err_unexpected()?;
     let proof_of_knowledge = *package.proof_of_knowledge();
 
     Ok(Secrets {
         encryption_key,
+        encryption_package,
         secret_package,
         proof_of_knowledge,
     })
@@ -67,11 +72,12 @@ where
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedCommitment {
     encryption_public_key: EncryptionPublicKey,
+    #[serde(with = "serialization::round1_package")]
     package: round1::Package,
 }
 
 /// Verifies a participant's public commitment by decoding its values and
-/// checking its proof of knowledge.
+/// checking its proofs of possession and knowledge.
 ///
 /// These are applied to _both_ `me`, the validator itself, and all peers that
 /// publish key generation commitments onchain; unlike [`generate_secret_shares`]
@@ -85,7 +91,8 @@ pub fn verify_commitment(
     // unexpected FROST error.
     let identifier = participants::identifier(participant);
     marshal::frost_commitment(commitment)
-        .and_then(|(encryption_public_key, package)| {
+        .and_then(|(encryption_package, package)| {
+            let encryption_public_key = encryption_package.verified_public_key(identifier)?;
             frost_core::keys::dkg::verify_proof_of_knowledge(
                 identifier,
                 package.commitment(),
@@ -103,6 +110,7 @@ pub fn verify_commitment(
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GroupCommitments {
     commitments: BTreeMap<Address, VerifiedCommitment>,
+    #[serde(with = "serialization::vss_commitment")]
     group_commitment: keys::VerifiableSecretSharingCommitment,
     verifying_key: VerifyingKey,
 }
@@ -243,15 +251,6 @@ fn group_commitment(
     )
 }
 
-/// A verified public key share.
-///
-/// Public key shares are verified against the commitments made by the
-/// participant at the start of the keygen ceremony.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PublicKeyShare {
-    verifying_share: keys::VerifyingShare,
-}
-
 /// A participant's encrypted key shares, in canonical publishing order.
 pub struct EncryptedSecretShares {
     shares: Vec<[u8; 32]>,
@@ -268,13 +267,13 @@ pub fn verify_secret_share(
     group_commitments: &GroupCommitments,
     participant: Address,
     share: &bindings::KeyGenSecretShare,
-) -> Result<(PublicKeyShare, EncryptedSecretShares), Error> {
+) -> Result<EncryptedSecretShares, Error> {
     if !group_commitments.commitments.contains_key(&participant) {
         return Err(frost_secp256k1::Error::UnknownIdentifier).err_unexpected();
     }
 
     let identifier = participants::identifier(participant);
-    let public_key = marshal::frost_point(&share.y)
+    marshal::frost_point(&share.y)
         .and_then(|y| {
             let verifying_share = keys::VerifyingShare::from_commitment(
                 identifier,
@@ -284,7 +283,7 @@ pub fn verify_secret_share(
                 return Err(frost_secp256k1::Error::MalformedVerifyingKey);
             }
 
-            Ok(PublicKeyShare { verifying_share })
+            Ok(())
         })
         .err_with_culprit(participant)?;
 
@@ -295,7 +294,7 @@ pub fn verify_secret_share(
         shares: share.f.iter().map(U256::to_be_bytes).collect(),
     };
 
-    Ok((public_key, encrypted_shares))
+    Ok(encrypted_shares)
 }
 
 /// A validated signing share from a participant.

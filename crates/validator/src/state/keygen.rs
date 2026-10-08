@@ -1,6 +1,6 @@
 use super::{
     ConfirmationDeadlines, Epoch, KeyGenCommitment, KeyGenConfirmation, KeyGenParticipation,
-    NonceState, Packet, RolloverState, SigningState, State, Transition,
+    Packet, RolloverState, SigningState, State, Transition,
 };
 use crate::{
     bindings::{Consensus, Coordinator},
@@ -283,7 +283,7 @@ impl Transition {
                 next_epoch,
                 group,
                 participation,
-                mut public_keys,
+                mut shared,
                 mut shares,
                 complaints,
                 deadline,
@@ -300,8 +300,8 @@ impl Transition {
                     event.participant,
                     &event.share,
                 ) {
-                    Ok((public_key, encrypted_shares)) => {
-                        public_keys.insert(event.participant, public_key);
+                    Ok(encrypted_shares) => {
+                        shared.insert(event.participant);
                         Some(encrypted_shares)
                     }
                     Err(err) => {
@@ -348,7 +348,7 @@ impl Transition {
                     }
                 }
 
-                if public_keys.len() as u16 != count {
+                if shared.len() as u16 != count {
                     // We are still missing shares from some participants, so
                     // stay in the same collecting state.
                     return (
@@ -357,7 +357,7 @@ impl Transition {
                                 next_epoch,
                                 group,
                                 participation,
-                                public_keys,
+                                shared,
                                 shares,
                                 complaints,
                                 deadline,
@@ -468,11 +468,11 @@ impl Transition {
                 }
 
                 match next_epoch {
-                    // On genesis: retain the active key, start preprocessing,
-                    // and immediately begin key generation for the next epoch.
+                    // On genesis: retain the active key and immediately begin
+                    // key generation for the next epoch.
                     EpochId::Genesis => {
                         let next_epoch = epoch::next_number(block, self.config.blocks_per_epoch);
-                        let (state, finalize_commands) = self.finalize_key_gen(
+                        let state = self.finalize_key_gen(
                             State {
                                 rollover: RolloverState::EpochSkipped { next_epoch },
                                 ..state
@@ -491,19 +491,17 @@ impl Transition {
                                 excluded: BTreeSet::new(),
                             },
                         ) else {
-                            return (state, finalize_commands);
+                            return (state, Vec::new());
                         };
 
                         let deadline =
                             Some(block.saturating_add(self.config.key_gen_timeout.get()));
-                        let (state, keygen_commands) = self.start_key_gen(
+                        self.start_key_gen(
                             state,
                             EpochId::Number { number: next_epoch },
                             &participants,
                             deadline,
-                        );
-
-                        (state, [finalize_commands, keygen_commands].concat())
+                        )
                     }
                     EpochId::Number {
                         number: proposed_epoch,
@@ -540,6 +538,7 @@ impl Transition {
                                         group_id,
                                         group_key,
                                     },
+                                    oracle_approved: false,
                                     signers: participating_epoch.group.participants().clone(),
                                     deadline: block
                                         .saturating_add(self.config.signing_timeout.get()),
@@ -570,8 +569,7 @@ impl Transition {
     /// clears the rollover signing session and moves
     /// [`RolloverState::SigningRollover`] to [`RolloverState::EpochStaged`],
     /// via [`Self::finalize_key_gen`] recording the new epoch and group in
-    /// `state.epochs` (if this validator is participating) and preprocessing
-    /// it by sampling and registering its nonce tree. Ports
+    /// `state.epochs` (if this validator is participating). Ports
     /// `consensus/epochStaged.ts`.
     ///
     /// `active_epoch` itself is not rolled forward here; that only happens
@@ -596,7 +594,7 @@ impl Transition {
                     signature_id = %event.signatureId,
                     "epoch staged"
                 );
-                let (state, keygen_commands) = self.finalize_key_gen(
+                let state = self.finalize_key_gen(
                     State {
                         rollover: RolloverState::EpochStaged { next_epoch },
                         ..state
@@ -605,10 +603,7 @@ impl Transition {
                     group,
                     key_share,
                 );
-                let (state, attested_commands) =
-                    self.handle_sign_attested(state, event.signatureId, message);
-
-                (state, [keygen_commands, attested_commands].concat())
+                self.handle_sign_attested(state, event.signatureId, message)
             }
             RolloverState::WaitingForGenesis => {
                 // We should have been waiting for genesis to start. In this,
@@ -651,69 +646,87 @@ impl Transition {
     /// group's signing threshold, key generation restarts excluding them;
     /// otherwise, if this validator is the one accused, it reveals its own
     /// secret share for the plaintiff via [`Action::KeyGenComplaintResponse`].
+    /// Complaints raised after the complaint deadline still count towards the
+    /// threshold, but do not require a response.
     pub(super) fn handle_key_gen_complained(
         &self,
         mut state: State,
         block: u64,
         event: &Coordinator::KeyGenComplained,
     ) -> (State, Commands<State, Self>) {
-        let (next_epoch, group, participation, complaints, restart_deadline, response_expires_at) =
-            match &mut state.rollover {
-                RolloverState::CollectingShares {
-                    next_epoch,
-                    group,
-                    participation,
+        let (
+            next_epoch,
+            group,
+            participation,
+            complaints,
+            restart_deadline,
+            response_expires_at,
+            requires_response,
+        ) = match &mut state.rollover {
+            RolloverState::CollectingShares {
+                next_epoch,
+                group,
+                participation,
+                complaints,
+                deadline,
+                ..
+            } if group.id() == event.gid => {
+                let restart_deadline =
+                    deadline.map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
+                // We get at least another `key_gen_timeout` to get the
+                // complaint response onchain, which ends up being the same
+                // value as the restart deadline (by coincidence).
+                let response_expires_at = restart_deadline;
+                let requires_response = true;
+
+                (
+                    *next_epoch,
+                    &*group,
+                    &*participation,
                     complaints,
-                    deadline,
-                    ..
-                } if group.id() == event.gid => {
-                    let restart_deadline =
-                        deadline.map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
-                    // We get at least another `key_gen_timeout` to get the
-                    // complaint response onchain, which ends up being the same
-                    // value as the restart deadline (by coincidence).
-                    let response_expires_at = restart_deadline;
-                    (
-                        *next_epoch,
-                        &*group,
-                        &*participation,
-                        complaints,
-                        restart_deadline,
-                        response_expires_at,
-                    )
-                }
-                RolloverState::CollectingConfirmations {
-                    next_epoch,
-                    group,
-                    participation,
+                    restart_deadline,
+                    response_expires_at,
+                    requires_response,
+                )
+            }
+            RolloverState::CollectingConfirmations {
+                next_epoch,
+                group,
+                participation,
+                complaints,
+                deadlines,
+                ..
+            } if group.id() == event.gid => {
+                let restart_deadline = deadlines
+                    .as_ref()
+                    .map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
+                let response_expires_at = deadlines.as_ref().map(|deadlines| deadlines.response);
+                // The contract accepts complaints past the complaint deadline
+                // and counts them towards the accused being compromised, so we
+                // must count them as well. However, they are late and therefore
+                // do not require a response.
+                let requires_response = deadlines
+                    .as_ref()
+                    .is_none_or(|deadlines| block <= deadlines.complain);
+
+                (
+                    *next_epoch,
+                    &*group,
+                    &*participation,
                     complaints,
-                    deadlines,
-                    ..
-                } if group.id() == event.gid
-                    && deadlines
-                        .as_ref()
-                        .is_none_or(|deadlines| block <= deadlines.complain) =>
-                {
-                    let restart_deadline = deadlines
-                        .as_ref()
-                        .map(|_| block.saturating_add(self.config.key_gen_timeout.get()));
-                    let response_expires_at =
-                        deadlines.as_ref().map(|deadlines| deadlines.response);
-                    (
-                        *next_epoch,
-                        &*group,
-                        &*participation,
-                        complaints,
-                        restart_deadline,
-                        response_expires_at,
-                    )
-                }
-                _ => return (state, Vec::new()),
-            };
+                    restart_deadline,
+                    response_expires_at,
+                    requires_response,
+                )
+            }
+            _ => return (state, Vec::new()),
+        };
 
         let complaint = complaints.entry(event.accused).or_default();
         complaint.total += 1;
-        complaint.unresponded += 1;
+        if requires_response {
+            complaint.unresponded.insert(event.plaintiff);
+        }
 
         // If we ever get threshold complaints, the keygen is done. This is
         // because it would reveal sufficient public information to compute
@@ -733,6 +746,7 @@ impl Transition {
         let mut commands = Vec::new();
         if let KeyGenParticipation::Participating(sharing_state) = participation
             && event.accused == self.account
+            && requires_response
         {
             match frost::keygen::reveal_secret_share(sharing_state, event.plaintiff) {
                 Ok(secret_share) => {
@@ -818,12 +832,14 @@ impl Transition {
                 _ => return (state, Vec::new()),
             };
 
-        let Some(complaint) = complaints
+        // Only consider responses to complaints that require one, so that a
+        // response to a late complaint can't resolve a different one.
+        if !complaints
             .get_mut(&event.accused)
-            .filter(|complaint| complaint.unresponded > 0)
-        else {
+            .is_some_and(|complaint| complaint.unresponded.remove(&event.plaintiff))
+        {
             return (state, Vec::new());
-        };
+        }
 
         match frost::keygen::verify_revealed_secret_share(
             participation.group_commitments(),
@@ -837,7 +853,6 @@ impl Transition {
                 {
                     shares.insert(event.accused, share);
                 }
-                complaint.unresponded -= 1;
             }
             Err(err) => {
                 tracing::warn!(
@@ -1047,12 +1062,12 @@ impl Transition {
             RolloverState::CollectingShares {
                 next_epoch,
                 group,
-                public_keys,
+                shared,
                 deadline: Some(deadline),
                 ..
             } if block >= *deadline => {
                 // There are participants that did not submit secret shares
-                // onchain. Note that we use the `public_keys` map to determine
+                // onchain. Note that we use the `shared` set to determine
                 // which participants are missing and not `shares`: this is
                 // because `shares` contains verified shares, which may be
                 // added later through the complaint flow.
@@ -1061,10 +1076,10 @@ impl Transition {
                     group_id = %group.id(),
                     block,
                     deadline,
-                    shared = ?public_keys.keys().copied().collect::<BTreeSet<_>>(),
+                    ?shared,
                     "key generation share collection timed out"
                 );
-                let excluded = group.exclude_all_others(public_keys.keys());
+                let excluded = group.exclude_all_others(shared.iter());
                 Some((*next_epoch, excluded))
             }
             RolloverState::CollectingConfirmations {
@@ -1077,7 +1092,7 @@ impl Transition {
             } => {
                 let unresponded = complaints
                     .iter()
-                    .filter(|(_, complaint)| complaint.unresponded > 0)
+                    .filter(|(_, complaint)| !complaint.unresponded.is_empty())
                     .map(|(address, _)| *address)
                     .collect::<BTreeSet<_>>();
                 let excluded = if block >= deadlines.response && !unresponded.is_empty() {
@@ -1280,7 +1295,7 @@ impl Transition {
                 next_epoch,
                 group,
                 participation,
-                public_keys: BTreeMap::new(),
+                shared: BTreeSet::new(),
                 shares: BTreeMap::new(),
                 complaints: BTreeMap::new(),
                 deadline,
@@ -1289,40 +1304,23 @@ impl Transition {
         )
     }
 
-    /// Finalizes keygen and triggers nonces preprocessing. Any remaining DKG
-    /// secrets are pruned by the next group reconciliation, since the group
-    /// now has a key share (or none, if not participating).
+    /// Finalizes keygen. Any remaining DKG secrets are pruned by the next group
+    /// reconciliation, since the group now has a key share (or none, if not
+    /// participating).
     fn finalize_key_gen(
         &self,
         mut state: State,
         epoch: EpochId,
         group: Group,
         key_share: Option<Arc<KeyShare>>,
-    ) -> (State, Commands<State, Self>) {
-        let group_id = group.id();
-
+    ) -> State {
         // If we are participating in the new group (in other words, we were
         // part of the DKG ceremony and key share), register the epoch in our
-        // participating epochs map and generate a nonces chunk.
-        let commands = if let Some(key_share) = key_share {
-            let mut nonces = NonceState::default();
-            let chunk = nonces.reserve_chunk();
-            debug_assert_eq!(chunk, Some(0));
-
-            state.epochs.insert(
-                epoch,
-                Epoch {
-                    group,
-                    key_share,
-                    nonces,
-                },
-            );
-            vec![Command::Effect(Effect::NonceTree { group_id })]
-        } else {
-            Vec::new()
-        };
-
-        (state, commands)
+        // participating epochs map.
+        if let Some(key_share) = key_share {
+            state.epochs.insert(epoch, Epoch { group, key_share });
+        }
+        state
     }
 
     /// Encodes commands for confirming a newly established secret key share,
@@ -1336,24 +1334,14 @@ impl Transition {
         deadlines: Option<&ConfirmationDeadlines>,
     ) -> Result<(KeyGenConfirmation, Commands<State, Self>), frost::error::Error> {
         let key_share = frost::keygen::finalize(sharing_state, shares)?;
-        let key_share = Arc::new(key_share);
 
         Ok((
-            KeyGenConfirmation::Confirmed(key_share.clone()),
-            vec![
-                Command::Action(Action::KeyGenConfirm {
-                    group_id: group.id(),
-                    callback: self.key_gen_confirmation_callback(epoch),
-                    expires_at: deadlines.map(|deadlines| deadlines.confirm),
-                }),
-                // Preemptively start nonce generation before any group
-                // reconciliation effect. This allows us to compute a nonce tree
-                // early to ensure we have one available for when we need it.
-                Command::Effect(Effect::StartNonceGeneration {
-                    group_id: group.id(),
-                    key_share,
-                }),
-            ],
+            KeyGenConfirmation::Confirmed(Arc::new(key_share)),
+            vec![Command::Action(Action::KeyGenConfirm {
+                group_id: group.id(),
+                callback: self.key_gen_confirmation_callback(epoch),
+                expires_at: deadlines.map(|deadlines| deadlines.confirm),
+            })],
         ))
     }
 

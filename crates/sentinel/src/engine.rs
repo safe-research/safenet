@@ -1,7 +1,7 @@
 //! Client for the sentinel engine used to check proposed transactions.
 
 use crate::{bindings::consensus::SafeTransaction, metrics::EngineCheckVerdict};
-use alloy::primitives::B256;
+use alloy::{eips::BlockNumberOrTag, primitives::B256};
 use reqwest::RequestBuilder;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{borrow::Cow, fmt, time::Duration};
@@ -34,7 +34,7 @@ impl RuleId {
         Self(section, rule)
     }
 
-    fn parse(code: &str) -> Option<Self> {
+    pub(crate) fn parse(code: &str) -> Option<Self> {
         let (section, rule) = code.strip_prefix("R-")?.split_once('.')?;
         let section = section.parse().ok()?;
         let rule = rule.parse().ok()?;
@@ -70,8 +70,7 @@ impl<'de> Deserialize<'de> for RuleId {
 
 #[derive(Serialize)]
 struct Request<'a> {
-    #[serde(with = "alloy::serde::quantity")]
-    block: u64,
+    block: BlockNumberOrTag,
     transaction: &'a SafeTransaction,
 }
 
@@ -116,13 +115,17 @@ impl EngineClient {
 
     /// Requests a verdict for `transaction`, correlating the HTTP request with
     /// the onchain request through the `x-request-id` header. `block` is the
-    /// block number the sentinel considers current, sent along so the engine
-    /// can use it as a reference point when reading chain state.
+    /// block, on the chain the transaction executes on, that the engine
+    /// should use as its reference point when reading chain state.
     ///
     /// An invalid transaction, transport failure, timeout, non-success status,
     /// or invalid response is not evidence for either vote and therefore
     /// resolves to [`CheckOutcome::Unknown`].
-    pub fn security_check(&self, block: u64, transaction: &SafeTransaction) -> SecurityCheck {
+    pub fn security_check(
+        &self,
+        block: BlockNumberOrTag,
+        transaction: &SafeTransaction,
+    ) -> SecurityCheck {
         let span = tracing::info_span!(
             "security_check",
             safe = %transaction.safe,
@@ -148,6 +151,13 @@ impl SecurityCheck {
     pub fn request_id(mut self, request_id: B256) -> Self {
         self.span.record("request_id", field::display(request_id));
         self.request = self.request.header("x-request-id", request_id.to_string());
+        self
+    }
+
+    /// Configure the timestamp, in seconds since the Unix epoch, of the
+    /// consensus-chain block the transaction was proposed in.
+    pub fn proposal_timestamp(mut self, timestamp: u64) -> Self {
+        self.request = self.request.header("x-proposal-timestamp", timestamp);
         self
     }
 
@@ -246,8 +256,9 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
 
         let _ = engine
-            .security_check(1, &SafeTransaction::default())
+            .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
             .request_id(B256::repeat_byte(0x42))
+            .proposal_timestamp(1_700_000_000)
             .timeout(Duration::from_millis(1337))
             .execute()
             .await;
@@ -255,6 +266,7 @@ mod tests {
 
         for header in [
             "x-request-id: 0x4242424242424242424242424242424242424242424242424242424242424242",
+            "x-proposal-timestamp: 1700000000",
             "x-request-timeout: 1337",
         ] {
             assert!(
@@ -265,12 +277,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sends_the_block_label() {
+        for (block, expected) in [
+            (BlockNumberOrTag::Latest, r#"{"block":"latest","#),
+            (
+                BlockNumberOrTag::Number(0x1361f5),
+                r#"{"block":"0x1361f5","#,
+            ),
+        ] {
+            let (url, request) =
+                respond_once_ex("200 OK", r#"{"verdict":"secure"}"#, Duration::ZERO).await;
+            let engine = EngineClient::new(url).unwrap();
+
+            let _ = engine
+                .security_check(block, &SafeTransaction::default())
+                .execute()
+                .await;
+            let request = request.await.unwrap();
+
+            assert!(
+                request.contains(&format!("\r\n\r\n{expected}")),
+                "request body does not start with '{expected}':\n---\n{request}\n---"
+            )
+        }
+    }
+
+    #[tokio::test]
     async fn approves_when_the_endpoint_approves() {
         let url = respond_once("200 OK", r#"{"verdict":"secure"}"#).await;
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(1, &SafeTransaction::default())
+                .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Approved
@@ -283,7 +321,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(1, &SafeTransaction::default())
+                .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Denied(RuleId::new(4, 6))
@@ -296,7 +334,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(1, &SafeTransaction::default())
+                .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Denied(RuleId::new(42, 1337))
@@ -313,7 +351,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(1, &SafeTransaction::default())
+                .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Unknown
@@ -335,7 +373,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(1, &SafeTransaction::default())
+                .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Unknown
@@ -348,7 +386,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(1, &SafeTransaction::default())
+                .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Unknown
@@ -364,7 +402,7 @@ mod tests {
         let engine = EngineClient::new(url).unwrap();
         assert_eq!(
             engine
-                .security_check(1, &SafeTransaction::default())
+                .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
                 .execute()
                 .await,
             CheckOutcome::Unknown
@@ -380,7 +418,7 @@ mod tests {
         let outcome = time::timeout(
             Duration::from_secs(50),
             engine
-                .security_check(1, &SafeTransaction::default())
+                .security_check(BlockNumberOrTag::Number(1), &SafeTransaction::default())
                 .timeout(Duration::from_secs(1))
                 .execute(),
         )

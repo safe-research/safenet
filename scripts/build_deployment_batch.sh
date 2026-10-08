@@ -7,13 +7,14 @@
 #
 # This coordinates the existing contracts/script/*.s.sol front doors 1:1 with the runbook steps —
 # it does not reimplement any of their deployment logic:
-#   1. DeployConsensusScript    (coordinator via the CANONICAL CREATE2 factory, consensus via the
-#                               FACTORY-selected one, same as steps 2 and 3)
+#   1. DeployConsensusScript    (coordinator and consensus via the FACTORY-selected CREATE2
+#                               factory, same as steps 2, 3 and 5)
 #   2. DeployERC20Script        (fee token, skipped if SENTINEL_FEE_TOKEN is already set), plus a
 #                               mint(...) to each SENTINEL_ADDRESSES entry when a fresh token is
 #                               deployed, so sentinels can actually afford to post bonds
 #   3. DeploySentinelOracleScript
 #   4. addSentinel(...) for each address in SENTINEL_ADDRESSES
+#   5. DeploySafenet7702ExecutorScript (via the FACTORY-selected factory)
 #
 # Each forge script dry-run still needs a live --rpc-url (read-only) to see the target chain's
 # deployed CREATE2 factory and to predict each contract's deterministic address; it never signs or
@@ -87,6 +88,10 @@ IFS=',' read -ra SENTINELS <<< "${SENTINEL_ADDRESSES:-}"
 dry_run() {
     local contract="$1"
     local output
+    # Forge doesn't write an artifact when a script records zero transactions, so remove any
+    # leftover one from a previous run: artifact_path would otherwise pick it up and add
+    # transactions for contracts that are already deployed.
+    rm -f "$CONTRACTS_DIR/build/broadcast/${contract%Script}.s.sol/$CHAIN_ID/dry-run/run-latest.json"
     output="$(cd "$CONTRACTS_DIR" && forge script "$contract" --rpc-url "$RPC_URL" --sender "$SAFE_ADDRESS" 2>&1)"
     echo "$output" >&2
     echo "$output"
@@ -162,7 +167,9 @@ export SENTINEL_CONSENSUS
 
 echo "--- 2. Deploy test token (skipped if SENTINEL_FEE_TOKEN is already set) ---"
 
+SENTINEL_FEE_TOKEN_DEPLOYED=false
 if [[ -z "${SENTINEL_FEE_TOKEN:-}" ]]; then
+    SENTINEL_FEE_TOKEN_DEPLOYED=true
     ERC20_OUTPUT="$(dry_run DeployERC20Script)"
     add_deploy_txs "$(artifact_path DeployERC20)"
     forge_return SENTINEL_FEE_TOKEN "$ERC20_OUTPUT" erc20
@@ -213,7 +220,13 @@ for sentinel in "${SENTINELS[@]}"; do
     }')")
 done
 
-echo "--- 5. Assemble the Safe Transaction Builder batch ---"
+echo "--- 5. Deploy Safenet7702Executor ---"
+
+EXECUTOR_OUTPUT="$(dry_run DeploySafenet7702ExecutorScript)"
+add_deploy_txs "$(artifact_path DeploySafenet7702Executor)"
+forge_return SAFENET_7702_EXECUTOR "$EXECUTOR_OUTPUT" account
+
+echo "--- 6. Assemble the Safe Transaction Builder batch ---"
 
 mkdir -p "$(dirname "$OUT_FILE")"
 TRANSACTIONS_JSON="$(printf '%s\n' "${TXS[@]}" | jq -s '.')"
@@ -233,7 +246,9 @@ COORDINATOR=$COORDINATOR
 GROUP_ID=$GROUP_ID
 SENTINEL_CONSENSUS=$SENTINEL_CONSENSUS
 SENTINEL_FEE_TOKEN=$SENTINEL_FEE_TOKEN
+SENTINEL_FEE_TOKEN_DEPLOYED=$SENTINEL_FEE_TOKEN_DEPLOYED
 SENTINEL_ORACLE=$SENTINEL_ORACLE
+SAFENET_7702_EXECUTOR=$SAFENET_7702_EXECUTOR
 EOF
 
 echo >&2

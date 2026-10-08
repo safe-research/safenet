@@ -74,8 +74,7 @@ use crate::{
         cow::{Order, TwapData, createWithContextCall, setPreSignatureCall},
         erc20::approveCall,
     },
-    contracts::multi_send::sub_transactions,
-    engine::{CheckContext, Coverage, Operation, RuleId, SafeTransaction},
+    engine::{AspectSet, CheckContext, Coverage, MetaTransaction, Operation, Proposal, RuleId},
 };
 use alloy::{
     primitives::{Address, B256, Bytes, U256, address},
@@ -172,6 +171,7 @@ fn compute_order_uid(chain_id: U256, order: &CowOrder) -> [u8; 56] {
 /// [`CowChecker`]'s own logic and the actual HTTP call, so tests can supply
 /// a fake instead of standing up a real server (see `FakeOrderApi` in this
 /// module's tests).
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 trait OrderApi: Send + Sync {
     async fn fetch_order(
@@ -277,7 +277,7 @@ impl CowChecker {
         &self,
         safe: Address,
         chain_id: U256,
-        calls: &[SafeTransaction],
+        calls: &[MetaTransaction],
     ) -> Assessment {
         let Some(base_url) = order_api_base_url(chain_id) else {
             return Assessment::Abstain;
@@ -321,7 +321,7 @@ impl CowChecker {
             },
             Ok(order) if token == order.sell_token && approved_amount == order.sell_amount => {
                 Assessment::Secure {
-                    coverage: Coverage::DATA,
+                    coverage: Coverage::calls(calls.len(), AspectSet::DATA),
                 }
             }
             Ok(_) => Assessment::Insecure {
@@ -360,7 +360,7 @@ impl CowChecker {
     /// approval *smaller* than that total is a trade-soundness concern (the
     /// order may not fully fill), not a security one, so it doesn't affect
     /// this verdict either way.
-    fn check_twap_batch(&self, safe: Address, calls: &[SafeTransaction]) -> Assessment {
+    fn check_twap_batch(&self, safe: Address, calls: &[MetaTransaction]) -> Assessment {
         // TODO(follow-up): same gap as `check_presignature_batch` — a
         // standalone TWAP `createWithContext` with no co-batched `approve`
         // abstains here rather than affirming on the receiver check alone.
@@ -396,14 +396,14 @@ impl CowChecker {
             };
         }
         Assessment::Secure {
-            coverage: Coverage::DATA,
+            coverage: Coverage::calls(calls.len(), AspectSet::DATA),
         }
     }
 
     /// An `approve` to `GPv2VaultRelayer` with no co-batched presignature or
     /// TWAP order-creation call is not the pattern a genuine CoW Swap
     /// interaction takes.
-    fn check_dangling_approval(&self, calls: &[SafeTransaction]) -> Assessment {
+    fn check_dangling_approval(&self, calls: &[MetaTransaction]) -> Assessment {
         if !calls.iter().any(approves_vault_relayer) {
             return Assessment::Abstain;
         }
@@ -441,7 +441,8 @@ impl Checker for CowChecker {
     /// batch payload (the paired `approve` plus presignature/TWAP-creation
     /// call), not the MultiSend container's own `to`/`operation` — that
     /// coverage comes from `BaseChecker`.
-    async fn check(&self, transaction: &SafeTransaction, _context: &CheckContext) -> Assessment {
+    async fn check(&self, proposal: &Proposal, _context: &CheckContext) -> Assessment {
+        let transaction = &proposal.transaction;
         if !SUPPORTED_CHAIN_IDS
             .iter()
             .any(|&id| transaction.chain_id == U256::from(id))
@@ -449,21 +450,19 @@ impl Checker for CowChecker {
             return Assessment::Abstain;
         }
 
-        let calls = sub_transactions(transaction);
-
-        let dangling_check = self.check_dangling_approval(&calls);
+        let dangling_check = self.check_dangling_approval(&proposal.calls);
         if dangling_check != Assessment::Abstain {
             return dangling_check;
         }
 
         let presig_check = self
-            .check_presignature_batch(transaction.safe, transaction.chain_id, &calls)
+            .check_presignature_batch(transaction.safe, transaction.chain_id, &proposal.calls)
             .await;
         if presig_check != Assessment::Abstain {
             return presig_check;
         }
 
-        let twap_check = self.check_twap_batch(transaction.safe, &calls);
+        let twap_check = self.check_twap_batch(transaction.safe, &proposal.calls);
         if twap_check != Assessment::Abstain {
             return twap_check;
         }
@@ -480,7 +479,7 @@ impl Checker for CowChecker {
 /// Returns the approved token (`tx.to`, the contract `approve` is called
 /// on) and amount, needed by [`CowChecker::check_twap_batch`]'s
 /// amount-overlap check.
-fn vault_relayer_approval_amount(tx: &SafeTransaction) -> Option<(Address, U256)> {
+fn vault_relayer_approval_amount(tx: &MetaTransaction) -> Option<(Address, U256)> {
     if tx.operation != Operation::Call || !tx.value.is_zero() {
         return None;
     }
@@ -491,14 +490,14 @@ fn vault_relayer_approval_amount(tx: &SafeTransaction) -> Option<(Address, U256)
 /// Whether `tx` is an ERC-20 `approve` to `GPv2VaultRelayer`, for
 /// [`CowChecker::check_dangling_approval`] — see
 /// [`vault_relayer_approval_amount`] for the exact recognition rules.
-fn approves_vault_relayer(tx: &SafeTransaction) -> bool {
+fn approves_vault_relayer(tx: &MetaTransaction) -> bool {
     vault_relayer_approval_amount(tx).is_some()
 }
 
 /// Only a plain, valueless `CALL` to `GPv2Settlement` is recognized — see
 /// [`vault_relayer_approval_amount`] for why `DELEGATECALL` and nonzero `tx.value`
 /// are excluded even to a legitimate address.
-fn is_presignature(tx: &SafeTransaction) -> bool {
+fn is_presignature(tx: &MetaTransaction) -> bool {
     tx.operation == Operation::Call
         && tx.value.is_zero()
         && tx.to == GP_V2_SETTLEMENT
@@ -512,7 +511,7 @@ fn is_presignature(tx: &SafeTransaction) -> bool {
 /// Safe-app-created TWAP order always routes through it (see
 /// [`CURRENT_BLOCK_TIMESTAMP_FACTORY`]); anything else isn't the expected
 /// pattern, the same way an unrecognized `handler` isn't.
-fn is_twap_create(tx: &SafeTransaction) -> bool {
+fn is_twap_create(tx: &MetaTransaction) -> bool {
     tx.operation == Operation::Call
         && tx.value.is_zero()
         && tx.to == COMPOSABLE_COW
@@ -529,8 +528,8 @@ fn is_twap_create(tx: &SafeTransaction) -> bool {
 /// given in the wrong order, which the caller (`CowChecker::check_twap_batch`)
 /// handles by trying both orderings.
 fn decode_approval_and_twap<'a>(
-    approval_candidate: &'a SafeTransaction,
-    twap_candidate: &'a SafeTransaction,
+    approval_candidate: &'a MetaTransaction,
+    twap_candidate: &'a MetaTransaction,
 ) -> Option<(Address, U256, Address, Address, U256, U256)> {
     let (approved_token, approved_amount) = vault_relayer_approval_amount(approval_candidate)?;
     let (sell_token, receiver, total_sell_amount, n) = twap_order_terms(twap_candidate)?;
@@ -551,7 +550,7 @@ fn decode_approval_and_twap<'a>(
 /// `staticInput` isn't shaped as expected, or the multiplication overflows
 /// (implausible in practice, but left unguessed rather than wrapping) —
 /// either way the caller treats that as inconclusive, not denied.
-fn twap_order_terms(tx: &SafeTransaction) -> Option<(Address, Address, U256, U256)> {
+fn twap_order_terms(tx: &MetaTransaction) -> Option<(Address, Address, U256, U256)> {
     if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != COMPOSABLE_COW {
         return None;
     };
@@ -581,7 +580,7 @@ fn max_approval_for_twap_total(total_sell_amount: U256, n: U256) -> U256 {
 /// doesn't commit the Safe to the order). See [`approves_vault_relayer`] for
 /// why `DELEGATECALL` and nonzero `tx.value` are excluded even to a
 /// legitimate address.
-fn presignature_order_uid(tx: &SafeTransaction) -> Option<Bytes> {
+fn presignature_order_uid(tx: &MetaTransaction) -> Option<Bytes> {
     if tx.operation != Operation::Call || !tx.value.is_zero() || tx.to != GP_V2_SETTLEMENT {
         return None;
     }
@@ -596,8 +595,8 @@ fn presignature_order_uid(tx: &SafeTransaction) -> Option<Bytes> {
 /// both orderings of a two-call batch without repeating the pairing logic
 /// (see [`CowChecker::check_presignature_batch`]).
 fn decode_approval_and_presignature(
-    approval: &SafeTransaction,
-    presignature: &SafeTransaction,
+    approval: &MetaTransaction,
+    presignature: &MetaTransaction,
 ) -> Option<(Address, U256, Bytes)> {
     let (token, approved_amount) = vault_relayer_approval_amount(approval)?;
     let order_uid = presignature_order_uid(presignature)?;
@@ -666,6 +665,7 @@ mod tests {
 
     use super::*;
     use crate::contracts::bindings::multi_send;
+    use crate::engine::SafeTransaction;
 
     const SAFE: Address = Address::new([1u8; 20]);
     const TOKEN: Address = Address::new([2u8; 20]);
@@ -727,10 +727,27 @@ mod tests {
     /// exercising [`CowChecker::check_dangling_approval`]/
     /// [`CowChecker::check_twap_batch`] never needs a real lookup, so this
     /// keeps those tests network-free.
+    ///
+    /// Parses `transaction` through the real engine parser rather than
+    /// `Proposal::from`'s unbatched identity wrap — `CowChecker::check` now
+    /// reads `proposal.calls` directly, so a batch has to actually be
+    /// flattened for these tests to exercise it, the same way
+    /// `SentinelEngine::security_check` flattens it in production.
     async fn check(transaction: &SafeTransaction) -> Assessment {
         CowChecker::with_order_api(FakeOrderApi::NotFound)
-            .check(transaction, &CheckContext::default())
+            .check(
+                &parsed_proposal(transaction.clone()),
+                &CheckContext::default(),
+            )
             .await
+    }
+
+    /// Parses `transaction` into a [`Proposal`], panicking if it's nested
+    /// deeper than the parser's recursion bound — none of these tests build
+    /// a transaction like that.
+    fn parsed_proposal(transaction: SafeTransaction) -> Proposal {
+        crate::engine::parse(transaction)
+            .unwrap_or_else(|err| panic!("expected a proposal, got an error: {err}"))
     }
 
     fn tx(to: Address, data: Vec<u8>, operation: Operation) -> SafeTransaction {
@@ -909,7 +926,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: Coverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -946,7 +963,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: Coverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -1006,7 +1023,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: Coverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -1026,7 +1043,7 @@ mod tests {
         assert_eq!(
             check(&tx(MULTI_SEND, data.into(), Operation::DelegateCall)).await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: Coverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -1272,10 +1289,11 @@ mod tests {
 
     #[tokio::test]
     async fn no_opinion_when_the_order_lookup_fails() {
-        let calls = sub_transactions(&batched_presig_tx(
+        let calls = parsed_proposal(batched_presig_tx(
             U256::from(100u64),
             ORDER_UID.to_vec().into(),
-        ));
+        ))
+        .calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::NotFound)
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1287,16 +1305,14 @@ mod tests {
     #[tokio::test]
     async fn approves_when_the_batched_approval_matches_the_swap_order() {
         let order = order(100);
-        let calls = sub_transactions(&batched_presig_tx(
-            U256::from(100u64),
-            order_uid_for(&order),
-        ));
+        let calls =
+            parsed_proposal(batched_presig_tx(U256::from(100u64), order_uid_for(&order))).calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: Coverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -1304,7 +1320,8 @@ mod tests {
     #[tokio::test]
     async fn denies_when_the_batched_approval_does_not_match_the_swap_order_amount() {
         let order = order(1000);
-        let calls = sub_transactions(&batched_presig_tx(U256::from(1u64), order_uid_for(&order)));
+        let calls =
+            parsed_proposal(batched_presig_tx(U256::from(1u64), order_uid_for(&order))).calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1321,10 +1338,8 @@ mod tests {
             receiver: Some(Address::new([9u8; 20])),
             ..order(100)
         };
-        let calls = sub_transactions(&batched_presig_tx(
-            U256::from(100u64),
-            order_uid_for(&order),
-        ));
+        let calls =
+            parsed_proposal(batched_presig_tx(U256::from(100u64), order_uid_for(&order))).calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1345,16 +1360,14 @@ mod tests {
             receiver: Some(Address::ZERO),
             ..order(100)
         };
-        let calls = sub_transactions(&batched_presig_tx(
-            U256::from(100u64),
-            order_uid_for(&order),
-        ));
+        let calls =
+            parsed_proposal(batched_presig_tx(U256::from(100u64), order_uid_for(&order))).calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
                 .await,
             Assessment::Secure {
-                coverage: Coverage::DATA
+                coverage: Coverage::calls(2, AspectSet::DATA)
             }
         );
     }
@@ -1368,10 +1381,11 @@ mod tests {
         // with a different order's terms. Must not be approved on that
         // basis.
         let order = order(100);
-        let calls = sub_transactions(&batched_presig_tx(
+        let calls = parsed_proposal(batched_presig_tx(
             U256::from(100u64),
             ORDER_UID.to_vec().into(),
-        ));
+        ))
+        .calls;
         assert_eq!(
             CowChecker::with_order_api(FakeOrderApi::Found(order))
                 .check_presignature_batch(SAFE, U256::from(1u64), &calls)
@@ -1383,10 +1397,11 @@ mod tests {
     #[tokio::test]
     async fn no_opinion_outside_the_recognized_presignature_shape() {
         let checker = CowChecker::with_order_api(FakeOrderApi::NotFound);
-        let calls = sub_transactions(&batched_presig_tx(
+        let calls = parsed_proposal(batched_presig_tx(
             U256::from(100u64),
             ORDER_UID.to_vec().into(),
-        ));
+        ))
+        .calls;
 
         // Unsupported chain.
         assert_eq!(

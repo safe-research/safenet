@@ -25,6 +25,7 @@ const makeProposal = (safeTxHash: string, epoch = 1n): TransactionProposalWithSt
 	epoch,
 	oracle: "0x0000000000000000000000000000000000000099" as Address,
 	oracleData: "0x" as Hex,
+	requestId: `0x${"cd".repeat(32)}` as Hex,
 	transaction: {
 		chainId: 1n,
 		safe: "0x0000000000000000000000000000000000000001" as Address,
@@ -42,6 +43,7 @@ const makeProposal = (safeTxHash: string, epoch = 1n): TransactionProposalWithSt
 	proposedAt: { block: 100n, tx: "0xabc" as Hex },
 	attestedAt: null,
 	status: "PROPOSED",
+	arbitration: null,
 });
 
 const PROPOSALS = [makeProposal("0xhash1"), makeProposal("0xhash2"), makeProposal("0xhash3")];

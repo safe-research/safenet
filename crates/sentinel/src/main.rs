@@ -7,8 +7,11 @@ mod hashing;
 mod metrics;
 mod service;
 mod state;
+mod verdicts;
 
-use self::{config::Config, engine::EngineClient, service::SentinelService};
+use self::{
+    config::Config, engine::EngineClient, service::SentinelService, verdicts::VerdictStore,
+};
 use alloy::primitives::U256;
 use argh::FromArgs;
 use safenet_core::{Driver, observability, provider::Provider, utils};
@@ -48,7 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // before the reveal deadline to leave some wiggle room for delays, with a
     // one-second minimum for practical deployments.
     let engine_timeout = {
-        let block_time = config.driver.index.blocks.block_time.resolve(chain_id)?;
+        let block_time = config.driver.index.blocks.timings(chain_id)?.block_time;
         Duration::from_millis(
             u64::try_from(
                 u128::from(config.sentinel.voting_window.saturating_sub(1))
@@ -70,6 +73,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         config.sentinel.voting_window,
         EngineClient::new(config.sentinel.engine)?,
         engine_timeout,
+        VerdictStore::new(pool.clone()).await?,
     );
 
     let driver = Driver::new(

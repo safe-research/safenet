@@ -61,7 +61,7 @@ const encodeKeyGenCommittedLog = (blockNumber: bigint, participant: Address, log
 		eventName: "KeyGenCommitted",
 		args: { gid: GID },
 	});
-	const commitment = { q: zeroPoint, c: [zeroPoint], r: zeroPoint, mu: 0n };
+	const commitment = { q: zeroPoint, pop: { r: zeroPoint, z: 0n }, c: [zeroPoint], pok: { r: zeroPoint, z: 0n } };
 	const data = encodeAbiParameters(
 		nonIndexedInputs(getAbiItem({ abi: COORDINATOR_KEY_GEN_EVENTS, name: "KeyGenCommitted" }).inputs),
 		[participant, commitment, true],

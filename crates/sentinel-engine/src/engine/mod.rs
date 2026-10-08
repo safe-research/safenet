@@ -5,15 +5,25 @@
 //! configured checker chain.
 
 mod coverage;
+mod proposal;
 mod rule;
 mod transaction;
 
+use self::proposal::ParseError;
+// Test-only and not part of the engine's own public API — exposed so a
+// checker's own tests can build a `Proposal` the same way `SentinelEngine`
+// itself does, flattening a real batch, rather than `Proposal::from`'s
+// unbatched identity wrap.
+#[cfg(test)]
+pub(crate) use self::proposal::parse;
 pub use self::{
-    coverage::{Coverage, CoverageLabel},
+    coverage::{AspectSet, Coverage, CoverageLabel},
+    proposal::Proposal,
     rule::RuleId,
-    transaction::{Operation, SafeTransaction},
+    transaction::{MetaTransaction, Operation, SafeTransaction},
 };
 use crate::checkers::{Assessment, Checker};
+use alloy::eips::BlockNumberOrTag;
 use serde::{Deserialize, Serialize};
 
 /// The transaction-verification engine shared by API handlers.
@@ -24,14 +34,58 @@ pub struct SentinelEngine(Vec<Box<dyn Checker>>);
 /// part of the transaction itself.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CheckContext {
-    /// The block number the caller (the sentinel) considers current — the
-    /// most recent block it had synced past when it submitted this check,
-    /// from the request's required `block` field. A check that reads
-    /// RPC-derived state should evaluate against this rather than resolving
-    /// "latest" itself, so it shares the same view of the chain the caller
-    /// had rather than racing ahead of (or behind) it. A check is free to
-    /// ignore this if it has no RPC-derived state to anchor.
-    pub block: u64,
+    /// The block a check that reads RPC-derived state should evaluate
+    /// against, from the request's required `block` field. A live caller
+    /// (the sentinel) sends [`BlockLabel::Latest`], since it has no view of
+    /// the chain the transaction executes on; a replayed historical
+    /// transaction supplies the block before the one that mined it. A
+    /// check is free to ignore this if it has no RPC-derived state to
+    /// anchor.
+    pub block: BlockLabel,
+    /// The timestamp, in seconds since the Unix epoch, of the consensus-chain
+    /// block the transaction was proposed in, from the optional
+    /// `x-proposal-timestamp` header. `None` when the caller didn't supply
+    /// one; a check relying on it must abstain in that case.
+    pub proposal_timestamp: Option<u64>,
+}
+
+/// A block reference on the engine's configured chain: either a concrete
+/// block number or the chain's `latest` block. Other block tags (`pending`,
+/// `safe`, …) are rejected at deserialization.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "BlockNumberOrTag", into = "BlockNumberOrTag")]
+pub enum BlockLabel {
+    /// The latest block, resolved by whichever check needs it.
+    #[default]
+    Latest,
+    /// A concrete block number.
+    Number(u64),
+}
+
+/// An error converting a [`BlockNumberOrTag`] into a [`BlockLabel`].
+#[derive(Debug, thiserror::Error)]
+#[error("unsupported block tag `{0}`, expected a block number or `latest`")]
+pub struct UnsupportedBlockTag(BlockNumberOrTag);
+
+impl TryFrom<BlockNumberOrTag> for BlockLabel {
+    type Error = UnsupportedBlockTag;
+
+    fn try_from(block: BlockNumberOrTag) -> Result<Self, Self::Error> {
+        match block {
+            BlockNumberOrTag::Latest => Ok(Self::Latest),
+            BlockNumberOrTag::Number(number) => Ok(Self::Number(number)),
+            tag => Err(UnsupportedBlockTag(tag)),
+        }
+    }
+}
+
+impl From<BlockLabel> for BlockNumberOrTag {
+    fn from(block: BlockLabel) -> Self {
+        match block {
+            BlockLabel::Latest => Self::Latest,
+            BlockLabel::Number(number) => Self::Number(number),
+        }
+    }
 }
 
 /// The engine's assessment of a proposed transaction.
@@ -57,19 +111,33 @@ impl SentinelEngine {
 
     /// Assesses a proposed Safe transaction using the configured checks.
     ///
+    /// `transaction` is first parsed into a [`Proposal`] — recognizing and
+    /// flattening a MultiSend batch into its packed sub-calls (see
+    /// [`Proposal`]'s docs). A batch nested deeper than the parser's
+    /// recursion bound can't be turned into a usable view at all; the
+    /// engine abstains without running any check in that case.
+    ///
     /// Any `Insecure` assessment is the engine's verdict — denials are never
     /// masked by an affirmation, and the first denial short-circuits the
     /// run. Otherwise, the engine answers `Secure` only once the union of
-    /// every affirming check's claimed [`Coverage`] covers every aspect the
-    /// transaction actually has, and `Abstain` otherwise.
+    /// every affirming check's claimed [`Coverage`] covers every call
+    /// the proposal actually has, and `Abstain` otherwise.
     pub async fn security_check(
         &self,
         transaction: SafeTransaction,
         context: CheckContext,
     ) -> Verdict {
-        let mut covered = Coverage::empty();
+        let proposal = match proposal::parse(transaction) {
+            Ok(proposal) => proposal,
+            Err(ParseError(why)) => {
+                tracing::trace!(why, "abstaining: transaction could not be parsed");
+                return Verdict::Abstain;
+            }
+        };
+
+        let mut covered = Coverage::none(proposal.calls.len());
         for checker in &self.0 {
-            let assessment = checker.check(&transaction, &context).await;
+            let assessment = checker.check(&proposal, &context).await;
             tracing::trace!(checker = checker.name(), ?assessment, "checker assessment");
             match assessment {
                 Assessment::Insecure { rule } => {
@@ -82,11 +150,11 @@ impl SentinelEngine {
             }
         }
 
-        let required = Coverage::required_for(&transaction);
-        let verdict = if covered.contains(required) {
+        let required = Coverage::required_for(&proposal);
+        let verdict = if covered.contains(&required) {
             Verdict::Secure
         } else {
-            let missing = covered.missing(required);
+            let missing = covered.missing(&required);
             tracing::trace!(%covered, %missing, "abstaining: incomplete coverage");
             for label in missing.labels() {
                 crate::metrics::missing_coverage_total(label).increment(1);
@@ -110,8 +178,8 @@ mod tests {
             "stub"
         }
 
-        async fn check(&self, _: &SafeTransaction, _: &CheckContext) -> Assessment {
-            self.0
+        async fn check(&self, _: &Proposal, _: &CheckContext) -> Assessment {
+            self.0.clone()
         }
     }
 
@@ -142,7 +210,7 @@ mod tests {
     async fn a_denial_dominates_a_preceding_secure() {
         let engine = SentinelEngine::new(vec![
             Box::new(StubChecker(Assessment::Secure {
-                coverage: Coverage::all(),
+                coverage: Coverage::calls(1, AspectSet::all()).union(Coverage::refund(1)),
             })),
             Box::new(StubChecker(Assessment::Insecure {
                 rule: RuleId::R4_3ValueTarget,
@@ -163,10 +231,11 @@ mod tests {
     async fn two_partial_claims_compose_to_secure() {
         let engine = SentinelEngine::new(vec![
             Box::new(StubChecker(Assessment::Secure {
-                coverage: Coverage::TO | Coverage::OPERATION,
+                coverage: Coverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
             })),
             Box::new(StubChecker(Assessment::Secure {
-                coverage: Coverage::VALUE | Coverage::DATA | Coverage::REFUND,
+                coverage: Coverage::calls(1, AspectSet::VALUE | AspectSet::DATA)
+                    .union(Coverage::refund(1)),
             })),
         ]);
 
@@ -221,7 +290,7 @@ mod tests {
         ] {
             assert_ne!(
                 BaseChecker
-                    .check(&transaction, &CheckContext::default())
+                    .check(&Proposal::from(transaction), &CheckContext::default())
                     .await,
                 Assessment::Abstain
             );
@@ -306,10 +375,9 @@ mod tests {
 
     /// A relayed escape-hatch call is just as structurally safe as an
     /// unrelayed one, but `EscapeHatchChecker` can't vouch for the refund
-    /// leg, so the engine now abstains rather than affirming on
-    /// `Coverage::all()`. Not expressible as a corpus vector — see "Behavior
-    /// changes not expressible as test vectors" in the verdict-composition
-    /// epic.
+    /// leg, so the engine abstains on that leg alone rather than affirming
+    /// outright. Not expressible as a corpus vector — see "Behavior changes
+    /// not expressible as test vectors" in the verdict-composition epic.
     #[tokio::test]
     async fn relayed_escape_hatch_call_abstains() {
         use crate::{checkers::EscapeHatchChecker, contracts::bindings::safenet_guard};
@@ -339,7 +407,7 @@ mod tests {
     #[tokio::test]
     async fn one_partial_claim_abstains() {
         let engine = SentinelEngine::new(vec![Box::new(StubChecker(Assessment::Secure {
-            coverage: Coverage::TO | Coverage::OPERATION,
+            coverage: Coverage::calls(1, AspectSet::TO | AspectSet::OPERATION),
         }))]);
 
         assert_eq!(
@@ -350,6 +418,20 @@ mod tests {
                 )
                 .await,
             Verdict::Abstain
+        );
+    }
+
+    #[test]
+    fn block_label_is_a_number_or_latest() {
+        let parse = |json| serde_json::from_str::<BlockLabel>(json).ok();
+
+        assert_eq!(parse(r#""latest""#), Some(BlockLabel::Latest));
+        assert_eq!(parse(r#""0x1361f5""#), Some(BlockLabel::Number(0x1361f5)));
+        assert_eq!(parse(r#""pending""#), None);
+        assert_eq!(parse(r#""finalized""#), None);
+        assert_eq!(
+            serde_json::to_string(&BlockLabel::Number(0x1361f5)).unwrap(),
+            r#""0x1361f5""#
         );
     }
 }

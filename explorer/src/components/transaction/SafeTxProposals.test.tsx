@@ -4,7 +4,8 @@ import type { DefinedUseQueryResult } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Address, Hex } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SafeTransaction, TransactionProposalWithStatus } from "@/lib/consensus";
+import type { Arbitration, SafeTransaction, TransactionProposalWithStatus } from "@/lib/consensus";
+import type { VotingStatus } from "@/lib/oracle";
 import { SafeTxProposals } from "./SafeTxProposals";
 
 const mockQueryResult = (data: TransactionProposalWithStatus[], isFetching = false) =>
@@ -19,7 +20,7 @@ vi.mock("@/hooks/useSubmitProposal", () => ({
 }));
 
 vi.mock("./SafeTxAttestationStatus", () => ({
-	SafeTxAttestationStatus: () => null,
+	SafeTxAttestationStatus: vi.fn(() => null),
 }));
 
 vi.mock("@/hooks/useSigningProgress", () => ({
@@ -38,14 +39,26 @@ vi.mock("@/hooks/useSentinelInfo", () => ({
 	useSentinelInfoMap: vi.fn(() => ({ data: null })),
 }));
 
+vi.mock("@/hooks/useConsensusState", () => ({
+	useConsensusState: vi.fn(() => ({ data: { currentBlock: 0n, chainId: 100n } })),
+}));
+
+vi.mock("@/hooks/useOracleArbitrator", () => ({
+	useOracleArbitrator: vi.fn(() => ({ data: undefined })),
+}));
+
 vi.mock("../common/Info", () => ({
 	InlineBlockInfo: ({ block }: { block: bigint }) => <span>{block.toString()}</span>,
 	InlineExplorerTxLink: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
 }));
 
+import { useConsensusState } from "@/hooks/useConsensusState";
+import { useOracleArbitrator } from "@/hooks/useOracleArbitrator";
 import { useProposalsForTransaction } from "@/hooks/useProposalsForTransaction";
 import { useSentinelVotes } from "@/hooks/useSentinelVotes";
+import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useVotingStatus } from "@/hooks/useVotingStatus";
+import { SafeTxAttestationStatus } from "./SafeTxAttestationStatus";
 
 afterEach(cleanup);
 
@@ -72,12 +85,30 @@ const makeProposal = (overrides?: Partial<TransactionProposalWithStatus>): Trans
 	epoch: 1n,
 	oracle: "0x0000000000000000000000000000000000000099" as Address,
 	oracleData: "0x" as Hex,
+	requestId: `0x${"cd".repeat(32)}` as Hex,
 	transaction: makeTransaction(),
 	proposedAt: { block: 100n, tx: "0xabc" as Hex },
 	attestedAt: null,
 	status: "PROPOSED",
+	arbitration: null,
 	...overrides,
 });
+
+const makeArbitration = (outcome: Arbitration["outcome"] = null): Arbitration => ({
+	triggeredAt: { block: 105n, tx: "0x105" as Hex },
+	deadline: 200n,
+	outcome,
+});
+
+const renderArbitration = (arbitration: Arbitration) => {
+	vi.mocked(useProposalsForTransaction).mockReturnValue(
+		mockQueryResult([makeProposal({ status: "ARBITRATING", arbitration })]),
+	);
+	render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+};
+
+// The text of the arbitration row with the given label, so assertions see the label and its value together.
+const rowText = (label: string) => screen.getByText(label).parentElement?.textContent;
 
 describe("SafeTxProposals", () => {
 	it("labels an attested proposal as ATTESTED", () => {
@@ -154,5 +185,166 @@ describe("SafeTxProposals", () => {
 		expect(screen.getByText("0x0000…0022 ✅")).toBeTruthy();
 		fireEvent.click(screen.getByText("0x0000…0022 ✅"));
 		expect(screen.getByText("looks fine")).toBeTruthy();
+	});
+
+	describe("arbitration", () => {
+		const ruledAt = { block: 300n, tx: "0x300" as Hex };
+
+		it("shows no arbitration section for a proposal without an arbitration", () => {
+			vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal()]));
+			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+			expect(screen.queryByText("Arbitration:")).toBeNull();
+			expect(rowText("Attested:")).toBe("Attested:-");
+		});
+
+		const UNDER_REVIEW = "Sentinels disagreed, this transaction is under review by the Security Council.";
+		const ARBITRATED = "Sentinels disagreed, so this transaction went to arbitration. It will not be attested.";
+
+		it.each<[string, Arbitration["outcome"], string]>([
+			["a pending dispute", null, UNDER_REVIEW],
+			["a ruled dispute", { kind: "ruled", secure: true, context: "", at: ruledAt }, ARBITRATED],
+			["an out-of-scope dispute", { kind: "outOfScope", context: "", at: ruledAt }, ARBITRATED],
+			["a timed-out dispute", { kind: "timedOut", at: ruledAt }, ARBITRATED],
+		])("explains why %s is not attested", (_, outcome, text) => {
+			renderArbitration(makeArbitration(outcome));
+			expect(rowText("Attested:")).toBe(`Attested:${text}`);
+		});
+
+		it("does not load the signing progress of a disputed proposal", () => {
+			vi.mocked(useAttestationStatus).mockClear();
+			vi.mocked(SafeTxAttestationStatus).mockClear();
+			renderArbitration(makeArbitration());
+			expect(useAttestationStatus).not.toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).not.toHaveBeenCalled();
+		});
+
+		it("does not load the signing progress of a denied proposal", () => {
+			vi.mocked(useAttestationStatus).mockClear();
+			vi.mocked(SafeTxAttestationStatus).mockClear();
+			vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal({ status: "DENIED" })]));
+			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+			expect(useAttestationStatus).not.toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).not.toHaveBeenCalled();
+			expect(rowText("Attested:")).toBe("Attested:Sentinels denied this transaction. It will not be attested.");
+		});
+
+		it("loads the signing progress of a proposal without an arbitration", () => {
+			vi.mocked(useAttestationStatus).mockClear();
+			vi.mocked(SafeTxAttestationStatus).mockClear();
+			vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal()]));
+			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+			expect(useAttestationStatus).toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).toHaveBeenCalled();
+		});
+
+		it("shows a pending dispute with its start, deadline and closing note", () => {
+			vi.mocked(useConsensusState).mockReturnValue({ data: { currentBlock: 200n, chainId: 100n } } as never);
+			renderArbitration(makeArbitration());
+			expect(rowText("Started:")).toContain("105");
+			expect(rowText("Deadline:")).toBe("Deadline:Block 200");
+			expect(rowText("Outcome:")).toBe("Outcome:Pending");
+			expect(screen.getByText(/Transactions that enter arbitration are never attested/)).toBeTruthy();
+		});
+
+		it("marks the deadline as passed once the current block is past it", () => {
+			vi.mocked(useConsensusState).mockReturnValue({ data: { currentBlock: 201n, chainId: 100n } } as never);
+			renderArbitration(makeArbitration());
+			expect(rowText("Deadline:")).toBe("Deadline:Block 200 (passed)");
+		});
+
+		it("does not mark the deadline as passed once there is an outcome", () => {
+			vi.mocked(useConsensusState).mockReturnValue({ data: { currentBlock: 400n, chainId: 100n } } as never);
+			renderArbitration(makeArbitration({ kind: "timedOut", at: ruledAt }));
+			expect(rowText("Deadline:")).toBe("Deadline:Block 200");
+		});
+
+		it.each<[string, NonNullable<Arbitration["outcome"]>]>([
+			["Ruled secure", { kind: "ruled", secure: true, context: "", at: ruledAt }],
+			["Ruled insecure", { kind: "ruled", secure: false, context: "", at: ruledAt }],
+			["Out of scope", { kind: "outOfScope", context: "", at: ruledAt }],
+			["Timed out without a ruling", { kind: "timedOut", at: ruledAt }],
+		])("shows the %s outcome with its block", (label, outcome) => {
+			renderArbitration(makeArbitration(outcome));
+			expect(rowText("Outcome:")).toBe(`Outcome:${label}, 300 Explorer Tx`);
+		});
+
+		it.each<[string, NonNullable<Arbitration["outcome"]>]>([
+			["a ruling", { kind: "ruled", secure: false, context: '<a href="x">phish</a> & <b>bold</b>', at: ruledAt }],
+			["an out-of-scope decision", { kind: "outOfScope", context: '<a href="x">phish</a> & <b>bold</b>', at: ruledAt }],
+		])("renders the reason for %s verbatim, markup included", (_, outcome) => {
+			renderArbitration(makeArbitration(outcome));
+			expect(rowText("Reason:")).toBe('Reason:<a href="x">phish</a> & <b>bold</b>');
+			expect(screen.queryByText("phish")).toBeNull();
+		});
+
+		it("hides an empty reason", () => {
+			renderArbitration(makeArbitration({ kind: "ruled", secure: true, context: "", at: ruledAt }));
+			expect(screen.queryByText("Reason:")).toBeNull();
+		});
+
+		it("shows the arbitrator's address", () => {
+			vi.mocked(useOracleArbitrator).mockReturnValue({
+				data: "0xe682000000000000000000000000000000005cc8" as Address,
+			} as never);
+			renderArbitration(makeArbitration());
+			expect(rowText("Arbitrator:")).toBe("Arbitrator:0xE682…5cC8");
+		});
+	});
+
+	describe("a vote that closed with nothing revealed", () => {
+		afterEach(() => {
+			vi.mocked(useVotingStatus).mockReturnValue({ data: null } as never);
+		});
+
+		const NO_VOTES: VotingStatus = {
+			kind: "sentinel",
+			state: "PENDING",
+			approveCount: 0n,
+			denyCount: 0n,
+			noVotes: true,
+		};
+
+		const renderTimedOut = (votingStatus: VotingStatus) => {
+			vi.mocked(useAttestationStatus).mockClear();
+			vi.mocked(SafeTxAttestationStatus).mockClear();
+			vi.mocked(useVotingStatus).mockReturnValue({ data: votingStatus } as never);
+			vi.mocked(useProposalsForTransaction).mockReturnValue(mockQueryResult([makeProposal({ status: "TIMED_OUT" })]));
+			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+		};
+
+		it("does not load the signing progress of a proposal nobody voted on in time", () => {
+			renderTimedOut(NO_VOTES);
+			expect(useAttestationStatus).not.toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).not.toHaveBeenCalled();
+			expect(rowText("Attested:")).toBe(
+				"Attested:No sentinel voted on this transaction in time. It will not be attested.",
+			);
+		});
+
+		it("labels the oracle badge NO VOTES", () => {
+			renderTimedOut(NO_VOTES);
+			expect(screen.getByText("NO VOTES").className).toContain("bg-warning-surface");
+		});
+
+		it("keeps loading the signing progress of a timed-out proposal the oracle approved", () => {
+			renderTimedOut({ kind: "sentinel", state: "RESOLVED_APPROVED", approveCount: 1n, denyCount: 0n, noVotes: false });
+			expect(useAttestationStatus).toHaveBeenCalled();
+			expect(SafeTxAttestationStatus).toHaveBeenCalled();
+			expect(rowText("Attested:")).toBe("Attested:-");
+		});
+
+		it("reads each proposal's own vote", () => {
+			vi.mocked(useVotingStatus).mockImplementation(
+				(_oracle, epoch) => ({ data: epoch === 2n ? NO_VOTES : null }) as never,
+			);
+			vi.mocked(useProposalsForTransaction).mockReturnValue(
+				mockQueryResult([makeProposal({ status: "TIMED_OUT" }), makeProposal({ epoch: 2n, status: "TIMED_OUT" })]),
+			);
+			render(<SafeTxProposals safeTxHash={SAFE_TX_HASH} transaction={makeTransaction()} />);
+			expect(screen.getAllByText("Attested:").map((label) => label.parentElement?.textContent)).toEqual([
+				"Attested:-",
+				"Attested:No sentinel voted on this transaction in time. It will not be attested.",
+			]);
+		});
 	});
 });

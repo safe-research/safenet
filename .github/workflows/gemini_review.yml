@@ -19,12 +19,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          sparse-checkout: |
-            .github/actions/ai-review
-
-      - uses: ./.github/actions/ai-review
+      - uses: safe-research/actions/ai-review@v1
         with:
           api-key: ${{ secrets.GEMINI_API_KEY }}
           pr-number: ${{ inputs.pr-number || github.event.pull_request.number }}

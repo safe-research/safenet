@@ -123,11 +123,27 @@ test-integration-validator:
 test-integration-validator-reorg-nonce:
     ./scripts/run_validator_reorg_nonce_test.sh
 
+# Regression test: a transaction signing ceremony whose signature share round
+# times out must restart and get attested (Anvil + three validator instances).
+test-integration-validator-signing-restart:
+    ./scripts/run_validator_signing_restart_test.sh
+
+# Regression test: a signing ceremony whose nonce commitment round times out
+# must continue with the signers that committed, instead of restarting (Anvil +
+# three validator instances, one of which is stopped before signing).
+test-integration-validator-nonce-commit-timeout:
+    ./scripts/run_validator_nonce_commit_timeout_test.sh
+
 # Regression test: a reorg deeper than the configured `max_reorg_depth` must
 # make the validator fail loudly instead of silently continuing (Anvil + a
 # single validator instance).
 test-integration-validator-deep-reorg:
     ./scripts/run_validator_deep_reorg_test.sh
+
+# Rust validator EIP-7702 batching integration test (Anvil + two validator
+# instances sending their transactions through a `Safenet7702Executor`).
+test-integration-validator-7702:
+    ./scripts/run_validator_7702_integration_test.sh
 
 # Run the explorer's Vite dev server.
 explorer-dev:
@@ -153,6 +169,9 @@ contracts-deploy-erc20 *args:
 
 contracts-deploy-sentinel-oracle *args:
     (cd contracts && forge script DeploySentinelOracleScript {{args}})
+
+contracts-deploy-safenet-7702-executor *args:
+    (cd contracts && forge script DeploySafenet7702ExecutorScript {{args}})
 
 contracts-deploy-test-consensus *args:
     (cd contracts && forge script DeployTestConsensusScript {{args}})

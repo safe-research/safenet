@@ -2,8 +2,8 @@
 
 mod extractors;
 
-use self::extractors::{RequestId, RequestTimeout};
-use crate::engine::{CheckContext, SafeTransaction, SentinelEngine, Verdict};
+use self::extractors::{ProposalTimestamp, RequestId, RequestTimeout};
+use crate::engine::{BlockLabel, CheckContext, SafeTransaction, SentinelEngine, Verdict};
 use axum::{Json, Router, extract::State, routing::post};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -14,9 +14,8 @@ use tracing::{Instrument as _, field};
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CheckRequest {
-    /// The block number the sentinel considers current.
-    #[serde(with = "alloy::serde::quantity")]
-    pub block: u64,
+    /// The block to evaluate chain state against: a number or `latest`.
+    pub block: BlockLabel,
     /// The transaction to verify.
     pub transaction: SafeTransaction,
 }
@@ -34,6 +33,7 @@ async fn security_check(
     State(engine): State<Arc<SentinelEngine>>,
     RequestId(request_id): RequestId,
     RequestTimeout(timeout): RequestTimeout,
+    ProposalTimestamp(proposal_timestamp): ProposalTimestamp,
     Json(request): Json<CheckRequest>,
 ) -> Json<Verdict> {
     let span = tracing::info_span!(
@@ -51,6 +51,7 @@ async fn security_check(
 
     let context = CheckContext {
         block: request.block,
+        proposal_timestamp,
     };
     let verdict = engine
         .security_check(request.transaction, context)

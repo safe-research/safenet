@@ -8,6 +8,7 @@
 use super::{blocks::BlockUpdate, bloom};
 use crate::provider::Provider;
 use alloy::{
+    eips::BlockId,
     primitives::{Address, B256, Bloom},
     providers::Provider as _,
     rpc::types::{Filter, Log},
@@ -15,10 +16,11 @@ use alloy::{
 };
 use serde::Deserialize;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     marker::PhantomData,
     num::{NonZeroU64, NonZeroUsize},
     range::RangeInclusive,
+    sync::atomic::{self, AtomicBool},
 };
 
 /// A typed set of EVM events that raw logs can be decoded into.
@@ -38,12 +40,21 @@ pub trait Events: Sized {
     fn decode_log(topics: &[B256], data: &[u8]) -> Option<Self>;
 }
 
-/// An event log, adding additional log position information (block number and
-/// log index) to event data.
+/// The block an event log was emitted in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EventBlock {
+    /// The block number.
+    pub number: u64,
+    /// The block timestamp, in seconds since the Unix epoch.
+    pub timestamp: u64,
+}
+
+/// An event log, adding additional log position information (block and log
+/// index) to event data.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EventLog<E> {
-    /// The block number the log is for.
-    pub block: u64,
+    /// The block the log is for.
+    pub block: EventBlock,
     /// The index of the log within the block.
     pub index: u64,
     /// The address that emitted the event.
@@ -120,6 +131,10 @@ pub enum Error {
     /// the node served an incomplete set.
     #[error("logs for block {block_hash:?} do not match the block bloom filter")]
     IncompleteLogs { block_hash: B256 },
+    /// A block in the reorg-safe range was missing, indicating an inconsistent
+    /// RPC node.
+    #[error("block {block_number} is unexpectedly missing")]
+    MissingBlock { block_number: u64 },
     /// A block update arrived while the watcher was still processing the
     /// previous one.
     #[error("received a block update while not idle")]
@@ -170,7 +185,7 @@ enum Fetch {
 }
 
 /// The current state of the event watcher's log-fetching state machine.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 // NOTE: The large enum variant warning is there because of the `logs_bloom`
 // field on the `Block` variant. Since fetching a new block is the common case,
 // boxing the value would not be beneficial.
@@ -184,15 +199,33 @@ enum Step {
         from_block: u64,
         to_block: u64,
         page_size: NonZeroU64,
+        /// The current page, once its logs have been fetched but some of its
+        /// block timestamps are still missing.
+        fetched: Option<FetchedPage>,
     },
     /// Fetching the logs of a single new block by hash, having already failed
     /// `retries` times.
     Block {
         block_number: u64,
         block_hash: B256,
+        block_timestamp: u64,
         logs_bloom: Bloom,
         retries: u64,
     },
+}
+
+/// A warp page whose logs have been fetched, but some of whose block timestamps
+/// are still missing.
+#[derive(Clone, Debug)]
+struct FetchedPage {
+    /// The last block of the page, which spans from the warp's current
+    /// `from_block` up to and including this block.
+    to_block: u64,
+    /// The page's raw logs.
+    logs: Vec<Log>,
+    /// The timestamps of the page's blocks resolved so far, keyed by block
+    /// number, for logs that the node returned without one.
+    block_timestamps: BTreeMap<u64, u64>,
 }
 
 /// Watches for the logs of the events `E` emitted by a set of addresses.
@@ -202,6 +235,7 @@ pub struct EventWatcher<E> {
     addresses: Vec<Address>,
     topics: Vec<B256>,
     step: Step,
+    warned_missing_timestamps: AtomicBool,
     _events: PhantomData<fn() -> E>,
 }
 
@@ -217,6 +251,7 @@ where
             addresses,
             topics: E::topics(),
             step: Step::Idle,
+            warned_missing_timestamps: AtomicBool::new(false),
             _events: PhantomData,
         }
     }
@@ -236,17 +271,19 @@ where
                 from_block: from,
                 to_block: to,
                 page_size: self.config.block_page_size,
+                fetched: None,
             },
             // Uncled blocks never had canonical logs, so there is nothing to do.
             BlockUpdate::Uncle { .. } => Step::Idle,
             BlockUpdate::New {
                 number,
                 hash,
+                timestamp,
                 logs_bloom,
-                ..
             } => Step::Block {
                 block_number: number,
                 block_hash: hash,
+                block_timestamp: timestamp,
                 logs_bloom,
                 retries: 0,
             },
@@ -279,49 +316,103 @@ where
     /// `(block_number, log_index)` order (which may be empty) and the block range
     /// they were fetched for.
     pub async fn next(&mut self) -> Result<Option<EventUpdate<E>>, Error> {
-        match self.step {
+        match self.step.clone() {
             Step::Idle => Ok(None),
             Step::Warping {
                 from_block,
                 to_block,
                 page_size,
-            } => self.warp(from_block, to_block, page_size).await.map(Some),
+                fetched,
+            } => self
+                .warp(from_block, to_block, page_size, fetched)
+                .await
+                .map(Some),
             Step::Block {
                 block_number,
                 block_hash,
+                block_timestamp,
                 logs_bloom,
                 retries,
             } => self
-                .block(block_number, block_hash, logs_bloom, retries)
+                .block(
+                    block_number,
+                    block_hash,
+                    block_timestamp,
+                    logs_bloom,
+                    retries,
+                )
                 .await
                 .map(Some),
         }
     }
 
     /// Fetches one page of a warp over `from_block..=to_block`, advancing to the
-    /// next page on success and narrowing the page size on failure.
+    /// next page on success.
+    ///
+    /// On failure, the page is retried: a failed logs query narrows the page
+    /// size, while a failed block header request keeps the page's logs and the
+    /// timestamps resolved so far, so that only the missing headers are
+    /// requested again.
     async fn warp(
         &mut self,
         from_block: u64,
         to_block: u64,
         page_size: NonZeroU64,
+        fetched: Option<FetchedPage>,
     ) -> Result<EventUpdate<E>, Error> {
-        // Note that block query ranges are inclusive.
-        let query_to_block = to_block.min(from_block.saturating_add(page_size.get() - 1));
-
-        // A single-block page splits into one query per event to query as little
-        // data as possible; larger pages use a single query for all events.
-        let blocks = BlockFilter::Range {
-            from: from_block,
-            to: query_to_block,
-        };
-        let fetch = if page_size.get() > 1 {
-            Fetch::SingleQuery(blocks)
+        let mut page = if let Some(page) = fetched {
+            // Reuse the already fetched page, and just retry querying missing
+            // block headers for timestamps.
+            page
         } else {
-            Fetch::MultipleQueries(blocks)
+            // Note that block query ranges are inclusive.
+            let query_to_block = to_block.min(from_block.saturating_add(page_size.get() - 1));
+
+            // A single-block page splits into one query per event to query as
+            // little data as possible; larger pages use a single query for all
+            // events.
+            let blocks = BlockFilter::Range {
+                from: from_block,
+                to: query_to_block,
+            };
+            let fetch = if page_size.get() > 1 {
+                Fetch::SingleQuery(blocks)
+            } else {
+                Fetch::MultipleQueries(blocks)
+            };
+
+            match self.fetch_logs(fetch).await {
+                Ok(logs) => FetchedPage {
+                    to_block: query_to_block,
+                    logs,
+                    block_timestamps: BTreeMap::new(),
+                },
+                Err(err) => {
+                    self.step = narrowed_warp(from_block, to_block, page_size);
+                    return Err(err);
+                }
+            }
         };
 
-        let result = self.fetch_logs(fetch).await;
+        if let Err(err) = self
+            .fetch_missing_block_timestamps(&page.logs, &mut page.block_timestamps)
+            .await
+        {
+            // Cache the fetched log page as well as the timestamps that have
+            // already been fetched. Next iteration, only the still missing
+            // block headers will be queried for their timestamps
+            self.step = Step::Warping {
+                from_block,
+                to_block,
+                page_size,
+                fetched: Some(page),
+            };
+            return Err(err);
+        }
+
+        let query_to_block = page.to_block;
+        let result = decode_and_sort(&page.logs, &page.block_timestamps);
+
         self.step = if result.is_ok() {
             if query_to_block == to_block {
                 Step::Idle
@@ -332,19 +423,11 @@ where
                     from_block: query_to_block + 1,
                     to_block,
                     page_size: self.config.block_page_size,
+                    fetched: None,
                 }
             }
         } else {
-            // Narrow the page size to query fewer logs on the next attempt.
-            // Rounding up keeps it from going below one, so single-block
-            // pages are retried indefinitely.
-            let page_size = NonZeroU64::new(page_size.get().div_ceil(2))
-                .expect("halving a nonzero page size stays nonzero");
-            Step::Warping {
-                from_block,
-                to_block,
-                page_size,
-            }
+            narrowed_warp(from_block, to_block, page_size)
         };
 
         result.map(|logs| EventUpdate {
@@ -363,6 +446,7 @@ where
         &mut self,
         block_number: u64,
         block_hash: B256,
+        block_timestamp: u64,
         logs_bloom: Bloom,
         retries: u64,
     ) -> Result<EventUpdate<E>, Error> {
@@ -379,13 +463,21 @@ where
             Fetch::MultipleQueries(BlockFilter::Hash(block_hash))
         };
 
-        let result = self.fetch_logs(fetch).await;
+        let result = self.fetch_logs(fetch).await.and_then(|logs| {
+            // The block watcher already fetched the block's header, so its timestamp
+            // fills in for logs the node returns without one, without an additional
+            // RPC request.
+            let block_timestamps = BTreeMap::from([(block_number, block_timestamp)]);
+            decode_and_sort(&logs, &block_timestamps)
+        });
+
         self.step = if result.is_ok() {
             Step::Idle
         } else {
             Step::Block {
                 block_number,
                 block_hash,
+                block_timestamp,
                 logs_bloom,
                 retries: retries + 1,
             }
@@ -397,9 +489,9 @@ where
         })
     }
 
-    /// Fetches the watched logs for some blocks using the given strategy,
-    /// returning them decoded and in `(block_number, log_index)` order.
-    async fn fetch_logs(&self, fetch: Fetch) -> Result<Vec<EventLog<E>>, Error> {
+    /// Fetches the raw watched logs for some blocks using the given strategy,
+    /// in no particular order.
+    async fn fetch_logs(&self, fetch: Fetch) -> Result<Vec<Log>, Error> {
         let logs = match fetch {
             Fetch::SingleQuery(blocks) => {
                 let filter = blocks
@@ -465,7 +557,80 @@ where
                     .collect()
             }
         };
-        decode_and_sort(&logs)
+
+        // Only warn once per watcher, as a node that omits timestamps does so
+        // for every log and would otherwise warn on every fetch.
+        let warned = self
+            .warned_missing_timestamps
+            .load(atomic::Ordering::Relaxed);
+        if !warned
+            && logs.iter().any(|log| log.block_timestamp.is_none())
+            && !self
+                .warned_missing_timestamps
+                .swap(true, atomic::Ordering::Relaxed)
+        {
+            tracing::warn!(
+                "node does not include `blockTimestamp` in logs; falling back to block headers, \
+                 which requires additional RPC requests and degrades indexing performance"
+            );
+        }
+
+        Ok(logs)
+    }
+
+    /// A test helper that queries logs and decodes and sorts without additional
+    /// block header timestamps.
+    #[cfg(test)]
+    async fn fetch_and_decode_logs(&self, fetch: Fetch) -> Result<Vec<EventLog<E>>, Error> {
+        let logs = self.fetch_logs(fetch).await?;
+        decode_and_sort(&logs, &BTreeMap::new())
+    }
+
+    /// Fetches the timestamps of the blocks with logs that the node returned
+    /// without one, adding them to `block_timestamps` keyed by block number.
+    /// Blocks already in `block_timestamps` are not fetched again.
+    ///
+    /// On failure, `block_timestamps` still holds every timestamp that was
+    /// successfully fetched, so a retry only fetches the missing ones.
+    ///
+    /// Blocks are fetched by number, so this must only be used for logs in the
+    /// reorg-safe range.
+    async fn fetch_missing_block_timestamps(
+        &self,
+        logs: &[Log],
+        block_timestamps: &mut BTreeMap<u64, u64>,
+    ) -> Result<(), Error> {
+        let block_numbers = logs
+            .iter()
+            .filter(|log| log.block_timestamp.is_none())
+            .filter_map(|log| log.block_number)
+            .filter(|block_number| !block_timestamps.contains_key(block_number))
+            .collect::<BTreeSet<_>>();
+
+        let results =
+            futures::future::join_all(block_numbers.into_iter().map(|block_number| async move {
+                let block = self
+                    .provider
+                    .get_block(BlockId::number(block_number))
+                    .hashes()
+                    .await?
+                    .ok_or(Error::MissingBlock { block_number })?;
+                Ok::<_, Error>((block_number, block.header.timestamp))
+            }))
+            .await;
+
+        let mut first_err = None;
+        for result in results {
+            match result {
+                Ok((block_number, timestamp)) => {
+                    block_timestamps.insert(block_number, timestamp);
+                }
+                Err(err) => {
+                    first_err.get_or_insert(err);
+                }
+            }
+        }
+        first_err.map_or(Ok(()), Err)
     }
 
     /// Guards against nodes that silently cap the number of returned logs: a
@@ -486,9 +651,31 @@ where
     }
 }
 
+/// Returns the warp step retrying the page at `from_block` with a narrower page,
+/// to query fewer logs on the next attempt.
+fn narrowed_warp(from_block: u64, to_block: u64, page_size: NonZeroU64) -> Step {
+    // Rounding up keeps the page size from going below one, so single-block
+    // pages are retried indefinitely.
+    let page_size = NonZeroU64::new(page_size.get().div_ceil(2))
+        .expect("halving a nonzero page size stays nonzero");
+    Step::Warping {
+        from_block,
+        to_block,
+        page_size,
+        fetched: None,
+    }
+}
+
 /// Decodes logs into the typed event set and sorts them into
 /// `(block_number, log_index)` order.
-fn decode_and_sort<E>(logs: &[Log]) -> Result<Vec<EventLog<E>>, Error>
+///
+/// A log's block timestamp is taken from the log itself when the node includes
+/// it, and otherwise looked up by block number in `block_timestamps`; it is an
+/// error for a log to have neither.
+fn decode_and_sort<E>(
+    logs: &[Log],
+    block_timestamps: &BTreeMap<u64, u64>,
+) -> Result<Vec<EventLog<E>>, Error>
 where
     E: Events,
 {
@@ -497,8 +684,12 @@ where
         .map(|log| {
             E::decode_log(log.topics(), &log.data().data)
                 .and_then(|data| {
+                    let number = log.block_number?;
+                    let timestamp = log
+                        .block_timestamp
+                        .or_else(|| block_timestamps.get(&number).copied())?;
                     Some(EventLog {
-                        block: log.block_number?,
+                        block: EventBlock { number, timestamp },
                         index: log.log_index?,
                         address: log.inner.address,
                         data,
@@ -506,15 +697,16 @@ where
                 })
                 .ok_or_else(|| Error::DecodeLog {
                     // This is an unfortunate typing quirk of `alloy`, but we
-                    // should never have a log without a block hash or index set.
-                    // If we do, it's not the end of the world, and we would just
-                    // report an error with weird data.
+                    // should never have a log without a block hash or index
+                    // set, and all missing block timestamps should have been
+                    // fetched. If we do, it's not the end of the world, and we
+                    // would just report an error with weird data.
                     block_hash: log.block_hash.unwrap_or(B256::repeat_byte(0xff)),
                     log_index: log.log_index.unwrap_or(u64::MAX),
                 })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    logs.sort_unstable_by_key(|log| (log.block, log.index));
+    logs.sort_unstable_by_key(|log| (log.block.number, log.index));
     Ok(logs)
 }
 
@@ -597,7 +789,9 @@ macro_rules! watcher_events {
 mod tests {
     use super::*;
     use alloy::{
+        consensus,
         primitives::{Address, address},
+        rpc::types::{Block, Header},
         sol,
         sol_types::SolEvent,
         transports::mock::Asserter,
@@ -647,14 +841,40 @@ mod tests {
                 data: event.encode_log_data(),
             },
             block_number: Some(block_number),
+            block_timestamp: Some(block_timestamp(block_number)),
             log_index: Some(log_index),
             ..Default::default()
         }
     }
 
+    fn block_timestamp(block: u64) -> u64 {
+        1_700_000_000 + block * 12
+    }
+
+    fn without_timestamp(log: Log) -> Log {
+        Log {
+            block_timestamp: None,
+            ..log
+        }
+    }
+
+    fn block(number: u64) -> Block {
+        Block::empty(Header {
+            inner: consensus::Header {
+                number,
+                timestamp: block_timestamp(number),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+    }
+
     fn event_log<E>((block, index): (u64, u64), data: E) -> EventLog<E> {
         EventLog {
-            block,
+            block: EventBlock {
+                number: block,
+                timestamp: block_timestamp(block),
+            },
             index,
             address: WATCHED,
             data,
@@ -668,29 +888,32 @@ mod tests {
 
     #[test]
     fn decodes_and_sorts_logs() {
-        let events = decode_and_sort::<Erc20::Erc20Events>(&[
-            log(
-                (2, 0),
-                Erc20::Transfer {
-                    amount: uint!(1_U256),
-                    ..Default::default()
-                },
-            ),
-            log(
-                (2, 5),
-                Erc20::Approval {
-                    amount: uint!(2_U256),
-                    ..Default::default()
-                },
-            ),
-            log(
-                (1, 1),
-                Erc20::Transfer {
-                    amount: uint!(3_U256),
-                    ..Default::default()
-                },
-            ),
-        ])
+        let events = decode_and_sort::<Erc20::Erc20Events>(
+            &[
+                log(
+                    (2, 0),
+                    Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    },
+                ),
+                log(
+                    (2, 5),
+                    Erc20::Approval {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    },
+                ),
+                log(
+                    (1, 1),
+                    Erc20::Transfer {
+                        amount: uint!(3_U256),
+                        ..Default::default()
+                    },
+                ),
+            ],
+            &BTreeMap::new(),
+        )
         .unwrap();
 
         assert_eq!(
@@ -748,11 +971,11 @@ mod tests {
         ];
 
         assert_matches!(
-            decode_and_sort::<Erc20::Erc20Events>(&logs),
+            decode_and_sort::<Erc20::Erc20Events>(&logs, &BTreeMap::new()),
             Err(Error::DecodeLog { log_index, .. }) if log_index == 1
         );
 
-        let events = decode_and_sort::<TokenEvents>(&logs).unwrap();
+        let events = decode_and_sort::<TokenEvents>(&logs, &BTreeMap::new()).unwrap();
         assert_eq!(
             events,
             [
@@ -781,6 +1004,64 @@ mod tests {
         );
     }
 
+    #[test]
+    fn decodes_logs_with_known_block_timestamps() {
+        let logs = vec![
+            log(
+                (1, 0),
+                Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                },
+            ),
+            without_timestamp(log(
+                (2, 0),
+                Erc20::Transfer {
+                    amount: uint!(2_U256),
+                    ..Default::default()
+                },
+            )),
+            without_timestamp(log(
+                (3, 0),
+                Erc20::Transfer {
+                    amount: uint!(3_U256),
+                    ..Default::default()
+                },
+            )),
+        ];
+        let block_timestamps = BTreeMap::from([(1, 0), (2, block_timestamp(2))]);
+
+        let events = decode_and_sort::<Erc20::Erc20Events>(&logs[..2], &block_timestamps).unwrap();
+
+        assert_eq!(
+            events,
+            [
+                // The log's own timestamp takes precedence over a known one.
+                event_log(
+                    (1, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                ),
+                // A log without a timestamp falls back to the known one.
+                event_log(
+                    (2, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    })
+                ),
+            ]
+        );
+
+        // Neither the log nor the known timestamps have one.
+        assert_matches!(
+            decode_and_sort::<Erc20::Erc20Events>(&logs, &block_timestamps),
+            Err(Error::DecodeLog { .. })
+        );
+    }
+
     #[tokio::test]
     async fn single_query_fetches_all_events_at_once() {
         let asserter = Asserter::new();
@@ -804,7 +1085,7 @@ mod tests {
         ]);
 
         let logs = events
-            .fetch_logs(Fetch::SingleQuery(BlockFilter::Range { from: 1, to: 2 }))
+            .fetch_and_decode_logs(Fetch::SingleQuery(BlockFilter::Range { from: 1, to: 2 }))
             .await
             .unwrap();
 
@@ -851,7 +1132,7 @@ mod tests {
         )]);
 
         let logs = events
-            .fetch_logs(Fetch::MultipleQueries(BlockFilter::Range {
+            .fetch_and_decode_logs(Fetch::MultipleQueries(BlockFilter::Range {
                 from: 1,
                 to: 2,
             }))
@@ -927,7 +1208,7 @@ mod tests {
         asserter.push_success(&logs);
 
         let logs = events
-            .fetch_logs(Fetch::ClientFiltered {
+            .fetch_and_decode_logs(Fetch::ClientFiltered {
                 block_hash: B256::repeat_byte(0x42),
                 logs_bloom: bloom::compute_logs_bloom(&logs),
             })
@@ -981,7 +1262,7 @@ mod tests {
 
         assert_matches!(
             events
-                .fetch_logs(Fetch::SingleQuery(BlockFilter::Range { from: 1, to: 1 }))
+                .fetch_and_decode_logs(Fetch::SingleQuery(BlockFilter::Range { from: 1, to: 1 }),)
                 .await,
             Err(Error::TooManyLogs)
         );
@@ -1019,10 +1300,10 @@ mod tests {
 
         assert_matches!(
             events
-                .fetch_logs(Fetch::MultipleQueries(BlockFilter::Range {
+                .fetch_and_decode_logs(Fetch::MultipleQueries(BlockFilter::Range {
                     from: 1,
                     to: 1
-                }))
+                }),)
                 .await,
             Err(Error::TooManyLogs)
         );
@@ -1044,10 +1325,10 @@ mod tests {
 
         assert_matches!(
             events
-                .fetch_logs(Fetch::MultipleQueries(BlockFilter::Range {
+                .fetch_and_decode_logs(Fetch::MultipleQueries(BlockFilter::Range {
                     from: 1,
                     to: 1
-                }))
+                }),)
                 .await,
             Err(Error::Rpc(_))
         );
@@ -1079,7 +1360,7 @@ mod tests {
         }
 
         let logs = events
-            .fetch_logs(Fetch::MultipleQueries(BlockFilter::Range {
+            .fetch_and_decode_logs(Fetch::MultipleQueries(BlockFilter::Range {
                 from: 1,
                 to: 1,
             }))
@@ -1115,10 +1396,12 @@ mod tests {
 
         assert_matches!(
             events
-                .fetch_logs(Fetch::ClientFiltered {
-                    block_hash: B256::repeat_byte(0x42),
-                    logs_bloom: Bloom::repeat_byte(0xcd),
-                })
+                .fetch_and_decode_logs(
+                    Fetch::ClientFiltered {
+                        block_hash: B256::repeat_byte(0x42),
+                        logs_bloom: Bloom::repeat_byte(0xcd),
+                    },
+                )
                 .await,
             Err(Error::IncompleteLogs { block_hash }) if block_hash == B256::repeat_byte(0x42)
         );
@@ -1283,6 +1566,212 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn warp_fetches_the_headers_of_blocks_with_logs_missing_timestamps() {
+        let asserter = Asserter::new();
+        let mut events = watcher(&asserter, Config::default());
+        events
+            .on_block_update(BlockUpdate::Warp { from: 1, to: 10 })
+            .unwrap();
+
+        // The node omits `blockTimestamp` from the page's logs, two of which are
+        // in the same block.
+        asserter.push_success(&vec![
+            without_timestamp(log(
+                (3, 0),
+                Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                },
+            )),
+            without_timestamp(log(
+                (3, 1),
+                Erc20::Approval {
+                    amount: uint!(2_U256),
+                    ..Default::default()
+                },
+            )),
+            without_timestamp(log(
+                (7, 0),
+                Erc20::Transfer {
+                    amount: uint!(3_U256),
+                    ..Default::default()
+                },
+            )),
+        ]);
+        // So one header is fetched per block with logs.
+        asserter.push_success(&block(3));
+        asserter.push_success(&block(7));
+
+        // The logs get the timestamps of their block headers.
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(1..=10),
+                logs: vec![
+                    event_log(
+                        (3, 0),
+                        Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                            amount: uint!(1_U256),
+                            ..Default::default()
+                        })
+                    ),
+                    event_log(
+                        (3, 1),
+                        Erc20::Erc20Events::Approval(Erc20::Approval {
+                            amount: uint!(2_U256),
+                            ..Default::default()
+                        })
+                    ),
+                    event_log(
+                        (7, 0),
+                        Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                            amount: uint!(3_U256),
+                            ..Default::default()
+                        })
+                    ),
+                ],
+            })
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn warp_does_not_fetch_headers_when_logs_have_timestamps() {
+        let asserter = Asserter::new();
+        let mut events = watcher(&asserter, Config::default());
+        events
+            .on_block_update(BlockUpdate::Warp { from: 1, to: 10 })
+            .unwrap();
+
+        asserter.push_success(&vec![log(
+            (3, 0),
+            Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            },
+        )]);
+        // A header response that must be left unconsumed.
+        asserter.push_success(&block(3));
+
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(1..=10),
+                logs: vec![event_log(
+                    (3, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                )],
+            })
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert_eq!(asserter.read_q().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn warp_retries_only_the_missing_headers_when_fetching_a_header_fails() {
+        let asserter = Asserter::new();
+        let mut events = watcher(
+            &asserter,
+            Config {
+                block_page_size: NonZeroU64::new(5).unwrap(),
+                ..Default::default()
+            },
+        );
+        events
+            .on_block_update(BlockUpdate::Warp { from: 1, to: 10 })
+            .unwrap();
+
+        // The first page's logs (1..=5) are fetched and the header of block 2
+        // too, but the header request for block 5 fails. Header requests are
+        // issued in block order.
+        asserter.push_success(&vec![
+            without_timestamp(log(
+                (2, 0),
+                Erc20::Transfer {
+                    amount: uint!(1_U256),
+                    ..Default::default()
+                },
+            )),
+            without_timestamp(log(
+                (5, 0),
+                Erc20::Approval {
+                    amount: uint!(2_U256),
+                    ..Default::default()
+                },
+            )),
+        ]);
+        asserter.push_success(&block(2));
+        asserter.push_failure_msg("header unavailable");
+        assert_matches!(events.next().await, Err(Error::Rpc(_)));
+        assert!(asserter.read_q().is_empty());
+
+        // The retry only requests the header of block 5, which the node now
+        // reports as missing.
+        asserter.push_success::<Option<Block>>(&None);
+        assert_matches!(
+            events.next().await,
+            Err(Error::MissingBlock { block_number: 5 })
+        );
+        assert!(asserter.read_q().is_empty());
+
+        // The next retry gets the header of block 5, completing the page
+        // without querying its logs again or narrowing it.
+        asserter.push_success(&block(5));
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(1..=5),
+                logs: vec![
+                    event_log(
+                        (2, 0),
+                        Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                            amount: uint!(1_U256),
+                            ..Default::default()
+                        })
+                    ),
+                    event_log(
+                        (5, 0),
+                        Erc20::Erc20Events::Approval(Erc20::Approval {
+                            amount: uint!(2_U256),
+                            ..Default::default()
+                        })
+                    ),
+                ],
+            })
+        );
+        assert!(asserter.read_q().is_empty());
+
+        // The next page (6..=10) is fetched from scratch.
+        asserter.push_success(&vec![without_timestamp(log(
+            (7, 0),
+            Erc20::Transfer {
+                amount: uint!(3_U256),
+                ..Default::default()
+            },
+        ))]);
+        asserter.push_success(&block(7));
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(6..=10),
+                logs: vec![event_log(
+                    (7, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(3_U256),
+                        ..Default::default()
+                    })
+                )],
+            })
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
     async fn fetches_a_new_block_with_a_single_query() {
         let asserter = Asserter::new();
         let mut events = watcher(&asserter, Config::default());
@@ -1290,6 +1779,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
                 logs_bloom: Bloom::ZERO,
             })
             .unwrap();
@@ -1303,6 +1793,47 @@ mod tests {
         )]);
 
         // A single query returns the block's logs, then the watcher is idle.
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(EventUpdate {
+                blocks: range(1337..=1337),
+                logs: vec![event_log(
+                    (1337, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    })
+                )],
+            })
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn new_block_uses_the_header_timestamp_when_logs_omit_it() {
+        let asserter = Asserter::new();
+        let mut events = watcher(&asserter, Config::default());
+        events
+            .on_block_update(BlockUpdate::New {
+                number: 1337,
+                hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
+                logs_bloom: Bloom::ZERO,
+            })
+            .unwrap();
+
+        // The node omits `blockTimestamp` from the block's logs.
+        asserter.push_success(&vec![without_timestamp(log(
+            (1337, 0),
+            Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            },
+        ))]);
+
+        // The log gets the timestamp of the block update, and the logs query is
+        // the only request made.
         assert_eq!(
             events.next().await.unwrap(),
             Some(EventUpdate {
@@ -1358,6 +1889,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
                 logs_bloom: bloom::compute_logs_bloom(&block_logs),
             })
             .unwrap();
@@ -1395,6 +1927,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
                 logs_bloom: Bloom::ZERO,
             })
             .unwrap();
@@ -1457,6 +1990,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash,
+                timestamp: block_timestamp(1337),
                 logs_bloom: Bloom::ZERO,
             })
             .unwrap();
@@ -1503,6 +2037,7 @@ mod tests {
             .on_block_update(BlockUpdate::New {
                 number: 1337,
                 hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
                 logs_bloom: Bloom::ZERO,
             })
             .unwrap();

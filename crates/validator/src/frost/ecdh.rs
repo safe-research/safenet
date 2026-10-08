@@ -1,6 +1,7 @@
 //! ECDH-XOR encryption of FROST secret shares for the onchain publishing
 //! channel.
 
+use frost_secp256k1::{Identifier, Signature, keys};
 use k256::{
     EncodedPoint, NonZeroScalar, ProjectivePoint, Scalar,
     elliptic_curve::{
@@ -17,10 +18,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::fmt::{self, Debug, Formatter};
 
 /// A locally-generated ECDH encryption key. The secret scalar is sampled by the
-/// effect handler and never leaves the secret store; only [`public_key`] is
+/// effect handler and never leaves the secret store; only its [`package`] is
 /// published onchain.
 ///
-/// [`public_key`]: EncryptionKey::public_key
+/// [`package`]: EncryptionKey::package
 #[derive(Clone, Deserialize, Serialize)]
 pub struct EncryptionKey(NonZeroScalar);
 
@@ -35,8 +36,28 @@ impl EncryptionKey {
         Self(hash_to_scalar(b"enc", &entropy))
     }
 
-    /// The public key `q` published onchain for peers to encrypt shares to.
-    pub(super) fn public_key(&self) -> EncryptionPublicKey {
+    /// Builds the package published onchain for peers to encrypt shares to,
+    /// with a proof of possession of the encryption key for `identifier`.
+    pub(super) fn package<R>(
+        &self,
+        identifier: Identifier,
+        rng: R,
+    ) -> Result<Package, frost_secp256k1::Error>
+    where
+        R: CryptoRng + RngCore,
+    {
+        let public_key = self.public_key();
+        let proof_of_possession = frost_core::keys::dkg::compute_proof_of_knowledge(
+            identifier,
+            &[*self.0],
+            &public_key.as_commitment(),
+            rng,
+        )?;
+        Ok(Package::new(public_key.0, proof_of_possession))
+    }
+
+    /// The public key `q` for peers to encrypt shares to.
+    fn public_key(&self) -> EncryptionPublicKey {
         EncryptionPublicKey(ProjectivePoint::GENERATOR * *self.0)
     }
 
@@ -61,22 +82,109 @@ impl Drop for EncryptionKey {
 
 impl ZeroizeOnDrop for EncryptionKey {}
 
+/// An encryption public key along with its proof of possession, as published
+/// onchain by a participant.
+#[derive(Clone, Debug)]
+pub(super) struct Package {
+    public_key_point: ProjectivePoint,
+    proof_of_possession: Signature,
+}
+
+impl Package {
+    /// Creates a new package from an unverified public key and its proof of
+    /// possession.
+    pub(super) fn new(public_key_point: ProjectivePoint, proof_of_possession: Signature) -> Self {
+        Self {
+            public_key_point,
+            proof_of_possession,
+        }
+    }
+
+    /// Returns the unverified public key point.
+    pub(super) fn public_key_point(&self) -> &ProjectivePoint {
+        &self.public_key_point
+    }
+
+    /// Returns the proof of possession of the public key.
+    pub(super) fn proof_of_possession(&self) -> &Signature {
+        &self.proof_of_possession
+    }
+
+    /// Verifies the proof of possession of the public key for the participant
+    /// with `identifier`, returning the verified encryption public key.
+    pub(super) fn verified_public_key(
+        self,
+        identifier: Identifier,
+    ) -> Result<EncryptionPublicKey, frost_secp256k1::Error> {
+        let public_key = EncryptionPublicKey::from_point(self.public_key_point)?;
+        frost_core::keys::dkg::verify_proof_of_knowledge(
+            identifier,
+            &public_key.as_commitment(),
+            &self.proof_of_possession,
+        )?;
+        Ok(public_key)
+    }
+}
+
+impl<'de> Deserialize<'de> for Package {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Package {
+            public_key_point: EncodedPoint,
+            proof_of_possession: Signature,
+        }
+
+        let package = Package::deserialize(deserializer)?;
+        let public_key_point = ProjectivePoint::from_encoded_point(&package.public_key_point)
+            .into_option()
+            .ok_or_else(|| de::Error::custom("invalid encryption public key encoding"))?;
+        Ok(Self::new(public_key_point, package.proof_of_possession))
+    }
+}
+
+impl Serialize for Package {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        #[derive(Serialize)]
+        struct Package<'a> {
+            public_key_point: EncodedPoint,
+            proof_of_possession: &'a Signature,
+        }
+
+        Package {
+            public_key_point: self.public_key_point.to_encoded_point(true),
+            proof_of_possession: &self.proof_of_possession,
+        }
+        .serialize(serializer)
+    }
+}
+
 /// An encryption public key that can be serialized.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EncryptionPublicKey(ProjectivePoint);
 
 impl EncryptionPublicKey {
     /// Tries to construct an encryption public key from a projective point.
-    pub(super) fn from_point(point: ProjectivePoint) -> Result<Self, frost_secp256k1::Error> {
+    fn from_point(point: ProjectivePoint) -> Result<Self, frost_secp256k1::Error> {
         if point.is_identity().into() {
             return Err(frost_secp256k1::GroupError::InvalidIdentityElement.into());
         }
         Ok(Self(point))
     }
 
-    /// Returns the public key as a point.
-    pub(super) fn as_point(&self) -> &ProjectivePoint {
-        &self.0
+    /// Returns the public key as a secret sharing commitment with the public
+    /// key as its only coefficient. The proof of possession uses the same
+    /// proof of knowledge scheme as the constant term of the DKG polynomial,
+    /// so it is computed and verified over this commitment.
+    fn as_commitment(&self) -> keys::VerifiableSecretSharingCommitment {
+        keys::VerifiableSecretSharingCommitment::new(vec![
+            frost_core::keys::CoefficientCommitment::new(self.0),
+        ])
     }
 }
 
@@ -135,6 +243,10 @@ fn hash_to_scalar(discriminant: &[u8], msg: &[u8]) -> NonZeroScalar {
 mod tests {
     use super::*;
 
+    fn id(id: u16) -> Identifier {
+        Identifier::try_from(id).unwrap()
+    }
+
     fn key(pk: u64) -> EncryptionKey {
         EncryptionKey(NonZeroScalar::new(Scalar::from(pk)).unwrap())
     }
@@ -172,6 +284,29 @@ mod tests {
             alice.ecdh(&bob.public_key(), msg),
             alice.ecdh(&charlie.public_key(), msg),
         );
+    }
+
+    #[test]
+    fn proof_of_possession_is_bound_to_identifier() {
+        let mut rng = rand::thread_rng();
+        let key = EncryptionKey::generate(&mut rng);
+        let package = key.package(id(1), &mut rng).unwrap();
+
+        let public_key = package.clone().verified_public_key(id(1)).unwrap();
+        assert_eq!(public_key, key.public_key());
+        package.verified_public_key(id(2)).unwrap_err();
+    }
+
+    #[test]
+    fn package_roundtrips_serialization() {
+        let mut rng = rand::thread_rng();
+        let key = EncryptionKey::generate(&mut rng);
+        let package = key.package(id(1), &mut rng).unwrap();
+
+        let json = serde_json::to_string(&package).unwrap();
+        let package = serde_json::from_str::<Package>(&json).unwrap();
+        let public_key = package.verified_public_key(id(1)).unwrap();
+        assert_eq!(public_key, key.public_key());
     }
 
     #[test]

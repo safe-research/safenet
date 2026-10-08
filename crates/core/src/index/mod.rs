@@ -14,7 +14,7 @@ use events::{EventWatcher, Events};
 use serde::Deserialize;
 
 pub use blocks::{BlockStatus, BlockUpdate};
-pub use events::{EventLog, EventUpdate};
+pub use events::{EventBlock, EventLog, EventUpdate};
 
 /// Watcher configuration, aggregating the block and event watcher configs.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -160,9 +160,9 @@ mod tests {
     fn config() -> Config {
         Config {
             blocks: blocks::Config {
-                block_time: blocks::BlockTime::Millis(2_000),
-                block_propagation_delay: 500,
-                block_retry_delays: vec![],
+                block_time: blocks::Timing::Millis(2_000),
+                block_propagation_delay: blocks::Timing::Millis(500),
+                block_retry_delays: blocks::Timing::Millis(vec![]),
                 max_reorg_depth: 3,
                 start_block: None,
             },
@@ -177,8 +177,15 @@ mod tests {
     }
 
     #[test]
-    fn deserializes_auto_block_time() {
-        let config = serde_json::from_str::<Config>(r#"{"block_time":"auto"}"#).unwrap();
+    fn deserializes_auto_timings() {
+        let config = serde_json::from_str::<Config>(
+            r#"{
+                "block_time": "auto",
+                "block_propagation_delay": "auto",
+                "block_retry_delays": "auto"
+            }"#,
+        )
+        .unwrap();
         assert_eq!(config, Config::default());
     }
 
@@ -203,9 +210,9 @@ mod tests {
             config,
             Config {
                 blocks: blocks::Config {
-                    block_time: blocks::BlockTime::Millis(2_000),
-                    block_propagation_delay: 250,
-                    block_retry_delays: vec![50, 75],
+                    block_time: blocks::Timing::Millis(2_000),
+                    block_propagation_delay: blocks::Timing::Millis(250),
+                    block_retry_delays: blocks::Timing::Millis(vec![50, 75]),
                     max_reorg_depth: 3,
                     start_block: Some(100),
                 },
@@ -368,6 +375,7 @@ mod tests {
             Update::Block(BlockUpdate::New {
                 number: 1000,
                 hash: block_hash(1000),
+                timestamp: block_timestamp(1000),
                 logs_bloom: block_bloom(1000),
             })
         );
@@ -399,7 +407,7 @@ mod tests {
             inner: consensus::Header {
                 parent_hash: number.checked_sub(1).map(block_hash).unwrap_or_default(),
                 number,
-                timestamp: number * 2,
+                timestamp: block_timestamp(number),
                 logs_bloom: block_bloom(number),
                 ..Default::default()
             },
@@ -413,6 +421,10 @@ mod tests {
         B256::from(bytes)
     }
 
+    fn block_timestamp(number: u64) -> u64 {
+        number * 2
+    }
+
     fn block_bloom(number: u64) -> Bloom {
         let mut bytes = [0; 256];
         bytes[248..].copy_from_slice(&number.to_be_bytes());
@@ -423,6 +435,7 @@ mod tests {
         Update::Block(BlockUpdate::New {
             number,
             hash: block_hash(number),
+            timestamp: block_timestamp(number),
             logs_bloom: block_bloom(number),
         })
     }
@@ -434,6 +447,7 @@ mod tests {
                 data: event.encode_log_data(),
             },
             block_number: Some(block_number),
+            block_timestamp: Some(block_timestamp(block_number)),
             log_index: Some(log_index),
             ..Default::default()
         }
@@ -457,7 +471,10 @@ mod tests {
                 .into_iter()
                 .enumerate()
                 .map(|(index, data)| EventLog {
-                    block,
+                    block: EventBlock {
+                        number: block,
+                        timestamp: block_timestamp(block),
+                    },
                     index: index.try_into().expect("test log index fits in u64"),
                     address: WATCHED,
                     data: Weth::WethEvents::Deposit(data),

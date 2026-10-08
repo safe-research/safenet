@@ -1,7 +1,7 @@
 import type { Address, PublicClient } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { shortAddress } from "@/lib/address";
-import { getBlockRange, loadChainId, mapAddressLabel, mostRecentFirst } from "./utils";
+import { getBlockRange, loadChainId, mapAddressLabel, mostRecentFirst, oldestFirst } from "./utils";
 
 const CURRENT_BLOCK = 10000n;
 const MAX_BLOCK_RANGE = 1000n;
@@ -89,6 +89,27 @@ describe("mostRecentFirst", () => {
 			{ blockNumber: 100n, logIndex: 5 },
 			{ blockNumber: 100n, logIndex: 2 },
 		]);
+	});
+});
+
+describe("oldestFirst", () => {
+	it("sorts logs by blockNumber ascending, then logIndex ascending", () => {
+		const logs = [
+			{ blockNumber: 200n, logIndex: 1 },
+			{ blockNumber: 100n, logIndex: 5 },
+			{ blockNumber: 200n, logIndex: 0 },
+			{ blockNumber: 100n, logIndex: 2 },
+		];
+		expect(oldestFirst(logs)).toEqual([
+			{ blockNumber: 100n, logIndex: 2 },
+			{ blockNumber: 100n, logIndex: 5 },
+			{ blockNumber: 200n, logIndex: 0 },
+			{ blockNumber: 200n, logIndex: 1 },
+		]);
+	});
+
+	it("returns empty array for empty input", () => {
+		expect(oldestFirst([])).toEqual([]);
 	});
 });
 

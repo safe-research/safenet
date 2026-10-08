@@ -143,7 +143,9 @@ cast call $CONSENSUS_ADDRESS "getTransactionAttestationByHash(uint64,address,byt
     <EPOCH> $ORACLE_ADDRESS <SAFE_TX_HASH> --rpc-url http://localhost:8545
 ```
 
-> [!TIP] For an oracle-checked transaction, the attestation only appears once `SentinelOracle` has resolved the request (see [Reading contract state with `cast`](#reading-contract-state-with-cast) for how to check a request's `getRequest`/`getCommitment` state) — validators won't attest before the oracle approves.
+> [!TIP]
+>
+> For an oracle-checked transaction, the attestation only appears once `SentinelOracle` has resolved the request (see [Reading contract state with `cast`](#reading-contract-state-with-cast) for how to check a request's `getRequest`/`getCommitment` state) — validators won't attest before the oracle approves.
 
 ### Checking service status
 

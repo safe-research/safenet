@@ -9,25 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SafeTxRouteImport } from './routes/safeTx'
-import { Route as SafeRouteImport } from './routes/safe'
-import { Route as EpochRouteImport } from './routes/epoch'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EpochRouteImport } from './routes/epoch'
+import { Route as ImprintRouteImport } from './routes/imprint'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as SafeRouteImport } from './routes/safe'
+import { Route as SafeTxRouteImport } from './routes/safeTx'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as TermsRouteImport } from './routes/terms'
 
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SafeTxRoute = SafeTxRouteImport.update({
-  id: '/safeTx',
-  path: '/safeTx',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SafeRoute = SafeRouteImport.update({
-  id: '/safe',
-  path: '/safe',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EpochRoute = EpochRouteImport.update({
@@ -35,71 +28,119 @@ const EpochRoute = EpochRouteImport.update({
   path: '/epoch',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const ImprintRoute = ImprintRouteImport.update({
+  id: '/imprint',
+  path: '/imprint',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SafeRoute = SafeRouteImport.update({
+  id: '/safe',
+  path: '/safe',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SafeTxRoute = SafeTxRouteImport.update({
+  id: '/safeTx',
+  path: '/safeTx',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/epoch': typeof EpochRoute
+  '/imprint': typeof ImprintRoute
+  '/privacy': typeof PrivacyRoute
   '/safe': typeof SafeRoute
   '/safeTx': typeof SafeTxRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/epoch': typeof EpochRoute
+  '/imprint': typeof ImprintRoute
+  '/privacy': typeof PrivacyRoute
   '/safe': typeof SafeRoute
   '/safeTx': typeof SafeTxRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/epoch': typeof EpochRoute
+  '/imprint': typeof ImprintRoute
+  '/privacy': typeof PrivacyRoute
   '/safe': typeof SafeRoute
   '/safeTx': typeof SafeTxRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/epoch' | '/safe' | '/safeTx' | '/settings'
+  fullPaths:
+    | '/'
+    | '/epoch'
+    | '/imprint'
+    | '/privacy'
+    | '/safe'
+    | '/safeTx'
+    | '/settings'
+    | '/terms'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/epoch' | '/safe' | '/safeTx' | '/settings'
-  id: '__root__' | '/' | '/epoch' | '/safe' | '/safeTx' | '/settings'
+  to:
+    | '/'
+    | '/epoch'
+    | '/imprint'
+    | '/privacy'
+    | '/safe'
+    | '/safeTx'
+    | '/settings'
+    | '/terms'
+  id:
+    | '__root__'
+    | '/'
+    | '/epoch'
+    | '/imprint'
+    | '/privacy'
+    | '/safe'
+    | '/safeTx'
+    | '/settings'
+    | '/terms'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EpochRoute: typeof EpochRoute
+  ImprintRoute: typeof ImprintRoute
+  PrivacyRoute: typeof PrivacyRoute
   SafeRoute: typeof SafeRoute
   SafeTxRoute: typeof SafeTxRoute
   SettingsRoute: typeof SettingsRoute
+  TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/safeTx': {
-      id: '/safeTx'
-      path: '/safeTx'
-      fullPath: '/safeTx'
-      preLoaderRoute: typeof SafeTxRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/safe': {
-      id: '/safe'
-      path: '/safe'
-      fullPath: '/safe'
-      preLoaderRoute: typeof SafeRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/epoch': {
@@ -109,11 +150,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EpochRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/imprint': {
+      id: '/imprint'
+      path: '/imprint'
+      fullPath: '/imprint'
+      preLoaderRoute: typeof ImprintRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/safe': {
+      id: '/safe'
+      path: '/safe'
+      fullPath: '/safe'
+      preLoaderRoute: typeof SafeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/safeTx': {
+      id: '/safeTx'
+      path: '/safeTx'
+      fullPath: '/safeTx'
+      preLoaderRoute: typeof SafeTxRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -122,9 +198,12 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EpochRoute: EpochRoute,
+  ImprintRoute: ImprintRoute,
+  PrivacyRoute: PrivacyRoute,
   SafeRoute: SafeRoute,
   SafeTxRoute: SafeTxRoute,
   SettingsRoute: SettingsRoute,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

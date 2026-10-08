@@ -1,6 +1,7 @@
 import { expose } from "comlink";
 import type { Address, Hex } from "viem";
 import { createRpcClient } from "@/lib/rpc";
+import { loadArbitrator } from "./arbitrator";
 import { loadSentinelVotes } from "./votes";
 import { loadVotingStatus } from "./votingStatus";
 
@@ -15,6 +16,8 @@ type LoadVotesParams = {
 };
 
 const workerApi = {
+	loadArbitrator: ({ rpc, oracle }: { rpc: string; oracle: Address }) =>
+		loadArbitrator({ provider: createRpcClient(rpc), oracle }),
 	loadVotingStatus: ({ rpc, ...params }: LoadVotesParams) =>
 		loadVotingStatus({ ...params, provider: createRpcClient(rpc) }),
 	loadSentinelVotes: ({ rpc, ...params }: LoadVotesParams) =>

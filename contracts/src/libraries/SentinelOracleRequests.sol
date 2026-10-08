@@ -120,18 +120,20 @@ library SentinelOracleRequest {
         self.progress.committedCount = prog.committedCount + 1;
     }
 
-    function applyReveal(T storage self, bool approve) internal {
+    function applyReveal(T storage self, bool approve) internal returns (bool allRevealed) {
         Progress memory prog = self.progress;
         require(prog.state == State.PENDING, RequestNotPending());
         require(block.number > self.terms.commitDeadline, RevealWindowNotOpen());
         require(block.number <= self.terms.revealDeadline, RevealWindowClosed());
 
-        self.progress.revealedCount = prog.revealedCount + 1;
+        uint16 newRevealedCount = prog.revealedCount + 1;
+        self.progress.revealedCount = newRevealedCount;
         if (approve) {
             self.progress.approveSentinelCount = prog.approveSentinelCount + 1;
         } else {
             self.progress.denySentinelCount = prog.denySentinelCount + 1;
         }
+        allRevealed = newRevealedCount == prog.committedCount;
     }
 
     // Deducts the DAO's cut from `feeAmount`, then rounds the remainder down to a multiple of

@@ -31,7 +31,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 								<AnnotatedAddressList
 									accounts={allValidatorIds}
 									active={committedIds}
-									label={createStatusMapInfo(validatorInfo.data, true)}
+									label={createStatusMapInfo(validatorInfo.data, false)}
 								/>
 							</div>
 						</div>
