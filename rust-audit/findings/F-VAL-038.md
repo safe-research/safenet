@@ -355,3 +355,15 @@ Certainty **45% → 55%**, severity **Low** unchanged. Status left as it was: th
 ## Reconciliation (run 2)
 
 **Final combined status: Low, 55 %, Plausible — run-2 miss, still valid at `fe9e84c`.** `frost/preprocess.rs:19,124` (`into_par_iter`) and `store.rs:216-235` unchanged; the pruning series adds `prune_scheduled_secrets` awaited inline in the driver loop (`driver.rs:292-294`), as the AS-PRUNE note predicted. Duration still unmeasured. See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Moot |
+| Changed by | `392d7c8` "[Direct Nonce 10]: Remove the dead preprocessing code" (#1040) deleted `frost/preprocess.rs` (the `into_par_iter` chunk generation) and the 1,025-statement `register_nonces_chunk` transaction; `rayon` is no longer in the workspace |
+| Severity, certainty | resolved (code removed) |
+| Evidence | E2: `git log -S 'into_par_iter'` and `-S 'nonces_chunks'` over `fe9e84c..361aaf3` give `392d7c8`; `cargo tree -p validator --offline` lists no `rayon` |
+
+The replacement does not carry the defect: one `SigningNonces::generate` per accepted signing request, in the effect task (`crates/validator/src/service/effect.rs:128-131`), persisted by one `INSERT ... ON CONFLICT DO NOTHING` plus one `SELECT` in a short transaction (`crates/validator/src/secrets/store.rs:220-256`). There is no eager background stream and no bulk write competing with the snapshot commit.

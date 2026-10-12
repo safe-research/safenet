@@ -24,9 +24,9 @@ The direct effect is that any single registered participant can, at a time of it
 
 | # | Claim | Class (E1, E2, I) | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
-| 1 | The `CollectingShares` arm gates on the group id only — no deadline, and no reference to `public_keys` or `shares` (both are skipped by the `..` rest pattern) | E2 | `crates/validator/src/state/keygen.rs:661-675` | <pre> match &mut state.rollover {<br> RolloverState::CollectingShares {<br> next_epoch,<br> group,<br> participation,<br> complaints,<br> deadline,<br> ..<br> } if group.id == event.gid => {<br> let restart_deadline =<br> deadline.map(\|_\| block.saturating_add(self.config.key_gen_timeout.get));<br> // We get at least another `key_gen_timeout` to get the<br> // complaint response onchain, which ends up being the same<br> // value as the restart deadline (by coincidence).<br> let response_expires_at = restart_deadline;</pre> |
-| 2 | The confirmation arm _does_ carry a deadline guard, showing the sharing arm's omission is an asymmetry | E2 | `crates/validator/src/state/keygen.rs:685-701` | <pre> RolloverState::CollectingConfirmations {<br> next_epoch,<br> group,<br> participation,<br> complaints,<br> deadlines,<br> ..<br> } if group.id == event.gid<br> && deadlines<br> .as_ref<br> .is_none_or(\|deadlines\| block <= deadlines.complain) =><br> {<br> let restart_deadline = deadlines<br> .as_ref<br> .map(\|_\| block.saturating_add(self.config.key_gen_timeout.get));<br> let response_expires_at =<br> deadlines.as_ref.map(\|deadlines\| deadlines.response);</pre> |
-| 3 | The abort threshold is per accused, so `n-1` complaints from one plaintiff against distinct accused never trip it | E2 | `crates/validator/src/state/keygen.rs:714-722` | <pre> let complaint = complaints.entry(event.accused).or_default;<br> complaint.total += 1;<br> complaint.unresponded += 1;<br><br> // If we ever get threshold complaints, the keygen is done. This is<br> // because it would reveal sufficient public information to compute<br> // secret key shares from one or more participants.<br> let (_, threshold) = group.size;<br> if complaint.total >= threshold {</pre> |
+| 1 | The `CollectingShares` arm gates on the group id only — no deadline, and no reference to `public_keys` or `shares` (both are skipped by the `..` rest pattern) | E2 | `crates/validator/src/state/keygen.rs:661-675` | <pre> match &mut state.rollover {<br> RolloverState::CollectingShares {<br> next*epoch,<br> group,<br> participation,<br> complaints,<br> deadline,<br> ..<br> } if group.id == event.gid => {<br> let restart_deadline =<br> deadline.map(\|*\| block.saturating_add(self.config.key_gen_timeout.get));<br> // We get at least another `key_gen_timeout` to get the<br> // complaint response onchain, which ends up being the same<br> // value as the restart deadline (by coincidence).<br> let response_expires_at = restart_deadline;</pre> |
+| 2 | The confirmation arm _does_ carry a deadline guard, showing the sharing arm's omission is an asymmetry | E2 | `crates/validator/src/state/keygen.rs:685-701` | <pre> RolloverState::CollectingConfirmations {<br> next*epoch,<br> group,<br> participation,<br> complaints,<br> deadlines,<br> ..<br> } if group.id == event.gid<br> && deadlines<br> .as_ref<br> .is_none_or(\|deadlines\| block <= deadlines.complain) =><br> {<br> let restart_deadline = deadlines<br> .as_ref<br> .map(\|*\| block.saturating_add(self.config.key_gen_timeout.get));<br> let response_expires_at =<br> deadlines.as_ref.map(\|deadlines\| deadlines.response);</pre> |
+| 3 | The abort threshold is per accused, so `n-1` complaints from one plaintiff against distinct accused never trip it | E2 | `crates/validator/src/state/keygen.rs:714-722` | <pre> let complaint = complaints.entry(event.accused).or*default;<br> complaint.total += 1;<br> complaint.unresponded += 1;<br><br> // If we ever get threshold complaints, the keygen is done. This is<br> // because it would reveal sufficient public information to compute<br> // secret key shares from one or more participants.<br> let (*, threshold) = group.size;<br> if complaint.total >= threshold {</pre> |
 | 4 | The response is queued with no further validation of the plaintiff | E2 | `crates/validator/src/state/keygen.rs:734-745` | <pre> if let KeyGenParticipation::Participating(sharing_state) = participation<br> && event.accused == self.account<br> {<br> match frost::keygen::reveal_secret_share(sharing_state, event.plaintiff) {<br> Ok(secret_share) => {<br> commands.push(Command::Action(Action::KeyGenComplaintResponse {<br> group_id: group.id,<br> plaintiff: event.plaintiff,<br> secret_share,<br> expires_at: response_expires_at,<br> }));<br> }</pre> |
 | 5 | The revealed value is the raw secret scalar this validator computed for the plaintiff | E2 | `crates/validator/src/frost/keygen.rs:420-428` | <pre>pub fn reveal_secret_share(sharing_state: &SharingState, peer: Address) -> Result<U256, Error> {<br> let identifier = participants::identifier(peer);<br> sharing_state<br> .peer_packages<br> .get(&identifier)<br> .map(\|package\| marshal::solidity_scalar(&package.signing_share.to_scalar))<br> .ok_or(frost_secp256k1::Error::UnknownIdentifier)<br> .err_unexpected<br>}</pre> |
 | 6 | The contract permits complaints throughout `SHARING`, i.e. before the plaintiff has shared, and requires only that the plaintiff is `REGISTERED` (A7, reference only) | E2 | `contracts/src/FROSTCoordinator.sol:476-480` | <pre> function keyGenComplain(FROSTGroupId.T gid, address accused) external returns (bool compromised) {<br> Group storage group = $groups[gid];<br> GroupState memory state = group.state;<br> require(state.status == GroupStatus.SHARING \|\| state.status == GroupStatus.CONFIRMING, GroupNotReady);<br> compromised = group.participants.complain(msg.sender, accused) >= state.threshold;</pre> |
@@ -158,3 +158,42 @@ Nothing in the merge marks the plaintiff `COMPROMISED`, bounds complaints per pl
 ## Reconciliation (run 2)
 
 **Final combined status: Medium, 82 %, Confirmed — canonical.** Counterpart `F2-VAL-006` (CONFIRMS; E1 82 %, rated Low). Medium is kept: an attacker-controlled on-demand disclosure primitive plus the honest side's fee-market race to land `n-1` responses. `F2-VAL-006`'s second paragraph also restates `F-VAL-067`. See `state/run2/reconciliation/validator.md` (Section 1).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing removed the defect. `97f4cd1` (#1019) changed the complaint bookkeeping around it (late confirmation-round complaints are counted but not answered; `unresponded` is now a set of plaintiffs); `14750ea` (#1027) removed the F-VAL-001 amplification. |
+| Severity, certainty | unchanged, Medium 82 |
+| Evidence | E1: `poc/F-VAL-003/run3/` (adapted from `poc/F2-VAL-006`), `2 passed` |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- Sharing-round arm, still gated on the group id only: `state/keygen.rs:661-675` is now `crates/validator/src/state/keygen.rs:666-691`, with `let requires_response = true;` at `:680`.
+- Confirmation-round arm: `state/keygen.rs:685-701` is now `:692-721`. It no longer returns early after `deadlines.complain`; a late complaint is counted with `requires_response = false` (`:704-710`).
+- Per-accused count: `state/keygen.rs:714-722` is now `:725-735`:
+
+  ```rust
+  let complaint = complaints.entry(event.accused).or_default();
+  complaint.total += 1;
+  if requires_response {
+      complaint.unresponded.insert(event.plaintiff);
+  }
+  ```
+
+- Plaintext response: `state/keygen.rs:734-745` is now `:747-758`, unconditional for a timely complaint against this validator (`&& requires_response` at `:749`); the plaintiff's own sharing status is still not consulted (the arm destructures `..` over `shared`).
+- `reveal_secret_share`: `frost/keygen.rs:420-428` is now `frost/keygen.rs:419-427`.
+- `Complaint` (`state/mod.rs:225-232`) is now `crates/validator/src/state/mod.rs:205-211`; still keyed by accused, no per-plaintiff count.
+- Reference contract: `FROSTCoordinator.sol:482-486` is now `contracts/src/FROSTCoordinator.sol:473-477`; `FROSTParticipantMap.complain` keeps one complaint per `(plaintiff, accused)` pair (`contracts/src/libraries/FROSTParticipantMap.sol:181-191`).
+
+What was run: `cargo test -p validator --bins state::keygen:: -- --test-threads=1 --nocapture` with `poc/F-VAL-003/run3/complaints.rs` wired into `state/keygen.rs` (reverted afterwards). Output `poc/F-VAL-003/run3/RESULT.txt`.
+
+- `sharing_round_answers_unshared_plaintiff_and_counts_per_accused` (the run-2 route): ME in `CollectingShares` with a real `SharingState`, `shared` empty. `KeyGenComplained{plaintiff: PEER1, accused: ME}` queues exactly one `KeyGenComplaintResponse` whose `secret_share` equals `reveal_secret_share(ss_me, PEER1)`; a second complaint from PEER1 against PEER2 leaves both totals at 1 under threshold 2, no restart, no per-plaintiff record, and PEER1 never shared.
+- Variant `confirmation_round_answers_until_complain_deadline`: the same complaint in `CollectingConfirmations` is answered before `deadlines.complain` and counted but not answered after it (#1019).
+
+Notes:
+
+- With the proof of possession in place (F-VAL-001 Fixed), the scalars a plaintiff can compel are its own shares, and the second share each response exposes (F-VAL-002) is one the accused already holds. That was the standalone case the Medium was set for (C-VAL-A: "the disclosed scalars are ones the plaintiff already holds"), plus the honest side's race to land `n-1` responses before `deadlines.response` or be excluded. Both are unchanged, so the severity stays.
+- Counterpart `F2-VAL-006` is reproduced by the same test. F-VAL-067 (counting divergence) is resolved by #1019; this row is about the response policy, which #1019 did not touch.

@@ -1,0 +1,12 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins qa2_sen::f2_sen_008 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::qa2_sen::f2_sen_008_single_attempt_failure_drops_request_and_header_equals_timeout ... [F2-SEN-008] store readable after the failed check: Ok(None) (Unknown is never recorded)
+[F2-SEN-008] connection refused → outcome Unknown; commands=[]; tracked after failed check: false (commit deadline 120, block 100)
+[F2-SEN-008] x-request-timeout header = Some("4321") (client timeout 4321 ms); HTTP 503 → outcome Unknown
+
+thread 'service::tests::qa2_sen::f2_sen_008_single_attempt_failure_drops_request_and_header_equals_timeout' (219201) panicked at crates/sentinel/src/service.rs:4146:13:
+F2-SEN-008 reproduced: one refused connection resolved Unknown and the request was dropped with the commit window open; x-request-timeout=Some("4321") equals the client timeout
+FAILED
+

@@ -1,0 +1,16 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3::f2_sen_010 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::rv_sen_run3::f2_sen_010_run3_a_live_deadline_block_commit_is_tallied ... [F2-SEN-010 run3 a] after Revealed(self)@107: commands=[] entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[F2-SEN-010 run3 a] Revealed(OTHER) + OracleResult@108 → [Action(SentinelAction { kind: Finalize { id: 0xda031202cb8d7b4a7b9488e2d0f8fe690a34fc045194fefc4c988f2c9012df05 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0xda031202cb8d7b4a7b9488e2d0f8fe690a34fc045194fefc4c988f2c9012df05 }, expires_at: None })]
+ok
+test service::tests::rv_sen_run3::f2_sen_010_run3_b_restart_warp_tallies_the_deadline_block ... [F2-SEN-010 run3 b] warp page 102..=107 → [Action(SentinelAction { kind: Reveal { id: 0x5ac3838b5eaa6605899f3e4940bac45a53070e92037319aad7a29f7830e64587, approve: true, salt: 0xb691a022ac5849f6d94710684b3a9a2af081c91a83327ef6791b904770e741d1, reason: "" }, expires_at: Some(112) })]; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[F2-SEN-010 run3 b] warp page 108..=110 → [Action(SentinelAction { kind: Finalize { id: 0x5ac3838b5eaa6605899f3e4940bac45a53070e92037319aad7a29f7830e64587 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0x5ac3838b5eaa6605899f3e4940bac45a53070e92037319aad7a29f7830e64587 }, expires_at: None })]
+ok
+test service::tests::rv_sen_run3::f2_sen_010_run3_c_restart_replays_the_deadline_block ... [F2-SEN-010 run3 c] replayed cd → [Action(SentinelAction { kind: Reveal { id: 0x7ccf0ff6c1f737530240a440ddb63e230956c50b0c4c59e09761347419fd576b, approve: true, salt: 0x782f4f7efaafb23a09983c156a796f7026f791e856c2c99d7ea2fb5a90ed0e9a, reason: "" }, expires_at: Some(112) })]; Revealed(self) → []; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+ok
+test service::tests::rv_sen_run3::f2_sen_010_run3_d_reorg_of_the_deadline_block ... [F2-SEN-010 run3 d] replacement cd → [Action(SentinelAction { kind: Reveal { id: 0xc93d35d0140c178d95a1a519ada5486a055ad9ba576dd3b4f92ddc02df3ab5a2, approve: true, salt: 0x119c44cd24c38b9843243317c94a1f00ae936a3ed017e6d8fa0a7abc67dc56d5, reason: "" }, expires_at: Some(112) })]; Revealed(self) → []; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+ok
+test service::tests::rv_sen_run3::f2_sen_010_run3_e_adversarial_deadline_committer_never_reveals ... [F2-SEN-010 run3 e] early Finalize=false; NewBlock(113) → [Action(SentinelAction { kind: Finalize { id: 0xb33e9ce408bb70a09dc665a3615c314e16a961edb85cb28048d8d9a024fc97b4 }, expires_at: None })]
+ok

@@ -27,7 +27,7 @@ This is the indexing half of lead **CORE-H12**. R2 filed the shutdown half as F-
 | --- | --- | --- | --- | --- |
 | 1 | The client is built with the observability layer and nothing else — no timeout, retry or rate-limit layer. | E2 | `crates/core/src/provider/mod.rs:127-137` | <pre>impl Provider {<br> /// Connects to `url`.<br> pub async fn connect(url: &Url) -> Result<Self, TransportError> {<br> let client = ClientBuilder::default<br> .layer(ObservabilityLayer)<br> .connect(url.as_str)<br> .await?;<br> let root = RootProvider::new(client);<br> let chain_id = root.get_chain_id.await?;<br> Ok(Self { root, chain_id })<br> }</pre> |
 | 2 | No timeout is configured anywhere else either. | E2 | whole-crate grep | `grep -rn -i "timeout" crates/core/src/` returns exactly four lines and **none** is in `provider/`, `index/` or `driver.rs`: `effects.rs:160` (a `time::timeout` inside a `#[cfg(test)]` assertion) and `utils.rs:41,54,58` (sqlx pool `idle_timeout(None)`, which bounds a database connection, not an RPC call). The only RPC-adjacent timeout in the workspace is the sentinel's _engine-client_ timeout (`crates/sentinel/src/main.rs:50-62`), which bounds HTTP calls to the sentinel engine, not to the chain. |
-| 3 | The metric that would reveal a hung call is only recorded once the call returns. | E2 | `crates/core/src/provider/mod.rs:90-114` | <pre>let response_packet = inner.call(request_packet).await;<br>…<br>for (_, (method, result)) in statuses {<br> metrics::rpc_requests_total(&method, result).increment(1);<br>}</pre> |
+| 3 | The metric that would reveal a hung call is only recorded once the call returns. | E2 | `crates/core/src/provider/mod.rs:90-114` | <pre>let response*packet = inner.call(request_packet).await;<br>…<br>for (*, (method, result)) in statuses {<br> metrics::rpc_requests_total(&method, result).increment(1);<br>}</pre> |
 | 4 | The indexer awaits these calls with no deadline of its own. | E2 | `crates/core/src/index/blocks.rs:393-397` and `crates/core/src/index/events.rs:409` | <pre>let block = loop {<br> self.wait_for_pending_block.await;<br> if let Some(block) = self.get_block(BlockId::number(self.pending.number)).await? {<br> break block;<br> }</pre><br><pre>let logs = self.provider.get_logs(&filter).await?;</pre> |
 | 5 | The only retry policy is a flat 100 ms driver sleep applied to every error class. | E2 | `crates/core/src/driver.rs:216-223` | <pre>Err(err) => {<br> tracing::warn!(<br> ?err,<br> "failed to get next blockchain update; retrying after delay"<br> );<br> tokio::time::sleep(STEP_RETRY_DELAY).await;<br>}</pre> |
 | 6 | `/health` is a static liveness probe with no link to indexing progress. | E2 | `crates/core/src/observability/metrics.rs:9-10` | <pre>/// The listener serves Prometheus-formatted metrics on every path except<br>/// `/health`, which returns a plain `OK` for liveness probes.</pre> |
@@ -84,3 +84,26 @@ Option 4 (bound the startup scan, which runs before `Driver::run` and is on no r
 ## Reconciliation (run 2)
 
 **Final: Confirmed (narrowed), Low, 80 (E2), canonical.** Rediscovered by run 2 as `F2-CORE-033` (CONFIRMS, narrows), which settled this file's open dependency question from the pinned sources: `alloy-transport-http` 2.0.5 uses `reqwest::Client::new()` and `reqwest-0.13.4` sets `timeout: None`, `read_timeout: None` **but** `tcp_user_timeout: Some(30 s)` on Linux (`tcp_keepalive` 15 s × 3 retries), so a vanished peer surfaces as an RPC error within about a minute and only a live-but-silent peer hangs indefinitely. That removes half of this file's "indefinite" premise; Medium 60 Plausible → Low 80 Confirmed (`state/run2/reconciliation/core.md` §1.1). The "no backoff" horn is `F-CORE-034`'s. Still valid at `fe9e84c` (`provider/mod.rs` unchanged). Counterparts: `F2-CORE-033` (also restates `F-CORE-030`'s `/health` half), `F2-CORE-034` (= `F-CORE-039`).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | #1046 (`55d811e`) wraps transport errors with `without_url` so the RPC URL stays out of logs; it adds no timeout, retry or rate-limit layer. The pinned `reqwest` 0.13.4 and `alloy-transport-http` 2.0.5 are unchanged in `Cargo.lock` |
+| Severity, certainty | unchanged (Low, 80, as narrowed by run 2) |
+| Evidence | E2 trace below (no PoC exists for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `provider/mod.rs:127-137` to `:143-153`: `pub async fn connect(url: &Url) -> Result<Self, TransportError> {` / `let client = ClientBuilder::default()` / `.layer(ObservabilityLayer)` / `.connect(url.as_str())` / `.await?;`
+- `provider/mod.rs:90-114` to `:90-115`: `let response_packet = inner.call(request_packet).await.map_err(without_url);` ... `for (_, (method, result)) in statuses {` / `metrics::rpc_requests_total(&method, result).increment(1);`
+- `index/blocks.rs:393-397` to `:448-452`: `let block = loop {` / `self.wait_for_pending_block().await;` / `if let Some(block) = self.get_block(BlockId::number(self.pending.number)).await? {`
+- `index/events.rs:409` to `:501`: `let logs = self.provider.get_logs(&filter).await?;`
+- `driver.rs:216-223` to `:218-224`: `tokio::time::sleep(STEP_RETRY_DELAY).await;`
+- `observability/metrics.rs:9-10`: unchanged
+
+What was run: code trace, and `grep -rn -i "timeout" crates/core/src/` at `361aaf3`, which finds the sqlx pool settings in `utils.rs` and a test-only `time::timeout` in `effects.rs` but nothing on the RPC path. The counter is still incremented only after `inner.call(...)` returns, so a live-but-silent peer leaves both the indexer and the metric parked.
+
+Notes: the same missing layer now also bounds nothing on the header requests that #1049 added to warps (`events.rs:610-620`) and on the `eth_getProof` and fee calls of the 7702 queue (`tx/mod.rs`). Counterparts `F2-CORE-033` (narrowing) and `F-CORE-039` (shutdown half) hold.

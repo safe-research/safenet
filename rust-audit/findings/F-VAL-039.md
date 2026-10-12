@@ -104,3 +104,34 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 ## Reconciliation (run 2)
 
 **Final combined status: High, 58 %, Plausible — run-2 miss, still valid at `fe9e84c`.** `state/preprocess.rs:17` (`NONCE_TOPUP_THRESHOLD = 100`) and `:91` unchanged. Run 2's R5 again rejected the drain framing as cost-of-attack; `F2-VAL-032` names the endpoint as the "known H6 vector" but nothing in run 2 examines the headroom. Needs an executed cost model to leave the Plausible band. See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Moot |
+| Changed by | `a9023ac` "[Direct Nonce 8]: Remove preprocessing from the state machine" (#1038) removed `NONCE_TOPUP_THRESHOLD`, `handle_nonce_topup` and the `observe` call in `handle_sign`; `82d5419` (#1036) moved signing to per-ceremony nonces |
+| Severity, certainty | resolved (code removed) |
+| Evidence | E2: `git log -S 'NONCE_TOPUP_THRESHOLD' fe9e84c..361aaf3 -- crates/validator` gives `a9023ac`; E1 for the replacement through F-VAL-032 run-3 variant V4 |
+
+The replacement does not carry the defect: there is no headroom to drain. `Coordinator.sign` is still permissionless and still increments the group sequence (`contracts/src/FROSTCoordinator.sol:509-521`), but the validator no longer ties nonce availability to that counter; it generates a pair when it accepts a request (`crates/validator/src/state/sign.rs:72-76`). F-VAL-032 run-3 variant V4 executes the attack shape (200 junk `Sign` calls on the legitimate group, then the real request at `sequence = 2^63`) and the real request is accepted with one `GenerateNonces`.
+
+## Fix verification (CA3-FIX, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Result | Moot confirmed |
+| Removed by | `a9023ac` (#1038): `NONCE_TOPUP_THRESHOLD`, `handle_nonce_topup` and the `observe` call in `handle_sign`; `82d5419` (#1036): nonces per ceremony |
+| Re-validation re-run | Matches rv-val: V4 (200 junk `Sign` calls on the legitimate group, then the real request at `sequence = 2^63`) passes |
+| New variants | 2 (sequence burn while the session waits for the oracle; an attacker's `Sign` taking the sequence and the session first); both behave |
+| Confidence | 92 |
+| Evidence | E1: `poc/F-VAL-032/ca3-fix/RESULT.txt` (W1, W4) and rv-val's V4 in the same run |
+
+The validator no longer reads `Sign.sequence` except as a log field (`grep -rn '\.sequence' crates/validator/src`: `state/sign.rs:69` only), so there is no headroom left to drain.
+
+Variants the re-validation did not list (`poc/F-VAL-032/ca3-fix/ca3fix_sign.rs`):
+
+1. W4: 300 junk `Sign` calls on the legitimate group while the session waits for the oracle result; the approving result still starts `GenerateNonces` for the original signature id.
+2. W1: the attacker's permissionless `Sign(G, m)` consumes the sequence and reaches the tracked session before the responsible party's; the ceremony proceeds under the attacker's id and the responsible party's `Sign` is ignored. The group signs once, as it would have.

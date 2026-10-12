@@ -1,0 +1,13 @@
+run 1: mining frozen at upstream head 20; snapshots [15, 16, 17, 18, 19, 20]
+restart against a node at head 14 (lag 6); one block mined 3 s later
+run 2: process exited
+run 2 snapshots: [15]
+{"timestamp":"2026-10-08T19:09:56.172177Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":14,"safe":9,"resume":"Some(BlockStatus { latest: 20, safe: 15 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:10:00.014549Z","level":"ERROR","fields":{"message":"unrecoverable driver error; exiting","err":"State(BadUpdate)"},"target":"safenet_core::driver"}
+
+run 1: mining frozen at upstream head 20; snapshots [15, 16, 17, 18, 19, 20]
+restart against a node at head 15 (lag 5); one block mined 3 s later
+run 2: still running 4 s after the new block
+run 2 snapshots: [15, 16]
+{"timestamp":"2026-10-08T19:10:27.329717Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":15,"safe":10,"resume":"Some(BlockStatus { latest: 20, safe: 15 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:10:34.601421Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}

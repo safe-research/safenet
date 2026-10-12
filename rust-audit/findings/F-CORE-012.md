@@ -92,3 +92,27 @@ Option 4 (state the guarantee honestly in the `use_client_filtering` doc comment
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Medium, 70 (E2), canonical — missed by run 2.** No run-2 log considers bloom idempotence over repeated `(address, topics)` shapes or the absent `check_logs_limit` on the `ClientFiltered` path (R1 rejected 19 addressed wrong-block logs only). Still valid at `fe9e84c` (`events.rs:441-466`, `bloom.rs:37-40` unchanged since `2893917`). It remains the second independent route to `F-CORE-002`'s realised outcome and should be reported beside it (`state/run2/reconciliation/core.md` §2). No run-2 counterpart.
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed the check (`index/bloom.rs` is byte-identical; the client-filtered arm moved with #1047 to #1052). The example event changed: Direct Nonce removed `Preprocess` (#1040) and renamed `SignRevealedNonces` to `SignCommittedNonces` (#1042), which still indexes only `sid` |
+| Severity, certainty | severity unchanged (Medium); certainty 70 to 85 proposed: both halves now executed (E1), the truncating provider stays an A4 assumption |
+| Evidence | E1 `poc/F-CORE-012/run3/` (first executed PoC for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/events.rs:444-456` to `:537-548`: `let filter = BlockFilter::Hash(block_hash).into_filter();` / `let logs = self.provider.get_logs(&filter).await?;` ... `if bloom::compute_logs_bloom(&logs) != logs_bloom {` ... `return Err(Error::IncompleteLogs { block_hash });`
+- `index/bloom.rs:37-40`: unchanged, `pub fn compute_logs_bloom(logs: &[Log]) -> Bloom {` / `alloy::primitives::logs_bloom(logs.iter().map(|log| &log.inner))`
+- `index/events.rs:441-466` (no `check_logs_limit` on this arm) to `:533-558`; `self.check_logs_limit` is called only at `:502` (`SingleQuery`) and `:512` (`MultipleQueries`)
+- `crates/validator/src/bindings.rs:191-208`: `event KeyGenConfirmed(bytes32 indexed gid, address participant, bool confirmed);` / `event KeyGenComplained(bytes32 indexed gid, address plaintiff, address accused, bool compromised);` ... `event SignCommittedNonces(bytes32 indexed sid, address participant, SignNonces nonces);` / `event SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z);`
+
+What was run (`poc/F-CORE-012/run3/rv-core-a-events_tests.rs`, batch `cargo test -p safenet-core --lib -- --nocapture --test-threads=1 ... index::events::tests::rv3_`):
+
+1. `rv3_f_core_012_repeated_shape_log_loss_passes_the_bloom_check`: two watched logs with the same emitter and topics (a `Transfer` between the same parties, amounts 1 and 2) set the same bloom bits as either one alone; with `use_client_filtering = true` a node that serves only the first passes the check, and the block completes with one log (`logs.len() == 1`, watcher idle).
+2. `rv3_f_core_012_client_filtered_path_skips_check_logs_limit`: with `max_logs_per_query = 1`, a two-log answer is accepted on the client-filtered path, while the same answer on the node-filtered single query returns `Err(TooManyLogs)` (control).
+
+Notes: the trigger frequency is about the same as at run 1. Every signing round still has one nonce log per participant with the same `(coordinator, topic0, sid)` shape (`SignCommittedNonces`, formerly `SignRevealedNonces`), often several in one 5 s block, and a truncated answer that keeps one of them passes the check; the `Preprocess` rounds named in the Trigger no longer exist. The KeyGen events (`gid` only) are unchanged. Sibling `F-CORE-002` holds (Still valid).

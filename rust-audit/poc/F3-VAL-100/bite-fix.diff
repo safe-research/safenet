@@ -1,0 +1,51 @@
+diff --git a/crates/validator/src/state/keygen.rs b/crates/validator/src/state/keygen.rs
+index a59ee7b..04000a3 100644
+--- a/crates/validator/src/state/keygen.rs
++++ b/crates/validator/src/state/keygen.rs
+@@ -29,6 +29,10 @@ use std::{
+     sync::Arc,
+ };
+ 
++thread_local! {
++    static LT3_EARLY: std::cell::RefCell<Vec<(B256, Address, crate::bindings::KeyGenCommitment)>> = const { std::cell::RefCell::new(Vec::new()) };
++}
++
+ impl Transition {
+     /// Joins the genesis key generation once its group is created onchain.
+     ///
+@@ -260,7 +264,11 @@ impl Transition {
+ 
+                 (State { rollover, ..state }, commands)
+             }
+-            _ => (state, Vec::new()),
++            _ => {
++                // LT3 bite fix: keep a commitment whose round is not open yet.
++                LT3_EARLY.with(|e| e.borrow_mut().push((event.gid, event.participant, event.commitment.clone())));
++                (state, Vec::new())
++            }
+         }
+     }
+ 
+@@ -1156,7 +1164,13 @@ impl Transition {
+                             poap,
+                             secrets: None,
+                         },
+-                        commitments: BTreeMap::new(),
++                        commitments: LT3_EARLY.with(|e| {
++                            e.borrow()
++                                .iter()
++                                .filter(|(gid, _, _)| *gid == group_id)
++                                .filter_map(|(_, who, c)| frost::keygen::verify_commitment(*who, c).ok().map(|v| (*who, v)))
++                                .collect()
++                        }),
+                         deadline,
+                     },
+                     ..state
+@@ -1445,3 +1459,7 @@ macro_rules! fail_rollover {
+     }};
+ }
+ use fail_rollover;
++
++#[cfg(test)]
++#[path = "/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/LT3/lt3_l2.rs"]
++mod lt3_l2;

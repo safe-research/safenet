@@ -22,7 +22,7 @@ This is a known and arguably deliberate design (someone must call `finalize`, an
 
 | # | Claim | Class (E1, E2, I) | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
-| 1 | `Finalize` is emitted unconditionally on the non-drop paths | E2 | crates/sentinel/src/service.rs:629-641 | `        // If this sentinel did not participate and it was not a timeout`<br>`        // then no actions should be taken and the request should be dropped`<br>`        if !*self_revealed && !timed_out {`<br>`            return (None, Vec::new);`<br>`        }`<br>``<br>`        let mut actions = vec![`<br>`            SentinelAction {`<br>`                kind: SentinelActionKind::Finalize { id: request_id },`<br>`                expires_at: None,`<br>`            }`<br>`            .into,`<br>`        ];` |
+| 1 | `Finalize` is emitted unconditionally on the non-drop paths | E2 | crates/sentinel/src/service.rs:629-641 | `        // If this sentinel did not participate and it was not a timeout`<br>`        // then no actions should be taken and the request should be dropped`<br>`        if !*self_revealed && !timed_out {`<br>`            return (None, Vec::new);`<br>`        }`<br>``<br>` let mut actions = vec![`<br>`            SentinelAction {`<br>`                kind: SentinelActionKind::Finalize { id: request_id },`<br>`                expires_at: None,`<br>`            }`<br>`            .into,`<br>`        ];` |
 | 2 | The early-finalise trigger fires on a log every participant sees at the same time | E2 | crates/sentinel/src/service.rs:372-375 | `        if *revealed_count < *committed_count {`<br>`            return (state, Vec::new);`<br>`        }`<br>`        let (update, actions) = self.finalize(entry, event.requestId);` |
 | 3 | The deadline trigger fires on the same block for everyone | E2 | crates/sentinel/src/service.rs:450-457 | `            RequestState::CollectingVotes {`<br>`                reveal_deadline, ..`<br>`            } => {`<br>`                if block <= *reveal_deadline {`<br>`                    return true;`<br>`                }`<br>`                let (update, finalization) = self.finalize(entry, *id);`<br>`                actions.extend(finalization);` |
 | 4 | Each carries a 250,000 gas limit and never expires | E2 | crates/sentinel/src/service.rs:723-730 | `            SentinelActionKind::Finalize { id } => Transaction {`<br>`                to: self.oracle,`<br>`                value: U256::ZERO,`<br>`                data: SentinelOracle::finalizeCall { requestId: id }`<br>`                    .abi_encode`<br>`                    .into,`<br>`                gas: 250_000,`<br>`            },` |
@@ -115,3 +115,33 @@ The set of sentinels that emit `Finalize` is unchanged: `finalize`'s guard is st
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed, Informational, 88% (E2), canonical `F-SEN-014`.** Run 2 restates it in one sentence of `F2-SEN-007`'s claim ("every sentinel that participated submits `Finalize` although only one can succeed") and did not file it separately. Still valid at `fe9e84c`: `Finalize` is emitted unconditionally on every non-drop path of `finalize()` (`crates/sentinel/src/service.rs:657-663`, `expires_at: None`), reached from the early trigger (`372-375`) and the reveal-deadline branch (`468-483`); `SentinelOracle.finalize` still requires `PENDING` (`contracts/src/libraries/SentinelOracleRequests.sol:168-172`), so `K − 1` revert. The post-merge side effect recorded above is now sharper through run 2: a reverted `Finalize` parks its sender in `WaitingForOutcome` with no deadline (`484`), which is the parking `F-SEN-005`/`F2-SEN-004` own and which `F2-SEN-002`/`F2-SEN-010` turn into an attacker-usable stall. Shared fix across both runs: `eth_call` before broadcast in `submit_transaction` (with `F-SEN-006`/`F-SEN-007`). Team disposition: none.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | #964 (`0be9636`, contract: the last `reveal` calls `finalize` itself). The sentinel was not changed to match. |
+| Severity, certainty | Informational, 88 unchanged |
+| Evidence | E1: `poc/F-SEN-014/run3/output.txt`, `poc/F-SEN-014/run3/forge-964-unanimous.txt` |
+
+What changed: when every committed sentinel reveals, the last `reveal` finalizes the request in the same transaction, and every revealer's local trigger still fires on that last `Revealed` log and emits `Finalize`. All `K` of those `Finalize` transactions now revert `RequestNotPending`, not `K − 1`; the `OracleResult` that follows in the same block then produces the `Claim`. When some committer does not reveal, the reveal-deadline path is as before (one succeeds, the rest revert).
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- Unconditional `Finalize` on the non-drop paths: `service.rs:657-663` to `:680-686` (`kind: SentinelActionKind::Finalize { id: request_id }`, `expires_at: None`).
+- The early trigger on the last reveal: `service.rs:372-375` to `:381-384`; the reveal-deadline trigger `service.rs:468-483` to `:460-475`.
+- Contract (reference): `contracts/src/SentinelOracle.sol:256-258` (`if (request.applyReveal(approve)) { finalize(requestId); }`); a later `finalize` hits `require(prog.state == State.PENDING, RequestNotPending())` (`contracts/src/libraries/SentinelOracleRequests.sol:171`).
+
+What was run:
+
+- `rv_sen_run3::f_sen_014_run3_finalize_after_auto_finalize` (transition level, two committers who both reveal): the last `Revealed` emits `[Finalize]`, the same-transaction `OracleResult` emits `[Claim]`. FAILED on the assertion that no `Finalize` is sent for an already-finalized request. `rv_sen_run3::f2_sen_010_run3_a` shows the same `[Finalize, Claim]` pair through the real state machine.
+- `forge test --offline --match-path test/SentinelOracle.t.sol --match-test test_UnanimousApprove_FeeDistributedAndBondsReturned` in `contracts/` of `wt/rv-sen`: PASS. That #964 test expects `RequestNotPending` from a `finalize` sent after the last reveal (`contracts/test/SentinelOracle.t.sol:723-725`).
+
+Notes: each wasted `Finalize` carries `gas: 250_000` and one in-flight slot, so with `K` sentinels every fully revealed request now costs `K` reverting transactions. `F-SEN-006` (replay duplicates) and `F-SEN-002` are the neighbouring rows.
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-XC-006`](F3-XC-006.md) (CONFIRMS, as changed by #964). This ID stays canonical.
+- Ledger values: Informational, certainty 95.

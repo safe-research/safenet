@@ -64,3 +64,72 @@ Filed by FWD from `origin/feat/batex_4` + the epic at `epics/2026_09_09_safenet_
 ## Reconciliation (run 2)
 
 **Final: Unmerged, forward-looking — unchanged.** PR #904's span-aware allocation is not in the tree at `fe9e84c` (`crates/core/src/tx/storage.rs` allocation is still `MAX(?, COALESCE((SELECT MAX(nonce) + 1 …), 0))`, `:145-149`), so run 2 did not assess it; not a miss. Its `main`-side prerequisite, the permanent gap, is `F-CORE-062` (now with executed evidence from `F2-CORE-061`). Re-validate when the stack merges. No run-2 counterpart (`state/run2/reconciliation/core.md` §2).
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Moot |
+| Changed by | The code this row is about never merged: PR #904's JSON-inferred two-nonce span, `pending_delegation` and the standalone startup `SetCode` transaction were explicitly rejected by the merged epic (`git show a9f7eef^:epics/2026_09_23_safenet_7702_executor_tx_batching.md`, lines 130 to 131). The replacement merged as `622cf89` #993 (one `allocated_nonces` row per nonce, an authorization gets its own row), `ce01715` #995 (bundles and authorizations allocated together) and `4847664` #996 (recover an unused authorization nonce). The replacement was checked and does not carry the defect. |
+| Severity, certainty | Not applicable (no live defect). Was High / Medium, forward-looking, 80. |
+| Evidence | E1 `poc/F-CORE-069/run3/` (two new tests pass; with the recovery disabled both fail, which shows they detect the gap; the merged design's own tests pass) |
+
+Re-based anchors (old `feat/batex_4` locations, merged locations at `361aaf3`, verbatim quote).
+
+- Span-aware allocation via `json_extract` (`storage.rs:194-206` on `feat/batex_4`): no counterpart. Allocation is `crates/core/src/tx/storage.rs:190-195`, `SELECT MAX(?, COALESCE((SELECT MAX(nonce) + 1 FROM allocated_nonces), 0))`, and the authorization's nonce is a row of its own, inserted in the same SQLite transaction (`crates/core/src/tx/storage.rs:200-211`).
+- `pending_delegation` and the one-shot `error!` self-check (`storage.rs:126-137`, `mod.rs:198-222` on `feat/batex_4`): no counterpart (`grep -rn pending_delegation crates/` finds nothing). The gap is closed instead, `crates/core/src/tx/storage.rs:294-312`:
+
+```rust
+    /// Recovers from the account's onchain `nonce` having moved past a
+    /// transaction but not past the authorization it carries, which would
+    /// leave every later nonce stuck behind a gap. The authorization at
+    /// `nonce`, if there is one, becomes a cancellation transaction
+    /// ([`Transaction::default()`]) that is immediately due for submission,
+    /// and the transaction before it keeps its authorization. An authorization
+    /// is recovered at most once. Returns whether one was recovered.
+    pub async fn recover_authorization_gap(&self, nonce: u64) -> Result<bool, Error> {
+        let updated = sqlx::query(
+            "UPDATE allocated_nonces
+             SET request = ?
+             WHERE nonce = ? AND delegate IS NOT NULL AND request IS NULL",
+        )
+```
+
+- It runs on every new block right after `mark_executed` and before `resubmit_stale`, so the cancellation is broadcast in the same pass whatever the in-flight budget (`crates/core/src/tx/mod.rs:207-225`). An unused authorization row keeps `count_outstanding` above zero, so the account is read on every block until it is resolved (`crates/core/src/tx/storage.rs:266-277`).
+
+What was run (worktree at `361aaf3`, `poc/F-CORE-069/run3/tx_mod_tests_run3.rs` appended to `crates/core/src/tx/mod.rs`'s `mod tests`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`.
+- `rv3_f_core_069_unused_authorization_nonce_is_cancelled_not_a_permanent_gap` (the row's own failure path, batched mode): ok. A batch at nonce 0 carries the authorization, which reserves nonce 1; the account then reads nonce 1 with no code. In the same block the reserved row becomes a cancellation (`Transaction::default()`) and is broadcast; once it lands (nonce 2) the waiting transaction is allocated at nonce 2 with a fresh authorization at 3, and after that lands nothing is outstanding. No gap, no stranded backlog.
+- `rv3_f_core_069_one_inconsistent_reading_leaves_no_gap` (the row's A4 route): ok. One inconsistent reading of nonce 1 creates the cancellation; the next canonical reading (nonce 2, delegated) marks it executed and the next batch follows at nonce 2 without an authorization.
+- Mutation check (`poc/F-CORE-069/run3/mutate_recovery.py`, `output-recovery-disabled.txt`): with `recover_authorization_gap` forced to return `Ok(false)`, both tests FAIL; the waiting transaction is allocated at nonce 2 behind the unused nonce 1, which is exactly the gap this row described. Mutation reverted.
+- The merged design's own tests (`output-existing-tests.txt`): `recovers_an_unused_authorization_nonce_with_a_full_budget`, `recovers_an_unused_authorization_nonce_once`, `only_recovers_the_authorization_at_the_account_nonce`, `marks_a_cancellation_executed_once_the_account_is_past_it` (reorg variant), `authorization_uses_up_the_next_nonce`, `delegates_an_undelegated_account_to_the_executor`: 6 passed.
+
+Notes:
+
+- The secondary defect (`pending_delegation` with no `ORDER BY` and no `nonce IS NOT NULL`) has no merged counterpart.
+- The "alarm fires once" concern no longer applies: the merged code logs a `warn` once per recovery ("authorization nonce unused onchain, sending a cancellation in its place"), and there is no persistent condition left to alarm about.
+- What the replacement does not fix belongs to other rows: if a false nonce reading marks the authorizing transaction executed and the canonical chain never reaches that nonce, the cancellation sits behind the gap and holds the batched mode's only in-flight slot. That is `F-CORE-062` and `F-CORE-063` (both still valid; batched variant in `poc/F2-CORE-061/run3/`), not a gap created by the reservation.
+- The `F-CORE-060` interaction recorded in that row's "In-flight impact (FWD)" (repairing a permanent gap releases a ratcheted backlog) is moot with this row.
+
+## Fix verification (CA3-FIX, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Result | Moot confirmed |
+| Replacement | `622cf89` (#993), `ce01715` (#995), `4847664` (#996): one `allocated_nonces` row per nonce, an authorization in its own row; `recover_authorization_gap` (`crates/core/src/tx/storage.rs:294-312`) runs on every new block right after `mark_executed` (`crates/core/src/tx/mod.rs:210-222`) |
+| Re-validation re-run | Matches rv-core-b: both `rv3_f_core_069_*` tests pass |
+| New variants | 2 (a restart between the execution mark and the recovery; Direct mode's un-delegation authorization left unused); both recover; all four tests fail with the recovery disabled |
+| Confidence | 92 |
+| Evidence | E1: `poc/F-CORE-069/ca3-fix/RESULT.txt` (source `ca3fix_tx.rs`) |
+
+What was run: `../run3/tx_mod_tests_run3.rs` and `ca3fix_tx.rs` pasted into `mod tests` of `crates/core/src/tx/mod.rs` (reverted), `cargo test -p safenet-core --lib --locked --offline`, test filters `rv3_f_core_069` and `ca3fix_f_core_069`, with `--nocapture` and `--test-threads=1`.
+
+Variants the re-validation did not list:
+
+1. Restart between `mark_executed` and `recover_authorization_gap`, which are separate statements: the state at the crash point (batch at nonce 0 marked executed, authorization at nonce 1 still unused) written through the storage API, then a new queue over the same database while the account still reads nonce 1. The startup unmark (`tx/mod.rs:188-200`) and the next block re-run the sequence: nonce 1 becomes the cancellation, and once it lands the waiting transaction follows at nonce 2.
+2. Direct mode after a Batched-to-Direct switch: the account is still delegated, so Direct mode sends its first transaction with an authorization to the zero address (`tx/mod.rs:248-256`), stored as `delegate = 0x0…0`, not `NULL` (`storage.rs:204-210`). When the un-delegation does not apply (nonce 1, still delegated) the recovery cancels it, and the next transaction follows at nonce 2 with a fresh un-delegation. The gap this row described has no Direct-mode counterpart either.
+
+Mutation: `../run3/mutate_recovery.py apply` (recovery forced to return `Ok(false)`) fails all four tests.

@@ -47,3 +47,20 @@
 ## Reconciliation (run 2)
 
 **Decision: D1 superseded by `F2-SEN-010`; D2–D4 remain forward-looking (#915 unmerged).** PR #914 is now merged (`fe9e84c`), and run 2's `F2-SEN-010` (Confirmed, High, 93%, E1 in Rust and forge) is the live form of D1: the `:418` cited above is `crates/sentinel/src/service.rs:423` (`if block < *commit_deadline`), a `Committed` mined in block `commitDeadline` arrives in `CollectingVotes` and is discarded (`307-319`), and the undercount feeds the early finalize (`372-375`, `649-671`). Run 1's probe showed outcome 1 (peer `Revealed@21` → `entry = None`); run 2 adds outcome 2 (reverted `Finalize`, parked forever in `WaitingForOutcome`, `484`), the honest-ordering correction and the adversarial stall. D1's remediation ("merge #914 only with #915, or keep `<=`") is superseded: #915 is not merged (`git log fe9e84c` has no optimistic-transition commit; the warp arm at `crates/core/src/state/mod.rs:173-181` is the pre-#915 form; the STOPGAP note at `service.rs:398-402` defers the revert to safe-research/safenet#471), and both runs' QA prefer keeping the tally open for block `commitDeadline` (`F2-SEN-010` option 1, compiled in-tree, 47/47 tests) over the plain revert. D2 and D3 (#915 warp-rollback resume loss; early-transition actions re-queued) and D4 (validator keygen deadlines under #915, unverified, outside the sentinel) stay in `report/IN-FLIGHT.md` and do not enter the ledger. This file is neither confirmed nor moot as a whole. See `state/run2/reconciliation/sentinel.md` §1.1, §4.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Superseded |
+| Changed by | #915 was never merged; its design landed as #1014, #1015 and #1017 (`fef8cfd`, `73967cf`, `24eaf8d`). |
+| Severity, certainty | n/a (forward-looking bundle) |
+| Evidence | E1 for D1 and D3 through the rows that carry them; E2 for D2 and D4 |
+
+Per item, against the merged design:
+
+- D1 (#914 alone drops a peer commit in the deadline block): superseded by `F2-SEN-010`, which is itself Fixed at `361aaf3` (#1014 reverted #914; see its run 3 section, five variants executed).
+- D2 (#915's warp rollback discards resumes): moot. The merged `Warp` arm only switches the status and keeps the live state (`crates/core/src/state/mod.rs:178-186`); warps are accepted only from `Initialized` or `BlockPending`. Resumes lost on a restart or an uncle are the core rows' mechanism (`F2-CORE-030`), not this one.
+- D3 (actions from the early transition re-queued after a reorg): exists in the merged code and is covered by `F-SEN-006` (still valid): `qa2_sen::f2_sen_007b` and `rv_sen_run3::f_sen_006_run3_restart_re_emits_the_reveal` both show the optimistic `NewBlock(cd + 1)` re-emitting the `Reveal`.
+- D4 (validator key-generation deadlines one block earlier): moot for the merged code. #1015 keeps the message order (`NewBlock(n)` after block `n - 1`'s logs and before block `n`'s, `state/mod.rs:196-211`, `:257-268`) and only runs it earlier in wall-clock time, and `FROSTCoordinator` and the FROST libraries contain no block-number or deadline check (`grep -n -i "timeout\|expire\|block.number\|deadline" contracts/src/FROSTCoordinator.sol contracts/src/libraries/FROST*.sol` finds nothing). Validator internals are rv-val's scope; not checked further here.

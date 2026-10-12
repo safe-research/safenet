@@ -1,0 +1,15 @@
+[03:17:39] F-SEN-015 E2E: iterations=10 replay-mode=down down-blocks=4
+[03:17:39] fee token 0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80, consensus 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0, oracle 0xE272FD58C5A852e64B3A4579f13ef8c7A6571513
+[03:17:39] sentinel 0xb7952Cb00E859a47121aA3A24D9b3768588be7db, sponsor 0x17C4Af0CC5d496A49126E6d381FB1CC5999d06eA
+[03:17:42] sentinel synced at block 18
+[03:17:54] iter 0: P=19 C=21 H=25 engine asked again=1 revealed=None commitment=(0xebf105fb39a0ec2529342f04d1c7e1033a4c45ba3d6c48e2eb48f123e362c6bd, 4000, 1, false)
+[03:18:06] iter 1: P=34 C=36 H=40 engine asked again=1 revealed=None commitment=(0x2e544d587ecb1bfa16c9f550c34024c93a1bb620779d0f010ce7aa9f8e735312, 4000, 1, false)
+[03:18:19] iter 2: P=49 C=51 H=55 engine asked again=1 revealed=None commitment=(0xc048b9080d2fa2fa432308c3c5fd04550e5d20b4eb4955f75f998898e54fde02, 4000, 1, false)
+[03:18:31] iter 3: P=64 C=66 H=70 engine asked again=1 revealed=None commitment=(0x9e3a090dd675ad20f665dc316c3b4b333f173f2b1c48a9923e8abe2ae7046ec1, 4000, 1, false)
+[03:18:43] iter 4: P=79 C=81 H=85 engine asked again=1 revealed=None commitment=(0xd371baae04e8f550096e87fe7d6eb3cfe4445746685c70de4c4d9b43b1e33ca5, 4000, 1, false)
+[03:18:55] iter 5: P=94 C=96 H=100 engine asked again=1 revealed=None commitment=(0x321ca16da3c584ddf3663a53cf8a5f1e7f6bde5fa0316226e9df0a0a6ed81aa7, 4000, 1, false)
+[03:19:07] iter 6: P=109 C=111 H=115 engine asked again=1 revealed=None commitment=(0xb155cc305f6bdbc50ad5102f0a9c1cf6261276fc5c342d9ab38e05f00a8a74a3, 4000, 1, false)
+[03:19:19] iter 7: P=124 C=126 H=130 engine asked again=1 revealed=None commitment=(0x10b28b76cf148fde73cf962bdf1eb472ccf3a72fb57fd77369a7bdfcc09cbdb4, 4000, 1, false)
+[03:19:31] iter 8: P=139 C=141 H=145 engine asked again=1 revealed=None commitment=(0xf037a0cd6a1b3b3688b2c679a69ea61bd31121e69c41ecc4af860c1d9203b950, 4000, 1, false)
+[03:19:43] iter 9: P=154 C=156 H=160 engine asked again=1 revealed=None commitment=(0xe5c227d2a1c26bfc1bb0826e7a7ff399404aa0f1491587aaa701bf9ff26255e7, 4000, 1, false)
+[03:19:43] SUMMARY replay-mode=down down-blocks=4: 10 runs, engine asked again after the restart in 10, revealed the committed reason in 0, no or wrong reveal in 10

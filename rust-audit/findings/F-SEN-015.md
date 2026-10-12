@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Verified |
+| Status | Final: Accepted (Changed: restart-window residual, not fixed) |
 | Crate and module | sentinel, service.rs (with core: state/mod.rs, driver.rs, index/blocks.rs) |
 | Location | crates/sentinel/src/service.rs:150-194, 198-244 (related: crates/sentinel/src/engine.rs:163-194, crates/core/src/state/mod.rs:54-73, 182-189, crates/core/src/index/blocks.rs:255-278) |
-| Severity | High / High |
-| Certainty | 97% (RW-CORE-SEN, Phase 8 real-world) |
+| Severity | High / Medium |
+| Certainty | 95% (CA3: restart variant reproduced 16 of 16 on the real binary, control 0 of 4) |
 | Assumptions involved | A2, A3, A5, A10 |
 | Tags | reorg, crash-consistency, funds, crypto |
 
@@ -292,3 +292,111 @@ Outcome 2 (`Unknown` on replay) is also unrescued by the new handlers: the entry
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed, High, 98% (E1), canonical `F-SEN-015`.** Run 2 folded this into `F2-SEN-001` variant (c) — "the re-run engine check answers differently: `Unknown` drops the entry; a different `approve`/`reason` yields `InvalidReveal`" — and weighted it as `I` ("engine out of scope, not needed for the verdict"; QA did not attempt it). That under-weights it: variant 2 here (`Unknown` on replay) needs no engine-determinism assumption, only a co-deployed engine still booting when the replayed effect fires (A3), and run 1 executed both variants at the state-machine level (`poc/F-SEN-015/`) and observed `AlreadyCommitted` then `InvalidReveal` against the real contract on Anvil. Settled in run 1's favour; this row keeps its own canonical ID and number. Still valid at `fe9e84c`: `handle_engine_check_result` removes the entry first and the `Unknown` arm never re-inserts it (`crates/sentinel/src/service.rs:156-171`, `176-179`), `commit_vote` re-hashes and stores the new `reason` (`214-224`), the reveal is built from state (`444-455`), and `hashCommitment` is bound at `bindings.rs:54-60` with no call site (`git grep`). Team disposition: **assigned @rmeissner**. Fix shape agreed across both runs: a three-state `getCommitment` effect (option 1; `Unavailable` keeps the entry and reveals from stored state), or option 2 in form (b) — the effect handler persists `(request_id, approve, reason)` idempotently, which is exactly `F2-SEN-001`'s reshaped option 1 with its `RecoverVerdict` effect; both runs reject "snapshot resumes" (option 3) as unsound. One fix closes `F-SEN-001` and this finding together. See `state/run2/reconciliation/sentinel.md` §1.2, §4.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Fixed |
+| Changed by | #978 (`d5b24dc`, "[SEN-015] Part 1: Add verdict store") and #979 (`be86ee3`, "[SEN-015] Part 2: Store verdicts"): remediation option 2 in form (b). The effect handler records each decisive verdict before resuming the state machine and returns the recorded one on any later check of the same request. |
+| Severity, certainty | n/a (was High, 98) |
+| Evidence | E1: `poc/F-SEN-015/run3/handler-route.txt` (source `poc/F2-SEN-001/run3/rv_sen_run3.rs`), `poc/F-SEN-015/run3/output.txt` |
+
+Re-based anchors:
+
+- The transition is unchanged: `handle_engine_check_result` still removes the entry and the `Unknown` arm still returns without re-inserting it (`service.rs:156-171`, `:176-179` at `fe9e84c` to `:165-180`, `:185-188`), and `commit_vote` still hashes whatever verdict it is given (`:214-224` to `:221-234`). The fix sits in front of it, in the effect handler, `crates/sentinel/src/effect.rs:72-119`:
+
+```rust
+        match self.verdicts.get(request_id, block).await {
+            Ok(Some(outcome)) => {
+                tracing::debug!(%request_id, ?outcome, "reusing recorded engine verdict");
+                return outcome;
+            }
+```
+
+then the engine call, then `self.verdicts.record(request_id, block, outcome)` (`:108-118`), which never overwrites a recorded verdict (`crates/sentinel/src/verdicts.rs:99-121`, `ON CONFLICT (request_id) DO UPDATE SET block = MAX(block, excluded.block) RETURNING rule`). Pruning uses the same `safe` block as the snapshots (`effect.rs:139-163`, `verdicts.rs:126-132`, `crates/core/src/driver.rs:263`, `:293`).
+
+What was run (`wt/rv-sen`, pasted into `mod tests`, reverted):
+
+- The original transition-level PoC (`poc/F-SEN-015/run3/poc_service.run3.rs`, text-only copy) still FAILS both tests, as expected: it feeds the second verdict straight into `apply_transition`, which is no longer the route a replayed check takes. Output kept in `output.txt` for the record.
+
+Variants through the real handler and store, with a scripted loopback engine, all passed:
+
+1. The original PoC's variant 1, changed verdict (`f_sen_015_run3_replayed_check_reuses_the_committed_verdict`): the engine answers `R-2.1`, then `R-3.4`. After the rollback the replayed check resumes with `Denied(RuleId(2, 1))` and `NewBlock(21)` emits the `Reveal` with reason `"R-2.1"`, matching the committed hash.
+2. The original PoC's variant 2, engine down on the replay (`f_sen_015_run3_engine_down_on_replay_still_reveals`): the engine answers once and then refuses connections (a probe to it returns `Unknown`); the replayed check resumes with `Denied(RuleId(2, 1))`, the entry stays tracked and the `Reveal` carries `"R-2.1"`.
+3. Two checks for one request in flight at once (a live reorg replaying the proposal while the first check runs), the engine answering each differently: both resume with the first recorded verdict (`f_sen_015_run3_concurrent_checks_resume_with_one_verdict`).
+4. Restart whose warp page replays the proposal, verdict recorded before the restart, engine now answering `R-4.1`: the replayed check resumes with the recorded `Approved` (`f_sen_015_run3_restart_replay_reuses_the_recorded_verdict`).
+5. Retention boundary: a verdict for a proposal at block 100 survives `prune(safe = 100)` and is removed by `prune(101)`, the boundary below which no snapshot, and so no replay, remains (`f_sen_015_run3_verdict_retained_until_the_snapshot_boundary`).
+6. The existing `effect.rs` test `replayed_check_resumes_with_the_first_verdict` passes in the baseline suite (50 of 50).
+
+Variants considered and not demonstrated (for the second verifier):
+
+- A store failure (SQLite read or write error) still resolves `Unknown`, and on a replay that drops a bonded entry. A local database failure is not attacker-controlled (A1, A17); not exercised.
+- Restart with a warp: the effect for a proposal in the last warp page reads its verdict concurrently with the first post-warp `New` update, whose housekeeping prunes verdicts below the new `safe` (`driver.rs:258`, `:293`). A proposal in that page below the new `safe` could in principle lose its verdict before the read. The read is spawned first and is one local query, while the driver does a snapshot prune before the verdict prune, so this ordering was not reproduced; I rate it theoretical.
+- A replayed own `Committed` that arrives before the replayed check resumes is still discarded. That is `F-SEN-001` (still valid), not this finding.
+
+Notes: `F2-SEN-001` variant (c) is closed by the same change. `F-SEN-001` is not, as #979's own description says.
+
+## Fix verification (CA3-FIX, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Result | Not fixed (restart variant). The verdict store holds for live reorgs and for restarts outside one window; inside it the recorded verdict is pruned before the replayed check reads it |
+| Fix under test | #978 (`d5b24dc`), #979 (`be86ee3`): the effect handler reuses a recorded verdict (`crates/sentinel/src/effect.rs:79-84`) and records every decisive one (`verdicts.rs:99-121`) |
+| Reproducing variant | A restart whose replay warp ends between the proposal block and the sentinel's own commitment block. The driver spawns the replayed check after the last warp page (`crates/core/src/driver.rs:278`); the next input, a `New` update, ends with `housekeeping` (`:257-258`, `:293`), which prunes verdicts below the watcher's head-based `safe` (`effect.rs:139-143`, `verdicts.rs:126-127`, `index/blocks.rs:300`, `:434`). The proposal is in the warp but below that `safe`, so its verdict usually goes first |
+| Re-validation re-run | Matches rv-sen: handler-route variants v1 to v5 pass; the original transition-level PoC still fails 2 of 2 by design |
+| Real binary | 15 of 20 restarts inside the window asked the engine again and left the commitment unrevealed; 0 of 6 in the control |
+| Confidence | 95 (that the fix is bypassed in this window) |
+| Evidence | E1: `poc/F-SEN-015/ca3-fix/RESULT.txt`, `e2e-*-report.txt`, `e2e-*-results.json`, `e2e-*-engine-requests.log`, `e2e-*-sentinel-key-lines.txt`; scripts `ca3fix_f_sen_015_e2e.py`, `ca3fix_engine.py`, `ca3fix_sen.rs` |
+
+What was run:
+
+1. rv-sen's fragments pasted into `mod tests` of `crates/sentinel/src/service.rs` (reverted): `cargo test -p sentinel --bins --locked --offline` with the test filters `poc_f_sen_015` and `rv_sen_run3`. `f_sen_015_run3` v1 to v5 pass; `poc_service.run3.rs` fails 2 of 2 as rv-sen recorded (it feeds the second verdict straight into the transition).
+2. Live-reorg route (the one this finding calls operative for variant 1), through the real `StateMachine`, handler and store: commit on R-2.1, `Uncle{P}` replays the proposal while the process runs and the engine now answers R-3.4; the replayed check resumes with the recorded R-2.1 before the next block's logs, the own commitment is tallied, and the reveal carries "R-2.1". Control on the same route with the recorded verdict deleted first: the reveal carries "R-3.4", the pre-fix behaviour. Both as expected; the fix holds here.
+3. The warp ordering rv-sen rated theoretical, emulated with the real `Handler`, `VerdictStore` and `SnapshotStore` on one file-backed pool and a multi-thread runtime (one worker per CPU, as `#[tokio::main]`): spawn the replayed check, then run the driver's snapshot prune and `housekeeping`. The verdict was lost in 254 of 300 replays with one check per page and in 746 of 1,200 with four. With 1 ms of unrelated work between the spawn and the prune: 0 of 300. Between those two points the real driver queues any actions the page produced, pops the `New` the watcher queued at startup (no RPC), skips the tx-queue update (`tx/mod.rs:167-170`, unchanged status), applies an in-memory `New` and runs the snapshot prune; the end-to-end run below measures the real thing.
+4. Intended route, `ca3fix_f_sen_015_e2e.py` under `integ`: the real sentinel binary built at `361aaf3`, Anvil with manual mining, `SentinelOracle` at the Aegis windows (commit 6, reveal 6), `max_reorg_depth` 5, a scripted loopback engine that logs every request. Proposal at P; the engine answers R-2.1 only after P + 1 is mined, so the commitment lands at P + 2; SIGKILL once the sentinel has processed P + 2; 4 blocks mined while it is down (restart head P + 6, new `safe` P + 1); the engine is switched; the sentinel restarts on the same database:
+   - engine down on the replay (HTTP 503, a co-deployed engine still starting): 8 of 12 runs asked the engine again for the same request; all 8 never revealed (`getCommitment` vote 1, PENDING, unclaimed). 4 of 12 revealed R-2.1.
+   - engine answering R-3.4 on the replay: 7 of 8 asked again; none of the 7 revealed. 1 revealed R-2.1.
+   - control, 3 blocks down (the proposal is the new `safe` block, so its verdict is not prunable): 0 of 6 asked again, 6 of 6 revealed R-2.1.
+
+   The sentinel log orders it. Lost runs: `pruned engine verdicts … safe 35, pruned 1` precedes the replayed check, the own commitment at P + 2 is then `ignoring unexpected commitment … waiting_for_engine_check`, and the check ends `engine check failed; dropping request unanswered` (down) or re-decides after the commitment passed (flip). Won runs: `reusing recorded engine verdict` precedes the prune.
+
+Mutation: with the handler bypassing the store, the live-reorg variant and rv-sen v1 to v4 fail; v5 (store-level retention) passes.
+
+Why it is this row's defect: after the restart the replayed check re-decides a vote that is already committed (the engine is asked again for the same request id), with the row's two outcomes: `Unknown` drops the bonded entry (variant 2), and a new verdict cannot be revealed (variant 1, here reached through the own commitment being ignored while the slower re-query runs, `F-SEN-001`'s path). The fix's own comment states the property it relies on, "a proposal the state machine can still replay always finds the verdict it was committed to" (`effect.rs:141`, `verdicts.rs:23`); a restart warp breaks it, because the prune uses the head's `safe` while the warp's replayed checks are still in flight.
+
+Window: the warp must replay the proposal below the new `safe` block and leave the own commitment for the live tail. With the crash right after the commitment block and `max_reorg_depth` 5, that is exactly 4 blocks of downtime for a commitment 2 blocks after the proposal, one block wider per extra block of commit latency; a commitment one block after the proposal is never in the window. On Gnosis: a restart 20 to 30 s after a proposal whose engine check took 5 s or more. Not attacker-triggered.
+
+Aegis impact when it hits: the request is dropped with the commitment unrevealed: 0.40 USDC.e slashed once another sentinel reveals, 799.60 USDC.e left for a manual `claim` (the figures in `F3-SEN-003`).
+
+Fix options for the team: prune verdicts below the replay anchor (the oldest retained snapshot) instead of the head-based `safe`, or keep a `max_reorg_depth` margin; or skip verdict housekeeping until the checks a warp spawned have resumed.
+
+Recommendation: do not delete. Keep this row open as Changed: conditional (restart timing), Aegis bond stuck or slashed per affected request; severity for PC3 and CA3 (input: Medium, a crash-consistency gap with recoverable impact).
+
+## Practicality (PC3, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Actor | Nobody hostile: an operator restart or a crash and restart, timed by chance |
+| Cost | None for anyone |
+| Condition | This sentinel's own commit landed (Batched mode on Aegis today, every mode once `F3-SEN-001` is fixed), and the restart's warp replays the proposal below the new `safe` block while the own commitment falls in the live tail. With the crash right after the commitment block and a commitment two blocks after the proposal, that is exactly 4 blocks of downtime, a one-block window; each extra block of commit latency widens it by one block (CA3-FIX: on Gnosis, a restart 20 to 30 s after a proposal whose engine check took 5 s or more) |
+| Gate | Gates 1 to 3 pass (CA3-FIX: real binary, 15 of 20 restarts inside the window lost the verdict, control 0 of 6). Gate 4 in a reduced form: 0.40 USDC.e slashed and 799.60 USDC.e locked per affected request until a manual `claim` |
+| Practicality | conditional (a restart whose warp ends between the proposal and the own commitment) |
+| Recommended severity | Medium (ledger High; CA3-FIX input Medium) |
+| Intended route and parameters | CA3-FIX ran the real sentinel binary built at `361aaf3` with SIGKILL, real restarts on the same database, Anvil at the Aegis windows (6 and 6), `max_reorg_depth` 5 and a scripted engine; the only stand-in is the engine, whose answer (down, or a flipped verdict) is the variable under test |
+| Cheapest settling change | None needed for the verdict; the window width at commit latencies of 3 and 4 blocks is arithmetic in CA3-FIX and could be confirmed by re-running `ca3fix_f_sen_015_e2e.py` with the engine answering after P + 2 |
+
+Reason. The live-reorg route this row was rated High for is fixed (#978, #979; CA3-FIX confirmed it). What remains is a crash-consistency gap in a restart window of a few blocks with recoverable impact, which is Section 8's Medium row. It overlaps in consequence with `F3-SEN-004` (same lost reveal, adjacent restart window) and should stay a separate row only because its fix is different (prune verdicts below the replay anchor, not the head-based `safe`). Not attacker-triggered: no outside party can choose when a sentinel restarts.
+
+## Confidence (CA3, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Result | The restart-window residual reproduces; the live-reorg route is fixed. Final: Accepted as Changed, Medium, certainty 95. Do not delete |
+| Reproductions | CA3-FIX's harness `ca3fix_f_sen_015_e2e.py` under `integ` with the real sentinel binary rebuilt at `361aaf3` (Aegis windows 6 and 6, `max_reorg_depth` 5, crash right after the own commit, 4 blocks down): engine down on the replay 10 of 10 and flipped verdict 6 of 6 asked the engine again and never revealed (vote `PENDING`, unclaimed); control with 3 blocks down 0 of 4. Emulation (`ca3fix_sen`): verdict lost 278 of 300 with no gap, 217 of 300 and 471 of 1,200 with the driver's work in between, 0 of 300 with a 1 ms gap. rv-sen's handler-route variants v1 to v5: 5 of 5 pass (live reorg, engine down on a live replay, concurrent checks, restart outside the window, retention boundary) |
+| Route and parameters | Intended route: SIGKILL and restart on the same database, real warp, real verdict store; only the engine is scripted (down or flipped), which is the variable under test |
+| Final severity | Medium, agree with PC3 and CA3-FIX: a crash-consistency gap in a restart window of a few blocks, recoverable by a manual `claim`. My in-window rate (16 of 16) is higher than CA3-FIX's 15 of 20; the race is load dependent and the likely outcome inside the window |
+| Certainty | 95 |
+| Evidence | `poc/F-SEN-015/ca3/` (`e2e-down/`, `e2e-flip/`, `e2e-control/` reports and results, `ca3fix-emulation.txt`, `rv-sen-handler-route.txt`); the generated throwaway signer keys in the e2e configs are redacted |

@@ -26,7 +26,7 @@ The prior analysis framed this as a restart in a roughly one-block window (`rust
 | --- | --- | --- | --- | --- |
 | 1 | Genesis starts its key generation with `deadline = None`, by design | E2 | `crates/validator/src/state/keygen.rs:46-53` | <pre> let genesis = self.genesis.group;<br> if !matches!(state.rollover, RolloverState::WaitingForGenesis) \|\| event.gid != genesis.id<br> {<br> return (state, Vec::new);<br> }<br><br> // The genesis group generation is not subject to a rollover deadline.<br> self.start_key_gen(state, EpochId::Genesis, &self.genesis, None)</pre> |
 | 2 | `start_key_gen` is the sole emitter of `Effect::KeyGenSetup` and pairs it with the `secrets: None` state that waits for its resume | E2 | `crates/validator/src/state/keygen.rs:1136-1153` | <pre> State {<br> rollover: RolloverState::CollectingCommitments {<br> next_epoch,<br> group,<br> secrets: KeyGenCommitment::Participating {<br> poap,<br> secrets: None,<br> },<br> commitments: BTreeMap::new,<br> deadline,<br> },<br> ..state<br> },<br> vec![Command::Effect(Effect::KeyGenSetup {<br> group_id,<br> count,<br> threshold,<br> })],</pre> |
-| 3 | The stuck-setup recovery added by PR #851 cannot match a genesis state: it requires `deadline: Some(deadline)` | E2 | `crates/validator/src/state/keygen.rs:1003-1010` | <pre> let stuck = match &state.rollover {<br> RolloverState::CollectingCommitments {<br> next_epoch,<br> group,<br> secrets: KeyGenCommitment::Participating { secrets: None, .. },<br> commitments,<br> deadline: Some(deadline),<br> } if block >= *deadline && commitments.len as u16 == group.size.0 => {</pre> |
+| 3 | The stuck-setup recovery added by PR #851 cannot match a genesis state: it requires `deadline: Some(deadline)` | E2 | `crates/validator/src/state/keygen.rs:1003-1010` | <pre> let stuck = match &state.rollover {<br> RolloverState::CollectingCommitments {<br> next_epoch,<br> group,<br> secrets: KeyGenCommitment::Participating { secrets: None, .. },<br> commitments,<br> deadline: Some(deadline),<br> } if block >= \*deadline && commitments.len as u16 == group.size.0 => {</pre> |
 | 4 | The rollover clock returns early for genesis, so it cannot rescue the state either | E2 | `crates/validator/src/state/keygen.rs:917-927` | <pre> let Some(target_epoch_number) =<br> state.rollover.next_epoch.and_then(\|epoch\| epoch.number)<br> else {<br> return (state, Vec::new);<br> };<br><br> let next_epoch_number = epoch::next_number(block, self.config.blocks_per_epoch);<br> if target_epoch_number >= next_epoch_number {<br> // Not due yet.<br> return (state, Vec::new);<br> }</pre> |
 | 5 | `EpochId::Genesis` has no number, which is what makes claim 4 fire | E2 | `crates/validator/src/consensus/epoch.rs:39-45` | <pre> /// Returns the epoch number for this ID for any non-genesis group.<br> pub const fn number(self) -> Option<NonZeroU64> {<br> match self {<br> EpochId::Genesis => None,<br> EpochId::Number { number } => Some(number),<br> }<br> }</pre> |
 | 6 | The effect performs a database write whose failure is a plausible transient error | E2 | `crates/validator/src/service/effect.rs:126-143` | <pre> Effect::KeyGenSetup {<br> group_id,<br> count,<br> threshold,<br> } => {<br> let secrets = {<br> let mut rng = rand::thread_rng;<br> frost::keygen::setup(&mut rng, self.account, count, threshold)?<br> };<br> let stored = self<br> .secrets<br> .store_keygen_secrets(group_id, self.account, secrets)<br> .await?;<br> Ok(Resume::Setup {<br> group_id,<br> secrets: Box::new(stored),<br> })<br> }</pre> |
@@ -249,3 +249,45 @@ Rust-only mechanism in unchanged code — `crates/validator` is untouched by the
 ## Reconciliation (run 2)
 
 **Final combined status: canonical; genesis instance Informational, `known` (A16, team accepted); rollover instance Medium, 69 %, Plausible.** Counterparts `F2-VAL-063` (EXTENDS: the same lost or failed `KeyGenSetup` forfeits a numbered epoch, structural gap E1, trigger E2) and `F2-VAL-005` (folded into `F2-VAL-063`). The rollover instance is the "other flow" the team's acceptance was conditional on. See `state/run2/reconciliation/validator.md` (Sections 1, 3, 5).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed this code path; `KeyGenSetup` is still emitted once and an effect error still resumes as `Resume::Noop` |
+| Severity, certainty | unchanged: rollover instance Medium 69; genesis instance Informational `known` (settled.md section 1, A16) |
+| Evidence | E1: `poc/F2-VAL-063/run3/` (run-2 PoC re-run unchanged), `poc/F-VAL-061/run3/` (closed pool: `KeyGenSetup` resumes as `Noop`) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- Genesis has no deadline, unchanged at `crates/validator/src/state/keygen.rs:52-53`.
+- Sole emitter: `start_key_gen` `state/keygen.rs:1115-1155` is now `crates/validator/src/state/keygen.rs:1130-1195`, writing `secrets: None` and `vec![Command::Effect(Effect::KeyGenSetup { .. })]` at `:1164`.
+- The waiting branch never re-requests: `state/keygen.rs:225-231` is now `:225-244` (`"all key generation commitments received; waiting for setup"` at `:229`).
+- Stuck branch still needs `deadline: Some(_)` and every peer committed: `state/keygen.rs:1003-1010` is now `:1018-1025`:
+
+  ```rust
+  let stuck = match &state.rollover {
+      RolloverState::CollectingCommitments {
+          next_epoch,
+          group,
+          secrets: KeyGenCommitment::Participating { secrets: None, .. },
+          commitments,
+          deadline: Some(deadline),
+      } if block >= *deadline && commitments.len() as u16 == group.size().0 => {
+  ```
+
+- Effect handler: `service/effect.rs:128-145` is now `crates/validator/src/service/effect.rs:105-121`; the error fold `service/effect.rs:264-276` is now `:172-183` (`(Resume::Noop, Outcome::Failure)` at `:178`).
+- `EffectManager::spawn`, no retry: `crates/core/src/effects.rs:61-69`.
+
+What was run:
+
+1. `poc/F2-VAL-063/run3/keygen_tests_module.rs` (byte-identical to run 2's module) appended to `state/keygen.rs`: `cargo test -p validator --bins state::keygen::` gives `f2_val_063_lost_key_gen_setup_is_never_re_issued ... ok`. `start_key_gen` for epoch 2 emits one `KeyGenSetup`; with its resume lost, `NewBlock(1501)` emits none and the state stays `CollectingCommitments { secrets: None }`. Output `poc/F2-VAL-063/run3/RESULT.txt`.
+2. `poc/F-VAL-061/run3/effect_failure.rs`: the real `Handler` over a closed SQLite pool returns `KeyGenSetup: closed pool -> Noop` (output `poc/F-VAL-061/run3/RESULT.txt`), the failure value this row's trigger depends on.
+
+Notes:
+
+- Genesis instance: exact match to settled.md section 1 (genesis-ceremony liveness alone, A16, Informational `known`). The rollover instance (one validator forfeits the epoch's DKG after a failed or lost setup; a rolling restart of more than a third of the set at an epoch boundary skips the epoch) keeps Medium 69.
+- The 7702 executor and Direct Nonce work did not touch this path. The restart-warp trigger F2-VAL-003 that fed this row is Fixed by #1017; the failed-effect trigger (SQLite error on the shared pool) and the lost-resume trigger (a restart between the round-opening commit and the resume's commit) are unchanged.
+- Counterparts `F2-VAL-063` and `F2-VAL-005` stay folded here.

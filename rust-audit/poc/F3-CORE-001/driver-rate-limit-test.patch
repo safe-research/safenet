@@ -1,0 +1,453 @@
+diff --git a/crates/core/src/driver.rs b/crates/core/src/driver.rs
+index bb3b717..2dddb88 100644
+--- a/crates/core/src/driver.rs
++++ b/crates/core/src/driver.rs
+@@ -326,3 +326,424 @@ impl UpdateRecorder {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod qa3_tests {
++    //! QA3 F3-CORE-001: the real `Driver` (real `STEP_RETRY_DELAY`, real time)
++    //! following a chain through a rate-limited RPC, mocked at the transport
++    //! boundary. The service watches 16 events, as the validator does.
++    use super::*;
++    use crate::{
++        index::blocks::Timing,
++        state::{Commands, Message, StateTransition},
++        state::storage::SnapshotStore,
++    };
++    use alloy::{
++        primitives::{B256, keccak256},
++        rpc::{
++            json_rpc::{RequestPacket, Response, ResponsePacket, ResponsePayload},
++            types::{Block, Header, Log},
++        },
++        transports::{TransportError, TransportErrorKind, TransportFut},
++    };
++    use sqlx::sqlite::SqliteConnectOptions;
++    use std::{
++        num::NonZeroU64,
++        str::FromStr,
++        sync::{Arc, Mutex},
++        task::{Context, Poll},
++        time::Instant,
++    };
++
++    alloy::sol! {
++        #[derive(Debug)]
++        contract Sixteen {
++            event E0(uint256 v);
++            event E1(uint256 v);
++            event E2(uint256 v);
++            event E3(uint256 v);
++            event E4(uint256 v);
++            event E5(uint256 v);
++            event E6(uint256 v);
++            event E7(uint256 v);
++            event E8(uint256 v);
++            event E9(uint256 v);
++            event E10(uint256 v);
++            event E11(uint256 v);
++            event E12(uint256 v);
++            event E13(uint256 v);
++            event E14(uint256 v);
++            event E15(uint256 v);
++        }
++    }
++    crate::watcher_events!(Sixteen::SixteenEvents);
++
++    #[derive(Default, Serialize, Deserialize)]
++    struct QaState {
++        last_block: u64,
++    }
++
++    struct QaTransition;
++
++    impl StateTransition<QaState> for QaTransition {
++        type Event = Sixteen::SixteenEvents;
++        type Action = ();
++        type Effect = ();
++        type Resume = ();
++
++        fn apply_transition(
++            &self,
++            mut state: QaState,
++            message: Message<Self::Event, Self::Resume>,
++        ) -> (QaState, Commands<QaState, Self>) {
++            if let Message::NewBlock(number) = message {
++                state.last_block = number;
++            }
++            (state, vec![])
++        }
++    }
++
++    struct QaEffects;
++
++    impl EffectHandler<(), ()> for QaEffects {
++        async fn perform_effect(&self, _effect: ()) {}
++    }
++
++    struct QaActions;
++
++    impl ActionEncoder<()> for QaActions {
++        fn encode_action(&self, _action: ()) -> (Transaction, Option<u64>) {
++            (Transaction::default(), None)
++        }
++    }
++
++    struct QaService;
++
++    impl Service for QaService {
++        type State = QaState;
++        type Event = Sixteen::SixteenEvents;
++        type Action = ();
++        type Effect = ();
++        type Resume = ();
++        type Transition = QaTransition;
++        type Effects = QaEffects;
++        type Actions = QaActions;
++
++        fn components(self) -> (QaTransition, QaEffects, QaActions) {
++            (QaTransition, QaEffects, QaActions)
++        }
++    }
++
++    /// The test clock is `TEST_SYSTEM_TIME_EPOCH_SECONDS` (private to `index`)
++    /// plus the elapsed time; block `1000 + k` is mined at second `k`.
++    const EPOCH: u64 = 1_337_420;
++    const RTT_MS: u64 = 20;
++
++    #[derive(Clone, Copy, Debug)]
++    enum Limit {
++        /// At most `max` requests per aligned window of `window_ms`.
++        FixedWindow { window_ms: u64, max: u64 },
++        /// At most `max` requests in flight at once.
++        Concurrency { max: u64 },
++        /// A token bucket starting full.
++        TokenBucket { capacity: f64, per_second: f64 },
++    }
++
++    #[derive(Debug, Default, Clone)]
++    struct Counters {
++        logs_sent: u64,
++        logs_ok: u64,
++        rejected_429: u64,
++        outage_502: u64,
++        blocks_sent: u64,
++    }
++
++    struct MockState {
++        start: Instant,
++        outage_ms: u64,
++        limit: Limit,
++        window_id: u64,
++        window_count: u64,
++        in_flight: u64,
++        tokens: f64,
++        last_ms: u64,
++        counters: Counters,
++    }
++
++    impl MockState {
++        fn admit(&mut self, now_ms: u64) -> bool {
++            match self.limit {
++                Limit::FixedWindow { window_ms, max } => {
++                    let id = now_ms / window_ms;
++                    if id != self.window_id {
++                        self.window_id = id;
++                        self.window_count = 0;
++                    }
++                    self.window_count += 1;
++                    self.window_count <= max
++                }
++                Limit::Concurrency { max } => {
++                    let admitted = self.in_flight < max;
++                    if admitted {
++                        self.in_flight += 1;
++                    }
++                    admitted
++                }
++                Limit::TokenBucket {
++                    capacity,
++                    per_second,
++                } => {
++                    let refill = (now_ms - self.last_ms) as f64 * per_second / 1000.0;
++                    self.tokens = (self.tokens + refill).min(capacity);
++                    self.last_ms = now_ms;
++                    let admitted = self.tokens >= 1.0;
++                    if admitted {
++                        self.tokens -= 1.0;
++                    }
++                    admitted
++                }
++            }
++        }
++    }
++
++    fn block_hash(number: u64) -> B256 {
++        keccak256(number.to_be_bytes())
++    }
++
++    fn block(number: u64) -> Block {
++        Block::empty(Header {
++            hash: block_hash(number),
++            inner: alloy::consensus::Header {
++                parent_hash: block_hash(number - 1),
++                number,
++                timestamp: EPOCH + number - 1000,
++                ..Default::default()
++            },
++            ..Default::default()
++        })
++    }
++
++    #[derive(Clone)]
++    struct Mock(Arc<Mutex<MockState>>);
++
++    struct Slot(Arc<Mutex<MockState>>);
++
++    impl Drop for Slot {
++        fn drop(&mut self) {
++            let mut s = self.0.lock().unwrap();
++            if let Limit::Concurrency { .. } = s.limit {
++                s.in_flight -= 1;
++            }
++        }
++    }
++
++    impl tower::Service<RequestPacket> for Mock {
++        type Response = ResponsePacket;
++        type Error = TransportError;
++        type Future = TransportFut<'static>;
++
++        fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
++            Poll::Ready(Ok(()))
++        }
++
++        fn call(&mut self, request: RequestPacket) -> Self::Future {
++            let RequestPacket::Single(request) = request else {
++                panic!("unexpected batch request");
++            };
++            let state = self.0.clone();
++            let (admitted, outage, payload) = {
++                let mut s = state.lock().unwrap();
++                let now_ms = s.start.elapsed().as_millis() as u64;
++                let head = 1000 + now_ms / 1000;
++                let admitted = s.admit(now_ms);
++                let mut outage = false;
++                let payload = match request.method() {
++                    "eth_getBlockByNumber" => {
++                        s.counters.blocks_sent += 1;
++                        let (tag, _): (String, bool) =
++                            serde_json::from_str(request.params().unwrap().get()).unwrap();
++                        let number = match tag.as_str() {
++                            "latest" => head,
++                            hex => u64::from_str_radix(hex.trim_start_matches("0x"), 16).unwrap(),
++                        };
++                        serde_json::value::to_raw_value(&(number <= head).then(|| block(number)))
++                            .unwrap()
++                    }
++                    "eth_getLogs" => {
++                        s.counters.logs_sent += 1;
++                        outage = now_ms < s.outage_ms;
++                        if admitted && outage {
++                            s.counters.outage_502 += 1;
++                        } else if admitted {
++                            s.counters.logs_ok += 1;
++                        }
++                        serde_json::value::to_raw_value(&Vec::<Log>::new()).unwrap()
++                    }
++                    method => panic!("unexpected method {method}"),
++                };
++                if !admitted {
++                    s.counters.rejected_429 += 1;
++                }
++                (admitted, outage, payload)
++            };
++            let id = request.id().clone();
++            // An admitted request holds its concurrency slot until its response
++            // arrives or its future is dropped (`try_join_all` drops the rest
++            // of an attempt on the first error).
++            let slot = admitted.then(|| Slot(state.clone()));
++            Box::pin(async move {
++                tokio::time::sleep(Duration::from_millis(RTT_MS)).await;
++                drop(slot);
++                if !admitted {
++                    return Err(TransportErrorKind::http_error(429, "rate limited".into()));
++                }
++                if outage {
++                    return Err(TransportErrorKind::http_error(502, "bad gateway".into()));
++                }
++                Ok(ResponsePacket::Single(Response {
++                    id,
++                    payload: ResponsePayload::Success(payload),
++                }))
++            })
++        }
++    }
++
++    #[derive(Debug)]
++    struct Outcome {
++        name: &'static str,
++        seconds: u64,
++        counters: Counters,
++        processed: Option<i64>,
++        head: u64,
++    }
++
++    /// Runs the real driver for `seconds` against a mock with `limit`, an
++    /// initial getLogs outage of `outage_ms`, and an optional resume point.
++    async fn run(
++        name: &'static str,
++        limit: Limit,
++        outage_ms: u64,
++        retry_count: u64,
++        resume_from: Option<u64>,
++        seconds: u64,
++    ) -> Outcome {
++        let tokens = match limit {
++            Limit::TokenBucket { capacity, .. } => capacity,
++            _ => 0.0,
++        };
++        // `QA3_OUTAGE_MS` overrides the outage of the stalling variants, so a
++        // remediation that slows retries still enters the per-event mode.
++        let outage_ms = match std::env::var("QA3_OUTAGE_MS") {
++            Ok(value) if !name.contains("control") => value.parse().unwrap(),
++            _ => outage_ms,
++        };
++        let mock = Mock(Arc::new(Mutex::new(MockState {
++            start: Instant::now(),
++            outage_ms,
++            limit,
++            window_id: 0,
++            window_count: 0,
++            in_flight: 0,
++            tokens,
++            last_ms: 0,
++            counters: Counters::default(),
++        })));
++        let provider = Provider::qa3_from_transport(mock.clone(), 0x5afe);
++        let pool = utils::connect_sqlite(SqliteConnectOptions::from_str("sqlite::memory:").unwrap())
++            .await
++            .unwrap();
++        if let Some(block) = resume_from {
++            // A node restarted after downtime: its last snapshot is at `block`.
++            SnapshotStore::<QaState>::new(pool.clone())
++                .await
++                .unwrap()
++                .commit(block, &QaState::default())
++                .await
++                .unwrap();
++        }
++        let signer = Signer::from_str(
++            "0x0000000000000000000000000000000000000000000000000000000000000001",
++        )
++        .unwrap();
++        let mut config = Config::default();
++        config.index.blocks.block_time = Timing::Millis(1_000);
++        config.index.blocks.block_propagation_delay = Timing::Millis(0);
++        config.index.blocks.block_retry_delays = Timing::Millis(vec![]);
++        config.index.events.block_single_query_retry_count = NonZeroU64::new(retry_count).unwrap();
++        let driver = Driver::new(
++            QaService,
++            provider,
++            signer,
++            pool.clone(),
++            vec![Address::repeat_byte(0x11)],
++            config,
++        )
++        .await
++        .unwrap();
++        let _ = tokio::time::timeout(Duration::from_secs(seconds), driver.run()).await;
++        let processed = sqlx::query_as::<_, (Option<i64>,)>("SELECT MAX(block_number) FROM snapshots")
++            .fetch_one(&pool)
++            .await
++            .unwrap()
++            .0;
++        let s = mock.0.lock().unwrap();
++        Outcome {
++            name,
++            seconds,
++            counters: s.counters.clone(),
++            processed,
++            head: 1000 + s.start.elapsed().as_secs(),
++        }
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn qa3_rate_limited_rpc_stalls_the_watcher() {
++        const SECONDS: u64 = 30;
++        let window = Limit::FixedWindow {
++            window_ms: 150,
++            max: 10,
++        };
++        let outcomes = futures::future::join_all([
++            Box::pin(run("A fixed window 10 per 150 ms", window, 500, 3, None, SECONDS))
++                as std::pin::Pin<Box<dyn Future<Output = Outcome> + Send>>,
++            Box::pin(run("B control: A with block_single_query_retry_count 1000", window, 500, 1000, None, SECONDS)),
++            Box::pin(run("C at most 8 requests in flight", Limit::Concurrency { max: 8 }, 500, 3, None, SECONDS)),
++            Box::pin(run("D token bucket 12, 100 per s", Limit::TokenBucket { capacity: 12.0, per_second: 100.0 }, 500, 3, None, SECONDS)),
++            Box::pin(run("E token bucket 20, 50 per s, first per-event attempt in the outage", Limit::TokenBucket { capacity: 20.0, per_second: 50.0 }, 800, 3, None, SECONDS)),
++            Box::pin(run("G control: E with the outage over before the first per-event attempt", Limit::TokenBucket { capacity: 20.0, per_second: 50.0 }, 450, 3, None, SECONDS)),
++            Box::pin(run("F restart warp from 800, A's window, 1 s outage", window, 1_000, 3, Some(800), SECONDS)),
++        ])
++        .await;
++        println!(
++            "QA3_OUTAGE_MS = {:?}",
++            std::env::var("QA3_OUTAGE_MS").ok()
++        );
++        for outcome in &outcomes {
++            println!(
++                "{}: processed up to {:?} of head {}; eth_getLogs sent {} ({} per s), ok {}, 429 {}, 502 {}",
++                outcome.name,
++                outcome.processed,
++                outcome.head,
++                outcome.counters.logs_sent,
++                outcome.counters.logs_sent / outcome.seconds,
++                outcome.counters.logs_ok,
++                outcome.counters.rejected_429,
++                outcome.counters.outage_502,
++            );
++        }
++        // The stall: no block's logs are ever processed while the chain moves on.
++        for index in [0, 2, 3, 4] {
++            assert_eq!(outcomes[index].processed, None, "{}", outcomes[index].name);
++        }
++        // The warp stalls on its first single-block page.
++        assert!(outcomes[6].processed.is_none_or(|block| block < 900), "{}", outcomes[6].name);
++        // The controls follow the chain.
++        for index in [1, 5] {
++            assert!(
++                outcomes[index].processed.is_some_and(|block| block >= 1_000 + SECONDS as i64 - 5),
++                "{}",
++                outcomes[index].name
++            );
++        }
++    }
++}
+diff --git a/crates/core/src/provider/mod.rs b/crates/core/src/provider/mod.rs
+index febc353..0f59ad9 100644
+--- a/crates/core/src/provider/mod.rs
++++ b/crates/core/src/provider/mod.rs
+@@ -180,3 +180,19 @@ impl AlloyProvider<AnyNetwork> for Provider {
+         ProviderCall::Ready(Some(Ok(self.chain_id)))
+     }
+ }
++
++/// QA3 PoC support: a provider over an in-process transport, so tests can model
++/// time-dependent node behaviour that the FIFO `Asserter` cannot.
++#[cfg(test)]
++impl Provider {
++    pub fn qa3_from_transport<T>(transport: T, chain_id: u64) -> Self
++    where
++        T: alloy::transports::IntoBoxTransport,
++    {
++        let client = ClientBuilder::default().transport(transport, true);
++        Self {
++            root: RootProvider::new(client),
++            chain_id,
++        }
++    }
++}

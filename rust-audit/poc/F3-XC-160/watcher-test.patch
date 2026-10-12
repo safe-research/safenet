@@ -1,0 +1,55 @@
+diff --git a/crates/core/src/index/mod.rs b/crates/core/src/index/mod.rs
+index dac7314..52bff33 100644
+--- a/crates/core/src/index/mod.rs
++++ b/crates/core/src/index/mod.rs
+@@ -401,6 +401,50 @@ mod tests {
+         );
+     }
+ 
++    /// QA3 F3-XC-160: a backend that has not imported block 1000 yet answers
++    /// its logs query with -32001 and `eth_getBlockByNumber(1000)` with
++    /// `null`. The watcher reports the canonical block as uncled, then fetches
++    /// the very same block again.
++    #[tokio::test]
++    async fn qa3_lagging_backend_uncles_a_canonical_block() {
++        let asserter = Asserter::new();
++        asserter.push_success(&block(1000));
++        asserter.push_success(&block(999));
++        let mut watcher = watcher(
++            &asserter,
++            {
++                let mut config = config();
++                config.blocks.max_reorg_depth = 1;
++                config
++            },
++            None,
++        )
++        .await;
++        let first = watcher.next().await.unwrap();
++        println!("update 1: {first:?}");
++        assert_eq!(first, new_block_update(1000));
++
++        // Logs by hash reach the lagging backend: -32001.
++        asserter.push_failure(ErrorPayload {
++            code: -32001,
++            message: "resource not found".into(),
++            data: None,
++        });
++        // The revalidation reaches the lagging backend too: no block yet.
++        asserter.push_success(&Option::<Block>::None);
++        let second = watcher.next().await.unwrap();
++        println!("update 2: {second:?}");
++        assert_eq!(second, Update::Block(BlockUpdate::Uncle { number: 1000 }));
++
++        // The next request reaches an up-to-date backend: the same block,
++        // same hash, is emitted again as new.
++        asserter.push_success(&block(1000));
++        let third = watcher.next().await.unwrap();
++        println!("update 3: {third:?}");
++        assert_eq!(third, new_block_update(1000));
++        assert!(asserter.read_q().is_empty());
++    }
++
+     fn block(number: u64) -> Block {
+         Block::empty(Header {
+             hash: block_hash(number),

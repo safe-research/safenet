@@ -1,0 +1,10 @@
+# rv-core-a run 3, 2026-10-08: python3 -I rv-core-a-hkdf_variants.py (Python 3.13.7)
+# and the run-1 script: python3 -I ../hkdf_reference_vector.py
+reference vector: de66ad87d39718318f7ec36177e9e2286b5c0ade3dc0de22b65e9ee55ccaab0d
+matches kdf.rs literal: True
+['ab','c'] == ['a','bc']: True
+domain 'domain-a' == 'domain-a\x00': True
+65-byte domain == sha256(domain): True
+--- run-1 script
+de66ad87d39718318f7ec36177e9e2286b5c0ade3dc0de22b65e9ee55ccaab0d
+True

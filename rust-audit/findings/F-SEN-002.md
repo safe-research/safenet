@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Verified |
+| Status | Final: Accepted |
 | Crate and module | sentinel, service.rs |
 | Location | crates/sentinel/src/service.rs:307-319, 372-384, 626-633 (related: 415-417, 466) |
-| Severity | High / High |
-| Certainty | 98% (RW-CORE-SEN, Phase 8 real-world) |
+| Severity | High / Medium |
+| Certainty | 90% (CA3: primary case reproduced through the transition; mirror case recovers since #964) |
 | Assumptions involved | A2, A4, A10 |
 | Tags | funds, input-validation |
 
@@ -27,7 +27,7 @@ Because bonds are pulled per request and this failure leaves them unclaimed, the
 | 1 | `Committed` outside `CollectingCommitments` is discarded, so it never reaches `committed_count` | E2 | crates/sentinel/src/service.rs:307-319 | `        let RequestState::CollectingCommitments {`<br>`            committed_count,`<br>`            self_committed,`<br>`            ..`<br>`        } = entry`<br>`        else {`<br>`            tracing::warn!(`<br>`                request_id = %event.requestId,`<br>`                state = entry.name,`<br>`                "ignoring unexpected commitment"`<br>`            );`<br>`            return (state, Vec::new);`<br>`        };` |
 | 2 | The tally starts at zero when we commit, so anything earlier is lost | E2 | crates/sentinel/src/service.rs:214-225 | `        state.0.insert(`<br>`            request_id,`<br>`            RequestState::CollectingCommitments {`<br>`                approve,`<br>`                reason,`<br>`                slash_amount,`<br>`                commit_deadline,`<br>`                reveal_deadline,`<br>`                committed_count: 0,`<br>`                self_committed: false,`<br>`            },`<br>`        );` |
 | 3 | Early finalisation is driven purely by the local tally | E2 | crates/sentinel/src/service.rs:363-384 | `        *revealed_count += 1;`<br>`        if event.approved {`<br>`            *approve_count += 1;`<br>`        } else {`<br>`            *deny_count += 1;`<br>`        }`<br>`        if event.sentinel == self.signer.address {`<br>`            *self_revealed = true;`<br>`        }`<br>`        if *revealed_count < *committed_count {`<br>`            return (state, Vec::new);`<br>`        }`<br>`        let (update, actions) = self.finalize(entry, event.requestId);` |
-| 4 | `finalize` drops the entry with no action when we have not (yet) been seen to reveal | E2 | crates/sentinel/src/service.rs:626-633 | `        let dispute = *approve_count > 0 && *deny_count > 0;`<br>`        let timed_out = *revealed_count == 0;`<br>``<br>`        // If this sentinel did not participate and it was not a timeout`<br>`        // then no actions should be taken and the request should be dropped`<br>`        if !*self_revealed && !timed_out {`<br>`            return (None, Vec::new);`<br>`        }` |
+| 4 | `finalize` drops the entry with no action when we have not (yet) been seen to reveal | E2 | crates/sentinel/src/service.rs:626-633 | `        let dispute = *approve_count > 0 && *deny_count > 0;`<br>`        let timed_out = *revealed_count == 0;`<br>``<br>` // If this sentinel did not participate and it was not a timeout`<br>` // then no actions should be taken and the request should be dropped`<br>` if !\*self_revealed && !timed_out {`<br>` return (None, Vec::new);`<br>` }` |
 | 5 | A later `Revealed` / `DisputeResolved` for an untracked id is a silent no-op, so nothing recovers the entry | E2 | crates/sentinel/src/service.rs:340-346 | `        let Some(entry) = state.0.get_mut(&event.requestId) else {`<br>`            tracing::debug!(`<br>`                request_id = %event.requestId,`<br>`                "ignoring reveal for an untracked request"`<br>`            );`<br>`            return (state, Vec::new);`<br>`        };` |
 | 6 | Claiming is per sentinel and is the only way a bond comes back | E2 (Solidity reference, A7) | contracts/src/SentinelOracle.sol:286-304 | `    function claim(bytes32 requestId) external {`<br>`        SentinelOracleRequest.T storage request = $requests.get(requestId);`<br>`        SentinelOracleRequest.State state = request.requireResolved;`<br>`        SentinelOracleCommitment.Commitment storage commitment = $commitments.get(requestId, msg.sender);`<br>`        SentinelOracleCommitment.Vote vote = commitment.vote;`<br>`        commitment.markClaimed;`<br>`        uint96 feeReward = request.calcFeeReward(state, vote);`<br>`        uint96 bondReturn = commitment.bondAmount - request.slashAmountFor(state, vote);` |
 | 7 | Onchain finalisation requires the _real_ committed count, so an undercounted early finalise reverts | E2 (Solidity reference, A7) | contracts/src/libraries/SentinelOracleRequests.sol:175-177 | `        bool everyoneRevealed = prog.committedCount > 0 && prog.revealedCount == prog.committedCount;`<br>`        bool nothingToReveal = prog.committedCount == 0 && block.number > self.terms.commitDeadline;`<br>`        require(block.number > self.terms.revealDeadline \|\| everyoneRevealed \|\| nothingToReveal, FinalizeTooEarly);` |
@@ -320,3 +320,83 @@ So two of the three sub-claims are now closed by `dbc963a` / `6df6fb9`: the guar
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed, High, 98% (E1), canonical `F-SEN-002`.** Run-2 counterpart `F2-SEN-002` (High 90, E1, both outcomes re-run at `fe9e84c`) **confirms** the undercount and the silent drop, and extends the mirror case into an attacker-usable stall: a reverted `Finalize` now parks the entry in `WaitingForOutcome` with no deadline and no retry (`crates/sentinel/src/service.rs:657-671`, `484`), so one registered sentinel that commits early and never reveals parks every honest sentinel until a third party finalizes. The in-flight note above ("#914 alone worsens this") and run 2's `F2-SEN-010` (High 93) are the same fact: the `CollectingVotes` switch now runs at `NewBlock(commit_deadline)` (`423-425`) before that block's logs, so commits mined in block `commitDeadline` are a second, engine-independent undercount source. It is filed as a distinct canonical finding because its root cause (tally frozen at the phase switch) and remediation (keep tallying in `CollectingVotes`, or stop early-finalizing on local counts) are disjoint from this file's (counter born at zero on the resume; count from `NewRequest` onward). Severity here is unchanged — the trigger set grew, the rating did not. Team disposition: **assigned @rmeissner**; the fix must close both sources — `F2-SEN-010` option 1 was compiled in-tree (47/47 tests), and `F2-SEN-003` option 1 (park instead of drop) makes outcome 1 recoverable (compiled, 42/42 existing tests pass). Run 1's QA caveat stands: counting in every pre-commit phase alone must not be reported as closing this finding (A4 log-loss trigger). See `state/run2/reconciliation/sentinel.md` §1.1, §4.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | #964 (`0be9636`, contract: the last `reveal` finalizes in the same transaction) narrows the mirror case; #1014/#1015 (`fef8cfd`, `73967cf`) remove the second undercount source (`F2-SEN-010`, fixed). The sentinel still counts locally and still drops: nothing in `crates/sentinel` changed `handle_committed`, `handle_revealed` or `finalize`. |
+| Severity, certainty | High, 98 unchanged (primary loss path re-executed) |
+| Evidence | E1: `poc/F-SEN-002/run3/output.txt`, `poc/F2-SEN-002/run3/output.txt` |
+
+What changed: the primary case (a peer commit seen before our verdict is not tallied, a peer's reveal fires the early finalize with `self_revealed == false`, the entry is dropped with no `Claim`) is unchanged and still loses the bond and fee share; with #964 our own later reveal auto-finalizes the request and the `OracleResult` hits an untracked id. The mirror case (our reveal reaches the undercounted threshold first and a premature `Finalize` reverts `FinalizeTooEarly`) is now recovered when the uncounted committer reveals later, because its reveal is the last one and the oracle emits `OracleResult` in that transaction. It still parks forever in `WaitingForOutcome` when the uncounted committer never reveals (the adversarial stall `F2-SEN-002` added). The deadline-block undercount source is gone (see `F2-SEN-010`); the pre-verdict source and the A4 log-loss source remain.
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- Commits seen outside `CollectingCommitments` are discarded: `crates/sentinel/src/service.rs:307-319` to `:316-328` (quoted under `F-SEN-001`'s run 3 section).
+- The tally starts at zero on the resume: `service.rs:214-224` to `:223-234` (`committed_count: 0,`).
+- Early finalize on the local tally: `service.rs:372-375` to `:381-384`:
+
+```rust
+        if *revealed_count < *committed_count {
+            return (state, Vec::new());
+        }
+        let (update, actions) = self.finalize(entry, event.requestId);
+```
+
+- The silent drop: `service.rs:649-655` to `:674-678`:
+
+```rust
+        // If this sentinel did not participate and it was not a timeout
+        // then no actions should be taken and the request should be dropped
+        if !*self_revealed && !timed_out {
+            return (None, Vec::new());
+        }
+```
+
+- `WaitingForOutcome` never expires: `service.rs:484` to `:476` (`RequestState::WaitingForOutcome { .. } => true,`).
+- Contract (reference, unchanged since #964): `contracts/src/SentinelOracle.sol:256-258` (`if (request.applyReveal(approve)) { finalize(requestId); }`), `contracts/src/libraries/SentinelOracleRequests.sol:172-174` (`FinalizeTooEarly`).
+
+What was run (`wt/rv-sen`, sources pasted into `mod tests`, then reverted):
+
+- `cargo test -p sentinel --bins poc_f_sen_002 -- --nocapture --test-threads=1` with `poc/F-SEN-002/run3/poc_service.run3.rs` (text-only copy of the run 1 PoC). Test 1 FAILED at "the request was silently dropped": the primary case reproduces. Test 2 FAILED with `commands = [Finalize]` at block 22: the premature `Finalize` is still emitted.
+- `qa2_sen::f2_sen_002a` FAILED: local tally 2 against 3 onchain, entry dropped at the second reveal, `Revealed(self)@124 → []`, `OracleResult@125 → []`. `qa2_sen::f2_sen_002b` FAILED: `Finalize` on a 2/2 local tally (2/3 onchain), `WaitingForOutcome` kept through `NewBlock(100130)` with no second `Finalize`.
+- New: `rv_sen_run3::f_sen_002_run3_mirror_case_recovers_when_the_last_reveal_auto_finalizes` passed: after the premature `Finalize` parks the entry, the uncounted committer's later reveal plus the same-transaction `OracleResult` produce our `Claim`.
+
+Notes:
+
+- At Aegis parameters one primary-case incident leaves 800 USDC.e of bond plus the fee share in the oracle until someone claims by hand; a sentinel whose engine is regularly slower than its peers drains its bond capital this way.
+- Counterparts: `F2-SEN-002` (outcomes re-run), `F2-SEN-010` (fixed), `F2-SEN-003` (the drop itself, canonical for it), `F-SEN-005` (the never-expiring `WaitingForOutcome`), `F-SEN-014` (finalize fan-out, changed by #964).
+
+## Practicality (PC3, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Actor | (a) Nobody: honest sentinels whose engines answer about one block apart. (b) One registered sentinel that commits early and never reveals (the stall `F2-SEN-002` added) |
+| Cost | (a) None. (b) 0.40 USDC.e slash per targeted request once someone finalizes, plus its own 800 USDC.e locked until it claims; gas |
+| Condition | This sentinel's own commit lands: Batched mode on Aegis today, every mode once `F3-SEN-001` / `F-SEN-008` is fixed. Since #964 the mirror case recovers whenever the uncounted committer reveals later (rv-sen variant passes), so the live losses are the primary case (a foreign reveal processed first) and variant (b) |
+| Gate | Gates 1 to 3 pass. Gate 4 in a reduced form: per occurrence 800 USDC.e of bond plus the fee share stay in the oracle until a manual `claim` (`contracts/src/SentinelOracle.sol:303-322`, no deadline); repeated occurrences drain the working balance until commits revert |
+| Practicality | practical for (a) once the gas-limit defect is fixed; conditional for (b) (a malicious registered sentinel, inside A2) |
+| Recommended severity | Medium (ledger High, rv-sen proposed High). Same defect as the run-3 row `F3-SEN-002` (reviewer and Critic Medium); one band for both |
+| Intended route and parameters | rv-sen re-ran the run-1 transition PoC and the run-2 `qa2_sen` tests at `361aaf3`; run 1's Phase 8 run used two real sentinel binaries with an 8 s engine (non-Aegis windows 30 and 15). QA3-SEN repeated the primary case at the Aegis windows through the real transition (`F3-SEN-002`) |
+| Cheapest settling change | The same as for `F3-SEN-002`: an end-to-end run at Aegis windows (6 and 6) with one engine stub delayed by 7 s, Batched mode, checking that the slow sentinel never claims |
+
+Reason. Run 1 rated High on "not recoverable by the running process" and a compounding drain. Both are true, but the funds are not lost: the operator recovers each bond with one `claim` from the sentinel's own key, and the drain is visible in the balance well before the sentinel stops voting. That matches Section 8's Medium row (recoverable impact under reachable conditions). Variant (b) is the argument for High (one registered sentinel freezes honest bond capital open-ended for 0.40 USDC.e per request, against the 12-block lock anyone can impose today); see the `F3-SEN-002` Practicality section for the full weighing. On Aegis today the whole row is gated by `F3-SEN-001`: no Direct-mode sentinel commits at all.
+
+## Confidence (CA3, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Result | Reproduced (Changed as rv-sen said). Final: Accepted, Medium, certainty 90 |
+| Reproductions | rv-sen's text-only copy of the run-1 PoC (`poc/F-SEN-002/run3/poc_service.run3.rs`) pasted into `mod tests` at `361aaf3`: both tests FAIL as recorded, which is the defect (the request is dropped while bonded; a premature `Finalize` is emitted), 1 of 1. rv-sen's `f_sen_002_run3_mirror_case_recovers_when_the_last_reveal_auto_finalizes` passes, 1 of 1, so the mirror case recovers when the uncounted committer reveals. The real-binary runs under `F3-SEN-002` (adversarial 1 of 1, honest undercount 4 of 4) are the same defect |
+| Route and parameters | Real `SentinelTransition`; the real-binary evidence is in `F3-SEN-002` |
+| Final severity | Medium, agree with PC3 (ledger High): a lock recoverable by a manual `claim`, not a loss; one band with `F3-SEN-002`. The run-1 text's mirror half no longer holds as written (#964) |
+| Certainty | 90 |
+| Evidence | `poc/F-SEN-002/ca3/poc-f-sen-002.txt`, `poc/F-SEN-002/ca3/rv-sen-mirror.txt` |
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-SEN-002`](F3-SEN-002.md) and [`F3-XC-001`](F3-XC-001.md) (CONFIRMS). This ID stays canonical.
+- Ledger values: Medium, certainty 90 (CA3 on this file and on `F3-SEN-002`).

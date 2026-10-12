@@ -1,0 +1,20 @@
+[review-cargo] 1 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-b; rebuilding them
+   Compiling validator v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-core-b/crates/validator)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.74s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-b/debug/deps/validator-dd9411993fa56ac3)
+
+running 1 test
+test state::sign::qa2a_val030_no_finality_wait::qa2a_approval_emits_attestation_share_without_reorg_safety ... 
+thread 'state::sign::qa2a_val030_no_finality_wait::qa2a_approval_emits_attestation_share_without_reorg_safety' (296337) panicked at crates/validator/src/state/sign.rs:1034:9:
+approval emits GenerateNonces in the same block, no finality wait
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    state::sign::qa2a_val030_no_finality_wait::qa2a_approval_emits_attestation_share_without_reorg_safety
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.24s
+
+error: test failed, to rerun pass `-p validator --bin validator`

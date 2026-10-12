@@ -27,7 +27,7 @@ Impact is missed participation only — no bond is at risk, because no commit wa
 | 3 | In-flight effects are aborted when the manager is dropped, i.e. at process exit | E2 | crates/core/src/effects.rs:28-36 | `/// Executes effects concurrently and yields their resumes as they complete.`<br>`///`<br>`/// The manager owns all spawned effect tasks. Dropping it aborts any effects`<br>`/// that are still in progress.`<br>`pub struct EffectManager<Handler, Effect, Resume> {`<br>`    handler: Arc<Handler>,`<br>`    tasks: JoinSet<Resume>,`<br>`    effect: PhantomData<fn(Effect)>,`<br>`}` |
 | 4 | A check is only ever created from a `TransactionProposed` event | E2 | crates/sentinel/src/service.rs:137-144 | `        (`<br>`            state,`<br>`            vec![Command::Effect(effect::Effect::EngineCheck {`<br>`                request_id,`<br>`                transaction: event.transaction,`<br>`                block,`<br>`            })],`<br>`        )` |
 | 5 | Replay starts at the earliest retained snapshot, so older logs are never re-delivered | E2 | crates/core/src/index/blocks.rs:256-266 | `            // The earliest retained snapshot is the rollback anchor. Replay`<br>`            // everything after it, but only emit an uncle when there are newer`<br>`            // snapshots to discard. A pruned warp may retain only its latest`<br>`            // snapshot, in which case we can continue directly from the next`<br>`            // block without a synthetic reorg.`<br>`            let uncle = indexed.safe.checked_add(1);`<br>`            if let Some(uncle) = uncle`<br>`                && uncle <= indexed.latest`<br>`            {`<br>`                self.queue.push_back(BlockUpdate::Uncle { number: uncle });`<br>`            }` |
-| 6 | The stranded entry is retired silently at its deadline | E2 | crates/sentinel/src/service.rs:390-399 | `    fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Commands<State, Self>) {`<br>`        let mut actions = Vec::new;`<br>``<br>`        state.0.retain(\|id, entry\| match entry {`<br>`            RequestState::WaitingForEngineCheck { deadline, request } => {`<br>`                block`<br>`                    <= request`<br>`                        .as_ref`<br>`                        .map_or(*deadline, \|request\| request.commit_deadline)`<br>`            }` |
+| 6 | The stranded entry is retired silently at its deadline | E2 | crates/sentinel/src/service.rs:390-399 | `    fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Commands<State, Self>) {`<br>`        let mut actions = Vec::new;`<br>``<br>` state.0.retain(\|id, entry\| match entry {`<br>` RequestState::WaitingForEngineCheck { deadline, request } => {`<br>` block`<br>` <= request`<br>` .as_ref`<br>` .map_or(\*deadline, \|request\| request.commit_deadline)`<br>` }` |
 
 ## Trigger
 
@@ -129,3 +129,27 @@ The new `metrics.rs` label (`ResolvedOutcome::RevealMissed`, `metrics.rs:84-89`)
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed, Low, 82% (E2), canonical `F-SEN-011`.** Run 2 filed no sentinel counterpart; the mechanism is carried generically by `F2-CORE-030` (REC-CORE), whose Critic names the in-flight sub-case explicitly — "effect still in flight at shutdown: the `JoinSet` dies with the process (`effects.rs:35-38`) and nothing re-creates it" — and whose reviewer prices the sentinel cost as "a missed vote rather than a slashed bond". The crate-level fact this file adds is not restated by run 2: `WaitingForEngineCheck` deliberately does not persist the `SafeTransaction` (`crates/sentinel/src/state.rs:29-32`, unchanged at `fe9e84c`), so the check _cannot_ be re-issued from state even with a re-issue hook, which is what decides the remediation (persist the transaction, or re-read the log by request id). Still valid: `effect.rs` unchanged; the stranded entry is now reaped one block earlier at `block < commit_deadline` (`service.rs:407-412`), still with no log line or metric. Run 1's Critic made `F-CORE-031` canonical for the core mechanism; run 2's `F2-CORE-030` option 1 (`pending_effects`/`Message::Restored` hook) is the same fix and, per its QA, "also covers effects still in flight at shutdown". Team disposition: none. See `state/run2/reconciliation/sentinel.md` §2, §6.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | Nothing in scope fixed it. #979 (`be86ee3`) records a verdict only after the engine answers, so a check that dies with the process leaves nothing to reuse, and nothing re-issues the effect. #975 (`c2f11bf`) added `proposal_timestamp` to the effect; the persisted state still lacks the transaction. |
+| Severity, certainty | Low, 82 unchanged; `known` (issue #973, `state/run3/settled.md` section 2) |
+| Evidence | E1: `poc/F2-CORE-030/run3/rv-sen-f-sen-011.txt` (source `poc/F2-SEN-001/run3/rv_sen_run3.rs`) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- The persisted state has no transaction: `crates/sentinel/src/state.rs:29-32`, unchanged (`WaitingForEngineCheck { deadline: u64, request: Option<Request> }`).
+- The effect carries it in memory only: `crates/sentinel/src/effect.rs:17-26` to `:30-35` (`EngineCheck { request_id, transaction, proposal_timestamp, block }`).
+- Effects die with the process: `crates/core/src/effects.rs:35-38` to `:37-41` ("Dropping it aborts any effects that are still in progress"; `tasks: JoinSet<Resume>`).
+- The orphan is retired silently: `service.rs:407-412` to `:404-409` (`block <= request.as_ref().map_or(*deadline, |request| request.commit_deadline)`); since #1014 it leaves at `NewBlock(commit_deadline + 1)`.
+
+What was run (`wt/rv-sen`, pasted into `mod tests`, reverted): `rv_sen_run3::f_sen_011_run3_restart_strands_in_flight_check_from_anchor_block`, through the real state machine at Aegis windows. The proposal is at block 100 with its check still in flight; the process restarts at 105; `Uncle{101}` restores snapshot 100 with `WaitingForEngineCheck`; blocks 101 to 107 replay. FAILED: `checks re-issued=[]`, entry gone after the commit deadline, no vote.
+
+Notes:
+
+- The assigned PoC folder `poc/F2-CORE-030` holds the core-level tests (re-run by the core re-validator, files `rv-core-a-*`). The sentinel-level test above is the crate consequence this row adds.
+- The same anchor mechanism with a bond posted is `F-SEN-001` variant (a), and with a live reorg instead of a restart, `F-SEN-001` variant (c); both reproduce at `361aaf3`.

@@ -1,0 +1,28 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins qa2_sen::f2_sen_001 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::qa2_sen::f2_sen_001a_restart_anchor_before_resume_strands_commitment ... [F2-SEN-001a] state after replayed Committed(self) @102: Some(WaitingForEngineCheck { deadline: 110, request: Some(Request { bond_target: 500, slash_amount: 500, commit_deadline: 120, reveal_deadline: 130 }) })
+[F2-SEN-001a] reveal_emitted=false tracked_after_commit_deadline=false
+
+thread 'service::tests::qa2_sen::f2_sen_001a_restart_anchor_before_resume_strands_commitment' (219076) panicked at crates/sentinel/src/service.rs:3318:13:
+F2-SEN-001 (a) reproduced: our commit landed onchain at 102, the restart rolled back to snapshot 100 (WaitingForEngineCheck), no Reveal was emitted through block 121, entry still tracked: false
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test service::tests::qa2_sen::f2_sen_001b_warp_page_delivers_own_commit_before_effect_respawns ... [F2-SEN-001b] state after the warp page (own Committed inside it): Some(WaitingForEngineCheck { deadline: 111, request: Some(Request { bond_target: 500, slash_amount: 500, commit_deadline: 120, reveal_deadline: 130 }) })
+[F2-SEN-001b] reveal_emitted=false tracked_after_commit_deadline=false
+
+thread 'service::tests::qa2_sen::f2_sen_001b_warp_page_delivers_own_commit_before_effect_respawns' (219080) panicked at crates/sentinel/src/service.rs:3386:13:
+F2-SEN-001 (b) reproduced: own Committed replayed inside the warp page before the effect re-spawned; resume started CollectingCommitments { self_committed: false }; no Reveal through block 121, entry tracked: false
+FAILED
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3::f_sen_001 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::rv_sen_run3::f_sen_001_run3_live_reorg_drops_resume_then_discards_own_commit ... [F-SEN-001 run3 c] replacement 101 → []; replacement 102 (own Committed) → []; entry=Some(WaitingForEngineCheck { deadline: 110, request: Some(Request { bond_target: 500, slash_amount: 500, commit_deadline: 106, reveal_deadline: 112 }) })
+[F-SEN-001 run3 c] reveal_emitted=false check_reissued=false tracked_at_reveal_deadline=false
+
+thread 'service::tests::rv_sen_run3::f_sen_001_run3_live_reorg_drops_resume_then_discards_own_commit' (219287) panicked at crates/sentinel/src/service.rs:4560:13:
+F-SEN-001 variant (c) reproduced at 361aaf3: depth-2 reorg restored snapshot 100 (WaitingForEngineCheck), the resume was lost, no check was re-issued, our replayed Committed was discarded and no Reveal was emitted through the reveal deadline
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED

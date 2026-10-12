@@ -1,0 +1,23 @@
+$ cargo test -p validator --bins poc_f3_val_031 -- --nocapture
+running 2 tests
+test state::sign::poc_f3_val_031::split_shares_drop_the_ceremony ... ok
+test state::sign::poc_f3_val_031::threshold_selection_restarts_instead_of_dropping ... ok
+test result: ok. 2 passed; 0 failed
+
+Driven through the real handle_sign_shared (records shares per root) and the real
+handle_signing_timeouts (CollectSigningShares branch, basis 5) via apply_transition.
+- split_shares_drop_the_ceremony: honest shares split 2+2 across roots R1,R2 at
+  threshold 3 (5 validators). No root reaches 3, so the session is DROPPED
+  (state.signing empty, sid unlinked, no restart Sign action).
+- threshold_selection_restarts_instead_of_dropping (control): one root with 3 of
+  5 shares -> the session RESTARTS (WaitingForRequest).
+
+Bite: the two tests are mutually controlling (same production code, different share
+distribution -> drop vs restart), so the drop test fails if the rule restarted on a
+sub-threshold split, and the control fails if it dropped a threshold selection.
+
+NOT executed here: the reorg that PRODUCES the split (an early nonce burn on a
+non-final block at the commitment deadline, then split RPC views). That trigger is
+traced E2 in the finding; the Critic rated the finding Plausible on exactly that
+point. This PoC proves the drop-vs-restart rule (the impact mechanism), not the
+reorg origin.

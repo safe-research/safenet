@@ -110,3 +110,40 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 ## Reconciliation (run 2)
 
 **Final combined status: Low, 70 %, Confirmed (impact bounded) — was Medium 48 %.** Mechanism confirmed by `F2-VAL-006` (second paragraph); `state/keygen.rs:715,722,840` unchanged. Checked at `fe9e84c`: `restart_key_gen_excluding` (`:1188-1224`) for a numbered epoch calls `start_key_gen` with a new participant set and consults no contract state, so every honest node moves together and the abort costs one extra ceremony; reaching `total >= threshold` against one accused needs `threshold` distinct plaintiffs. Genesis `Halted` branch is A16-Informational. See `state/run2/reconciliation/validator.md` (Sections 2, 3).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Fixed |
+| Changed by | `97f4cd1` "Count responded complaints towards the DKG compromise threshold" (#1019): `FROSTParticipantMap.respond` no longer decrements `accusations`, and the Rust side now counts late confirmation-round complaints as the contract does |
+| Severity, certainty | resolved (was Low 70) |
+| Evidence | E1: `poc/F-VAL-067/run3/` (Rust sequence test 1 passed; contract test pass; contract mutation fails) |
+
+The finding never had a PoC; its QA section specified the sequence (complaint, valid response, complaint) and both halves are now executed.
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- Rust, cumulative as before: `state/keygen.rs:714-722` is now `crates/validator/src/state/keygen.rs:725-735`; a valid response only removes the plaintiff from `unresponded` and leaves `total` (`:836-840`, `complaint.unresponded.remove(&event.plaintiff)`).
+- Contract, now cumulative too: `contracts/src/libraries/FROSTParticipantMap.sol:206-210`:
+
+  ```solidity
+  function respond(T storage self, address plaintiff, address accused) internal {
+      require(self.complaints[plaintiff][accused] == ComplaintStatus.SUBMITTED, NotComplaining());
+      self.complaints[plaintiff][accused] = ComplaintStatus.RESPONDED;
+      self.states[plaintiff].complaints--;
+  }
+  ```
+
+  with `totalAccusations = ++accusedState.accusations` at `:191` and `compromised = ... >= state.threshold` at `contracts/src/FROSTCoordinator.sol:477`.
+
+What was run:
+
+1. Rust, `poc/F-VAL-067/run3/counting.rs` wired into `state/keygen.rs` (reverted), `cargo test -p validator --bins state::keygen::`: 3 of 4 with real round-2 states; complaint, valid response, complaint, valid response, complaint against the same accused. No abort after two answered complaints (`total` stays 2, `unresponded` empty); the third restarts the ceremony without the accused. `1 passed`.
+2. Contract, the test #1019 added: `forge test --match-test test_KeyGenComplain_CompromisedByRespondedComplaints` (3 of 5; the accused answers the first two, the third compromises the group) passes.
+3. Variant, mutation: re-adding `self.states[accused].accusations--;` to `respond` (the pre-#1019 netting) fails that test with `KeyGenComplained param mismatch at compromised: expected=true, got=false`, the divergence this row described; restored with `git checkout`.
+
+Outputs: `poc/F-VAL-067/run3/RESULT.txt`, `RESULT-contract.txt`, `RESULT-contract-mutation-netting-restored.txt`.
+
+Notes: both sides now abort at the same complaint, the threshold-th distinct plaintiff against one accused, answered or not, which is the reading the Rust comment argued for. The remaining asymmetry the QA section noted (the contract never checks the revealed scalar, the Rust excludes on an invalid reveal) makes honest nodes restart rather than confirm, so the group cannot finalise around it; it is not a counting divergence. Counterpart `F2-VAL-006` paragraph 2 is resolved by the same commit; its paragraph 1 stays under F-VAL-003.

@@ -1,0 +1,5 @@
+max_in_flight_transactions = 0 -> Ok({"transactions": Config { mode: Direct { max_in_flight_transactions: 0 }, blocks_before_resubmit: 2, priority_fee_cap_percentage: None }})
+priority_fee_cap_percentage = nan -> Ok({"transactions": Config { mode: Direct { max_in_flight_transactions: 16 }, blocks_before_resubmit: 2, priority_fee_cap_percentage: Some(NaN) }})
+blocks_before_resubmit = 0 -> Ok({"transactions": Config { mode: Direct { max_in_flight_transactions: 16 }, blocks_before_resubmit: 0, priority_fee_cap_percentage: None }})
+accepted: ["max_in_flight_transactions = 0", "priority_fee_cap_percentage = nan", "blocks_before_resubmit = 0"]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s

@@ -318,3 +318,67 @@ Rust-only mechanism in unchanged code (`crates/validator` untouched by the merge
 ## Reconciliation (run 2)
 
 **Final combined status: High, 93 %, Confirmed — canonical; team: accepted.** Counterpart `F2-VAL-032` (EXTENDS; E1 92 %): an attacker-created 2-of-2 group and one `sign(G_att, m)` in the deterministic post-timeout block drops every honest validator's session, so the High no longer depends on `F-VAL-030`/`F-VAL-039`. See `state/run2/reconciliation/validator.md` (Section 1).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Fixed |
+| Changed by | `82d5419` "[Direct Nonce 6]: Sign without preprocessing" (#1036) removed the nonce lookup from `handle_sign` and with it the `(None, Some(WaitingForRequest { .. }))` arm; `a9023ac` (#1038) removed `NonceState::observe`. Team status unchanged: accepted risk (rmeissner on PR #905, confirmed by remedcu 2026-10-08; settled.md section 1). |
+| Severity, certainty | resolved in code (was High 93); the settled-risk entry no longer describes reachable behaviour |
+| Evidence | E1: `poc/F-VAL-032/run3/` (6 variants pass; restoring the drop arm fails V1, V2, V5) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`): the scrutinee `match (nonce, state.signing.remove(&event.message))` at `state/sign.rs:30-35` and the dropping arm at `:106-114` no longer exist. `handle_sign` is now `crates/validator/src/state/sign.rs:21-112`:
+
+```rust
+match state.signing.remove(&event.message) {
+    Some(SigningState::WaitingForRequest {
+        key_share,
+        group_id,
+        packet,
+        oracle_approved,
+        signers,
+        ..
+    }) if group_id == event.gid => match packet {
+```
+
+and every other session, a `WaitingForRequest` for another group included, falls to the re-inserting arm at `:94-101` (`state.signing.insert(event.message, other);`). No arm drops a session any more.
+
+What was run: `poc/F-VAL-032/run3/foreign_sign.rs` (adapted from `poc/F2-VAL-032/sign_tests_module.rs`; the nonce-chunk fixture is gone, `WaitingForRequest` gained `oracle_approved`, every event goes through `apply_transition`) wired into `state/sign.rs`, `cargo test -p validator --bins poc_f_val_032_run3`, `6 passed`. Variants, all against the full transition:
+
+- V1, the original route: `Sign(G_att, m)` from a group this validator does not track leaves the `WaitingForRequest` for `m` in place, no commands.
+- V2: the legitimate `Sign(G, m)` that follows still advances it to `CollectNonceCommitments` with one `GenerateNonces`.
+- V3: a foreign `Sign` against `WaitingForOracle`, `CollectNonceCommitments`, `CollectSigningShares` and `WaitingForAttestation` sessions leaves each unchanged.
+- V4, the H6 and F2-VAL-061 (b) route: 200 junk `Sign` calls on the legitimate group for other messages, then the real `Sign` at `sequence = 2^63`, is accepted (no sequence or chunk state exists).
+- V5, F2-VAL-032's deterministic post-timeout window: a share round times out into `WaitingForRequest { responsible: PEER1 }`, the attacker's foreign `Sign` lands first and is ignored, PEER1's `Sign` advances the session.
+- V6: a legitimate-group `Sign` for an untracked message leaves the tracked session alone.
+
+Mutation: re-adding a `Some(SigningState::WaitingForRequest { .. }) => {}` arm before `Some(other)` (the run-2 behaviour) makes V1, V2 and V5 fail; restored with `git checkout`. Outputs `poc/F-VAL-032/run3/RESULT.txt` and `RESULT-mutation-drop-arm-restored.txt`.
+
+Notes: the self-inflicted trigger (an unlinked chunk, F-VAL-030) and the griefing trigger (sequence burning, F-VAL-039) are gone with the nonce chunks. `Coordinator.sign` is still permissionless, so anyone can still emit `Sign(G, m)` on the legitimate group for a pending message; that starts the ceremony the responsible party would have started, with the first signature id every validator sees, and is not a drop. Counterpart `F2-VAL-032` is resolved by the same commit. Because this row is also a settled accepted risk, the head can file it either way; the code no longer has the behaviour the acceptance covered.
+
+## Fix verification (CA3-FIX, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Result | Fixed confirmed |
+| Fix | `82d5419` (#1036) and `a9023ac` (#1038): `handle_sign` matches `state.signing.remove(&event.message)` alone (`crates/validator/src/state/sign.rs:21-112`), and every session it does not advance falls to the re-inserting arm (`:94-101`) |
+| Re-validation re-run | Matches rv-val: `foreign_sign.rs` 6 of 6 |
+| New variants | 4, on oracle-backed `Packet::Transaction` sessions with an attacker's permissionless `Coordinator.sign` on the legitimate group; all keep the session; one bites the restored drop arm |
+| Confidence | 93 |
+| Evidence | E1: `poc/F-VAL-032/ca3-fix/RESULT.txt` |
+
+What was run: `cargo test -p validator --bins --locked --offline`, test filters `poc_f_val_032_run3` and `ca3fix_f_val_032`, with `--nocapture` and `--test-threads=1` (modules wired into `crate::state::sign`, reverted).
+
+Variants the re-validation did not list (`poc/F-VAL-032/ca3-fix/ca3fix_sign.rs`; rv-val's used rollover packets and a foreign group):
+
+1. W1: the attacker's `Sign(G, m)` lands before the responsible party's while the oracle has not voted. The session moves to `WaitingForOracle` under the attacker's signature id (deadline 100 + `oracle_timeout` 24), the responsible party's later `Sign` is ignored, and the approving `OracleResult` starts `GenerateNonces` for that one id. No drop.
+2. W2: front-run before the proposal is seen (the message is computable from the pending `proposeTransaction`): the `Sign` finds no session and is ignored; the session created afterwards advances on the next `Sign`.
+3. W3: an approved transaction packet (`oracle_approved: true`, the state a share-round timeout restart builds at `sign.rs:654-666`) and a foreign-group `Sign`: kept; the legitimate `Sign` goes straight to `GenerateNonces`.
+4. W4: 300 junk `Sign` calls on the legitimate group while the session waits for the oracle; the approval still starts nonce generation for the original id (F-VAL-039's shape on the replacement).
+
+Mutation: re-adding the arm that drops a `WaitingForRequest` (`Some(SigningState::WaitingForRequest { .. }) => {}` before `Some(other)`) fails rv-val V1, V2, V5 and W3. W1, W2 and W4 still pass: they take the matching-group arm, which the drop arm does not touch.
+
+Notes: the settled.md entry "A `Sign` event for another group dropping a pending signing session" (accepted risk) no longer describes reachable behaviour at `361aaf3` (V1, V5, W3 here). An attacker can still emit `Sign(G, m)` first (W1); that starts the ceremony the responsible party would have started, with the same signers.

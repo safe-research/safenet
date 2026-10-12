@@ -100,3 +100,26 @@ Option 3 (`catch_unwind` in `spawn` plus a `from_panic` bound on the service) ke
 ## Reconciliation (run 2)
 
 **Final: Plausible, Low, 45 (E2, no trigger), canonical — missed by run 2.** Run 2's R2 rejected 9 covers cancel-safety of `join_next`, not task failure; no run-2 log considers a panicking effect task. Still valid at `fe9e84c`: `EffectManager::next` still documents "Task failures are logged and skipped" (`effects.rs:76-79` after the housekeeping drift). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed this code (`effects.rs` differs from `fe9e84c` by one doc word, "pre-committed nonces" to "signing nonces") |
+| Severity, certainty | unchanged (Low, 45; mechanism verified, no trigger) |
+| Evidence | E1 for the mechanism: the existing test `skips_panicked_tasks_without_losing_successful_resumes`, output in `poc/F-CORE-032/run3/` |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `effects.rs:74-89` to `:86-101`: `pub async fn next(&mut self) -> Resume {` / `loop {` / `match self.tasks.join_next().await {` ... `Some(Err(err)) => tracing::error!(?err, "unexpected effect task failure"),`
+- `effects.rs:64-68` to `:76-79`: `/// Waits for and returns the next successfully completed effect.` / `///` / `/// Task failures are logged and skipped. If no effect tasks are in`
+- `effects.rs:209-219` to `:256-266`: `async fn skips_panicked_tasks_without_losing_successful_resumes() {` / `let mut manager = manager();` / `manager.spawn(TestEffect::Panic);`
+- `effects.rs:15-19` to `:16-20`: `/// Note that this method explicitly does not fail, and is expected to return`
+- `driver.rs:193-196` to `:195-198`: `if let Err(err) = result {` / `tracing::error!(?err, "unrecoverable driver error; exiting");` / `break;`
+- `metrics.rs:80-90` to `:98-107` (`initialize`): the crate's metrics are `rpc_requests_total`, `block_number`, `uncled_blocks_total` and, since #1003, the two batch histograms; none counts a failed effect task
+
+What was run: the existing test in the batch `cargo test -p safenet-core --lib -- --nocapture --test-threads=1 ... skips_panicked_tasks_without_losing_successful_resumes ...`: the panicking task prints `effect task panicked` and the test passes, so the panic is skipped and only the other task's resume (42) is returned. A search of the non-test code of `crates/validator/src/service/effect.rs`, `crates/sentinel/src/effect.rs`, `crates/sentinel/src/verdicts.rs`, `crates/sentinel/src/engine.rs` and `crates/validator/src/secrets/store.rs` for `unwrap()`, `expect(`, `panic!` and `unreachable!` finds none, so no current trigger is known.
+
+Notes: the Direct Nonce effects (`GenerateNonces`, `UseNonces`) and the sentinel verdict store add new handler code on this path; a future panic there would drop a resume in the same way. `F-VAL-061` remains the validator-side neighbour.

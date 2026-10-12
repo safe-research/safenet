@@ -65,3 +65,27 @@ Verdict: **Confirmed** (the mechanism is as stated; the trigger is the provider 
 ## Reconciliation (run 2)
 
 **Final: NEW in run 2 — Informational, 70 (E2), canonical.** No run-1 finding covers the default (non-client-filtered) path's absence of any completeness check; run 1 noted only that `may_contain_log` has no production caller (inside `F-CORE-002`'s Trail). Related run-1 findings: `F-CORE-002` (client-filtered path), `F-CORE-012` (bloom equality blind spot) (`state/run2/reconciliation/core.md` §1).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed the default path (`index/bloom.rs` byte-identical; `mod bloom` still `#[allow(dead_code)]`). #1010 made `block_propagation_delay` per-network; the Gnosis default is still 500 ms |
+| Severity, certainty | severity unchanged (Informational); certainty 70 to 80 proposed: the empty-answer acceptance is now executed (E1) |
+| Evidence | E1 `poc/F2-CORE-003/run3/` (first executed PoC for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/events.rs:375-377` and `:404-411` to `:460` and `:496-503`: `Fetch::SingleQuery(BlockFilter::Hash(block_hash))` and `let filter = blocks` / `.into_filter()` / `.address(self.addresses.clone())` / `.event_signature(self.topics.clone());` / `let logs = self.provider.get_logs(&filter).await?;` / `self.check_logs_limit(logs)?`
+- `index/events.rs:190-195` to `:208-214`: `Block {` / `block_number: u64,` / `block_hash: B256,` / `block_timestamp: u64,` / `logs_bloom: Bloom,` / `retries: u64,`
+- `index/mod.rs:5-6`: unchanged, `#[allow(dead_code)]` / `mod bloom;`
+- `index/bloom.rs:17-23`: unchanged, ``/// Because bloom membership has no false negatives, a `false` result guarantees`` ... `pub fn may_contain_log(bloom: &Bloom, addresses: &[Address], topics: &[B256]) -> bool {`
+- `index/events.rs:99` to `:110`: `use_client_filtering: false,`
+- `index/blocks.rs:81` and `:548-551` to `:57-61` (Gnosis `block_propagation_delay: 500`) and `:605-608`
+- `docs/validator-handbook.md:33-37` to `:37-39` (reference only): "an empty array will be returned even if there are logs in that block"
+
+What was run: `rv3_f2_core_003_default_path_accepts_an_empty_answer_the_bloom_contradicts` in the batch `cargo test -p safenet-core --lib -- --nocapture --test-threads=1 ... index::events::tests::rv3_`. With the default configuration, a header bloom for which `bloom::may_contain_log(&header_bloom, &[WATCHED], &topics)` is `true`, and a node that answers `[]`, the first attempt returns `Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))` and the watcher is idle after one request. `grep -rn may_contain_log crates/` outside `bloom.rs` finds no caller.
+
+Notes: the run-2 Critic's weight correction still applies (a dense Gnosis bloom says "maybe" for most blocks, so a bloom gate would retry often and still miss partial answers). Related rows `F-CORE-002` and `F-CORE-012` hold.

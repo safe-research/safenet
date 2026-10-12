@@ -1,0 +1,17 @@
+
+running 1 test
+test state::keygen::qa2a_xc100_two_victims::qa2a_last_committer_cancels_two_victims_and_skips_the_rollover ... all 5 crafted commitments verify (PoK of c[0] and PoP of q)
+survivor 0x1000000000000000000000000000000000000001 share y is a real curve point
+survivor 0x2000000000000000000000000000000000000002 share y is a real curve point
+victim 0x3000000000000000000000000000000000000003 share y = (0, 0)  [rejected on chain by NotOnCurve]
+victim 0x4000000000000000000000000000000000000004 share y = (0, 0)  [rejected on chain by NotOnCurve]
+after commitments: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=[], deadline=Some(1561))
+poisoned group 0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000 proceeds to share collection (defect present)
+after share from 0x1000000000000000000000000000000000000001: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=[0x1000000000000000000000000000000000000001], deadline=Some(1561))
+after share from 0x2000000000000000000000000000000000000002: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=[0x1000000000000000000000000000000000000001, 0x2000000000000000000000000000000000000002], deadline=Some(1561))
+after NewBlock(1561) share deadline: EpochSkipped(2)
+RESULT: exclude {attacker, V1, V2} -> 2 of 5 remain < min_participants(5)=4 -> rollover_failure -> EpochSkipped(2)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 47 filtered out; finished in 0.09s
+

@@ -1,0 +1,8 @@
+$ cargo test -p validator --bins -- poc_f_val_032_run3 poc_f_val_034_run3 poc_f_val_040_run3 poc_f_val_030_run3 poc_f_val_061_run3 --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3; modules wired into state/sign.rs and service/effect.rs, reverted afterwards)
+test state::sign::poc_f_val_040_run3::last_share_makes_the_sharer_responsible_for_the_restart ... first timeout (block 100): responsible = Some(0x90f79bf6eb2c4f870365e785982e1f101e93b906) (M = 0x90F79bf6EB2c4f870365E785982E1f101E93b906), ME queues 0 Sign
+second timeout (block 106): ME queues 1 Sign
+ok
+test state::sign::poc_f_val_040_run3::repeated_commitment_is_ignored ... after M, A, M(repeat): 2 commitments recorded
+ok
+
+(full run) test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 0.53s

@@ -1,0 +1,12 @@
+No files changed, compilation skipped
+
+Ran 1 test for test/IdentityShare.t.sol:IdentityShareTest
+[PASS] test_VictimShareWithIdentityKeyReverts() (gas: 3469214)
+Logs:
+  all 5 commitments accepted onchain, attacker last
+  victim keyGenSecretShare reverted with Secp256k1.NotOnCurve
+  group stuck in SHARING (keyGenConfirm reverts GroupNotReady)
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.76ms (1.50ms CPU time)
+
+Ran 1 test suite in 2.14ms (1.76ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

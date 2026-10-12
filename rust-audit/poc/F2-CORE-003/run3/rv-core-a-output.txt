@@ -1,0 +1,13 @@
+# rv-core-a run 3 re-run, audit commit 361aaf3 (worktree wt/rv-core-a), 2026-10-08
+# command: cargo test -p safenet-core --lib -- --nocapture --test-threads=1 index::events::tests::poc_f_core_002 index::events::tests::qa_f2_core_002 index::events::tests::rv3_
+# sources: the rv-core-a-*.rs files in this folder (and the sibling run3 folders of the same batch), injected into the mod tests of crates/core/src/index/events.rs; reverted afterwards with git checkout
+# excerpt: only this finding's tests are shown; the batch ran 10 tests (8 passed, 2 failed by design: the run-1 PoC tests fail at their key assertion when the defect is present)
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.23s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/safenet_core-1a555efd99e0fbb6)
+running 10 tests
+test index::events::tests::rv3_f2_core_003_default_path_accepts_an_empty_answer_the_bloom_contradicts ... default SingleQuery, node serves [] for a bloom-positive block: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+ok
+failures:
+failures:
+test result: FAILED. 8 passed; 2 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s

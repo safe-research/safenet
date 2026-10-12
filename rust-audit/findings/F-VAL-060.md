@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | QA-done |
+| Status | Final: Accepted |
 | Crate and module | validator, state/mod.rs + service/mod.rs + main.rs |
 | Location | crates/validator/src/state/mod.rs:415-462 (related: crates/validator/src/service/mod.rs:102-115, crates/validator/src/main.rs:56-57, crates/core/src/index/events.rs:403-409, crates/validator/src/state/keygen.rs:713-731, crates/validator/src/state/keygen.rs:1195-1224) |
 | Severity | High / Medium |
-| Certainty | 50% (Critic C-VAL-B; QA may raise) |
+| Certainty | 90% (CA3: mechanism re-executed; Aegis precondition re-checked false) |
 | Assumptions involved | A1, A2, A4 |
 | Tags | input-validation, crypto, dos |
 
@@ -34,8 +34,8 @@ Reachable consequences of one injectable address, all of which need only a log w
 | 3 | Configured oracle contracts join the same watched address set as the two trusted contracts | E2 | `crates/validator/src/main.rs:56-57` | `    let mut watched = vec![consensus, coordinator];`<br>`    watched.extend(config.validator.oracles.iter.copied);` |
 | 4 | The log filter is the cross product of every watched address with every watched topic | E2 | `crates/core/src/index/events.rs:402-409` | `    async fn fetch_logs(&self, fetch: Fetch) -> Result<Vec<EventLog<E>>, Error> {`<br>`        let logs = match fetch {`<br>`            Fetch::SingleQuery(blocks) => {`<br>`                let filter = blocks`<br>`                    .into_filter`<br>`                    .address(self.addresses.clone)`<br>`                    .event_signature(self.topics.clone);`<br>`                let logs = self.provider.get_logs(&filter).await?;` |
 | 5 | Decoding ignores the address; it is only carried alongside the decoded data | E2 | `crates/core/src/index/events.rs:491-503` | `fn decode_and_sort<E>(logs: &[Log]) -> Result<Vec<EventLog<E>>, Error>`<br>`where`<br>`    E: Events,`<br>`{`<br>`    let mut logs = logs`<br>`        .iter`<br>`        .map(\|log\| {`<br>`            E::decode_log(log.topics, &log.data.data)`<br>`                .and_then(\|data\| {`<br>`                    Some(EventLog {`<br>`                        block: log.block_number?,`<br>`                        index: log.log_index?,`<br>`                        address: log.inner.address,` |
-| 6a | Complaints are counted per accused with no address, plaintiff-membership or per-plaintiff-uniqueness check | E2 | `crates/validator/src/state/keygen.rs:714-722` | `        let complaint = complaints.entry(event.accused).or_default;`<br>`        complaint.total += 1;`<br>`        complaint.unresponded += 1;`<br>``<br>`        // If we ever get threshold complaints, the keygen is done. This is`<br>`        // because it would reveal sufficient public information to compute`<br>`        // secret key shares from one or more participants.`<br>`        let (_, threshold) = group.size;`<br>`        if complaint.total >= threshold {` |
-| 6b | Reaching `threshold` restarts the ceremony excluding the accused | E2 | `crates/validator/src/state/keygen.rs:728-730` | `            let excluded = group.also_exclude(iter::once(event.accused));`<br>``<br>`            return self.restart_key_gen_excluding(state, next_epoch, excluded, restart_deadline);` |
+| 6a | Complaints are counted per accused with no address, plaintiff-membership or per-plaintiff-uniqueness check | E2 | `crates/validator/src/state/keygen.rs:714-722` | `        let complaint = complaints.entry(event.accused).or_default;`<br>`        complaint.total += 1;`<br>`        complaint.unresponded += 1;`<br>``<br>` // If we ever get threshold complaints, the keygen is done. This is`<br>` // because it would reveal sufficient public information to compute`<br>` // secret key shares from one or more participants.`<br>` let (\_, threshold) = group.size;`<br>` if complaint.total >= threshold {` |
+| 6b | Reaching `threshold` restarts the ceremony excluding the accused | E2 | `crates/validator/src/state/keygen.rs:728-730` | `            let excluded = group.also_exclude(iter::once(event.accused));`<br>``<br>` return self.restart_key_gen_excluding(state, next_epoch, excluded, restart_deadline);` |
 | 6c | When the accused is this validator, a plaintext scalar is queued for onchain publication | E2 | `crates/validator/src/state/keygen.rs:733-744` | `        let mut commands = Vec::new;`<br>`        if let KeyGenParticipation::Participating(sharing_state) = participation`<br>`            && event.accused == self.account`<br>`        {`<br>`            match frost::keygen::reveal_secret_share(sharing_state, event.plaintiff) {`<br>`                Ok(secret_share) => {`<br>`                    commands.push(Command::Action(Action::KeyGenComplaintResponse {`<br>`                        group_id: group.id,`<br>`                        plaintiff: event.plaintiff,`<br>`                        secret_share,`<br>`                        expires_at: response_expires_at,`<br>`                    }));` |
 | 7a | A restart during genesis cannot re-form a participant set | E2 | `crates/validator/src/state/keygen.rs:1204-1210` | `        } else {`<br>`            // In case we need to restart keygen during genesis - halt! The`<br>`            // The genesis keygen is special in that it cannot be restart`<br>`            // since the group ID has special authorization, and any restart`<br>`            // would issue a new and different group ID`<br>`            None`<br>`        };` |
 | 7b | and therefore falls through to `rollover_failure` | E2 | `crates/validator/src/state/keygen.rs:1214-1219` | `            None => (`<br>`                State {`<br>`                    rollover: rollover_failure(`<br>`                        next_epoch,`<br>`                        "could not form new participant set to restart keygen",`<br>`                    ),` |
@@ -186,3 +186,62 @@ Computed with `cast keccak`. The new topic collides with nothing in the Coordina
 ## Reconciliation (run 2)
 
 **Final combined status: High, 90 %, Confirmed, conditional on a malicious or compromised allow-listed oracle — canonical.** Counterpart `F2-VAL-061` (EXTENDS; E1 90 %: plaintext-polynomial calldata, `sequence = 2^63` liveness kill, malformed-log indexer halt). Run 1's Critic cut to Medium on the precondition's likelihood; the report carries High with the precondition stated. Core half: `F-CORE-006` / `F2-CORE-004` (REC-CORE). See `state/run2/reconciliation/validator.md` (Section 1).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | the dispatch is unchanged. The Direct Nonce work (`82d5419` #1036, `a9023ac` #1038) removed scenario (b) of `F2-VAL-061` (a forged `Sign` with a huge `sequence`); scenario (a) is unchanged and now executed end to end |
+| Severity, certainty | unchanged, High conditional on a malicious or compromised allow-listed oracle, 90 |
+| Evidence | E1: `poc/F-VAL-060/run3/` (1 passed) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- Dispatch without the emitter: `state/mod.rs:415-462` is now `crates/validator/src/state/mod.rs:396-442`. Every `Coordinator::*` and `Consensus::*` arm passes only `log.block.number` and the event; `log.address` reaches only `handle_oracle_result` (`:438`).
+- Watched set, unchanged: `crates/validator/src/main.rs:56-57` (`let mut watched = vec![consensus, coordinator];` then the configured `oracles`).
+- Core still filters the address-by-topic cross product and decodes by `topic0` alone: `crates/core/src/index/events.rs:552` and `:685` (`E::decode_log(log.topics(), &log.data().data)`).
+- The plaintext response path the forged complaint reaches: `crates/validator/src/state/keygen.rs:747-758`.
+
+What was run: `poc/F-VAL-060/run3/forged_complaints.rs` wired into `state/keygen.rs` (reverted), `cargo test -p validator --bins state::keygen::`. At the Aegis size (3 of 5, one attacker member), two `KeyGenComplained { accused: ME }` logs whose `address` is the allow-listed oracle, not the coordinator, are fed through `apply_transition`. Each queues a `KeyGenComplaintResponse` with ME's plaintext share for the named plaintiff; with the attacker member's own share from ME that is three points of ME's degree-2 polynomial, and Lagrange at zero gives `f_me(0)` with `f_me(0) * G` equal to ME's published `c[0]`. Two complaints stay below the restart threshold. `1 passed`, output `poc/F-VAL-060/run3/RESULT.txt`.
+
+Why Changed:
+
+- Scenario (b) of `F2-VAL-061` (forged `Sign` with `sequence = 2^63` stops the validator signing for the epoch) no longer exists: the validator keeps no sequence state (F-VAL-036 Moot; F-VAL-032 run-3 variant V4 executes the same input and the real request is accepted).
+- Scenario (a) is unchanged and the executed impact is now concrete. The same two forged complaints against each honest member, answered on the wire, give the attacker every honest polynomial, so a member that also controls an allow-listed oracle recovers the group secret. The coordinator rejects the responses (`NotComplaining`), but the queue broadcasts them without simulation (`crates/core/src/tx/mod.rs:332`, `send_raw_transaction`).
+- Scenario (c) (a malformed log with a watched `topic0` fails `decode_and_sort` and the block is retried forever) is core behaviour and unchanged at `events.rs:685-708`; it belongs to `F-CORE-006` / `F2-CORE-004`.
+
+Severity: the executed outcome is in the Critical class (recovery of key shares), but it needs a malicious or compromised contract in `[validator] oracles` plus one malicious member, which is why run 2 rated it High conditional; I keep that rating. Counterparts `F2-VAL-061` (service side) and `F-CORE-006` (core side).
+
+## Practicality (PC3, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Actor | Whoever controls a contract listed in a validator's `oracles`, together with one malicious group member (for the key-recovery outcome rv-val executed) |
+| Cost | n/a on Aegis: no listed contract can be made to emit the logs |
+| Condition | A contract in `[validator] oracles` that can emit a log with a `FROSTCoordinator` or `Consensus` `topic0`. The published Aegis validator configuration lists exactly one oracle, the `SentinelOracle` `0x4F61B8832978e83b80D69551AEf07557DBE41d03` (`docs/configuration.md:87`) |
+| Gate | Fails gates 2 and 3 on Aegis. The listed oracle is not upgradeable and cannot emit foreign events (evidence below), so the dispatch gap is unreachable in the deployed configuration; reaching it needs an operator (trusted, A1) to list a different contract, and no unprivileged amplifier exists |
+| Practicality | theoretical on Aegis (the only listed oracle is immutable and emits only its own 16 events, none of which shares a `topic0` with a `Coordinator` or `Consensus` event) |
+| Recommended severity | Medium (ledger High conditional, rv-val unchanged): the missing address check stays a hardening item because `oracles` is an operator-extensible list and the fix is one comparison; it returns to High the day an Aegis operator lists a third-party, upgradeable or arbitrary-log-capable contract |
+| Intended route and parameters | rv-val fed two forged `KeyGenComplained` logs with the oracle's address straight into `apply_transition` at 3 of 5; that is the right route for the mechanism, and the open question was only whether a listed oracle can produce such logs |
+| Cheapest settling change | None needed |
+
+Evidence for the Aegis oracle (executed by PC3, `rust-audit/poc/F-VAL-060/pc3/`):
+
+- Topic sets from the forge artifacts built at `361aaf3` (`topics-at-361aaf3.txt`): `SentinelOracle` declares 16 events (its own plus `OracleResult`, `NewRequest`, `Committed`, `Revealed`, `SentinelScheduled`, `SentinelRemoved`, `BondConfigScheduled` from its libraries); the overlap with the 10 `FROSTCoordinator` and 6 `Consensus` events is empty. `OracleResult` is the one event the validator is meant to take from an oracle, and it binds the address (`handle_oracle_result`).
+- Bytecode census of the same build (`bytecode-at-361aaf3.txt`): no `DELEGATECALL`, `CALLCODE`, `SELFDESTRUCT`, `CREATE` or `CREATE2`; one `CALL` site (SafeERC20 to the immutable `FEE_TOKEN`, whose logs carry the token's address); 13 `LOG` sites; no `Coordinator` or `Consensus` `topic0` appears anywhere in the runtime bytecode, including with leading zero bytes trimmed. So the deployed code can only ever log its own topics.
+- Not upgradeable and not owned: no proxy or assembly in `contracts/src/SentinelOracle.sol` or its libraries; `GOVERNANCE` is an immutable address (`:58`) whose functions add or remove sentinels and schedule parameters only (`:368-409`). The sources are unchanged since `0be9636` (2026-09-23), before the 2026-10-07 deployment, and the overview records a Sourcify exact match for the deployed contract.
+
+Reason. On Aegis the precondition C-VAL-B left open is now settled: false for the deployed configuration. The mechanism is real and the executed outcome (an honest member's polynomial recovered) is Critical-class, which is why the row should stay open as a hardening fix rather than drop to Low, but nobody can reach it on Aegis without an operator first listing a hostile contract.
+
+## Confidence (CA3, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Result | Reproduced; precondition false on Aegis. Final: Accepted, Medium, certainty 90 |
+| Reproductions | rv-val's `forged_complaints_from_an_oracle_address_leak_the_polynomial` at 3 of 5: 1 of 1 (two forged complaints from an oracle address answered; `f_me(0) * G` matches `c_me[0]`). PC3's checks on the `SentinelOracle` artifact built at `361aaf3`: 1 of 1 (no `Coordinator` or `Consensus` topic0 in the runtime bytecode; 15 of its 16 own topic0 present; opcode census 1 `CALL`, 13 `LOG`, no `DELEGATECALL`, `CALLCODE`, `SELFDESTRUCT`, `CREATE` or `CREATE2`). Added check: none of its 16 events is `anonymous`, so every log it emits starts with its own constant topic0 |
+| Route and parameters | The forged logs go through the real `apply_transition`; the Aegis validator config lists only the `SentinelOracle` (`docs/configuration.md:87`, checked) |
+| Final severity | Medium, agree with PC3: unreachable on Aegis today (needs the trusted operator to list a hostile, upgradeable or arbitrary-log contract), but the impact if reached is key-share recovery and the fix is one address comparison. Low is defensible only if the team commits to listing nothing but the `SentinelOracle`; it returns to High the day a listed oracle can emit foreign topics |
+| Certainty | 90 |
+| Evidence | `poc/F-VAL-060/ca3/` (`forged-complaints.txt`, `bytecode-check.txt`, `opcode-census.txt`) |

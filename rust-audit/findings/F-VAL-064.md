@@ -14,7 +14,7 @@
 
 Three independently minor gaps in the validator's deployment surface compose into one operationally significant one: **a validator that has fatally stopped is indistinguishable from a validator that shut down cleanly, from every angle the shipped artefacts expose.**
 
-- `Driver::run` returns ``. It logs `error!` and breaks its loop on an unrecoverable watcher error — including `ExceededMaxReorgDepth`, the "deliberate exit" that A5 makes the designed response to a deep reorg — and on any unrecoverable driver error. `main` then does `driver.run.await;` followed by `Ok()`, so the process exits with status **0** in exactly the cases where it must not. Under Kubernetes `restartPolicy: OnFailure` (the natural choice for a stateful, single-writer service) the pod is marked `Completed` and never restarted; under systemd `Restart=on-failure` the unit stays stopped; any alert keyed on a non-zero exit sees a clean shutdown. `main` has no way to do better because `run` does not report why it returned.
+- `Driver::run` returns ``. It logs `error!`and breaks its loop on an unrecoverable watcher error — including`ExceededMaxReorgDepth`, the "deliberate exit" that A5 makes the designed response to a deep reorg — and on any unrecoverable driver error. `main`then does`driver.run.await;`followed by`Ok()`, so the process exits with status **0** in exactly the cases where it must not. Under Kubernetes `restartPolicy: OnFailure`(the natural choice for a stateful, single-writer service) the pod is marked`Completed`and never restarted; under systemd`Restart=on-failure`the unit stays stopped; any alert keyed on a non-zero exit sees a clean shutdown.`main`has no way to do better because`run` does not report why it returned.
 - The one liveness surface, `/health` on the metrics listener, binds to `127.0.0.1:0` by default — an ephemeral port on loopback, so neither the port nor the address is knowable to a container probe. `validator.sample.toml` ships the `metrics_address` override commented out, and the `Dockerfile` declares no `EXPOSE` and no `HEALTHCHECK`. A validator following the sample has no reachable health endpoint at all.
 - The runtime image declares no `USER`, so the binary runs as **root** inside the container. This one is not covered by A1: A1 says the operator provisions secrets honestly, not that the process should hold more privilege than it needs. The validator's job is to read one TOML file and read/write one SQLite file; running it as uid 0 means any memory-safety or logic escape in the process (or in `libsqlite3`, the one C dependency it links) starts from root, and a bind-mounted data directory ends up root-owned on the host.
 
@@ -28,7 +28,7 @@ Two smaller image-hygiene points in the same file: both base images are floating
 | 2 | There is no `.dockerignore` at the repository root, and the builder copies the whole `crates/` tree | E2 | `crates/validator/Dockerfile:15-18` | `COPY Cargo.toml Cargo.lock ./`<br>`COPY crates/ crates/`<br>``<br>`RUN cargo build --release --locked --package validator` |
 | 3 | Both base images are floating tags with no digest pin | E2 | `crates/validator/Dockerfile:5 and :24` | `FROM rust:1-slim AS builder`<br>`FROM debian:trixie-slim AS runner` |
 | 4 | The driver logs and breaks out of its loop on any unrecoverable error, returning normally | E2 | `crates/core/src/driver.rs:186-197` | `            let result = match input {`<br>`                Err(err) => {`<br>`                    tracing::error!(?err, "unrecoverable watcher error; exiting");`<br>`                    break;`<br>`                }`<br>`                Ok(input) => self.update(input).await,`<br>`            };`<br>`            if let Err(err) = result {`<br>`                tracing::error!(?err, "unrecoverable driver error; exiting");`<br>`                break;`<br>`            }`<br>`        }` |
-| 5 | and `main` discards that outcome and returns `Ok()`, so the process exit code is 0 | E2 | `crates/validator/src/main.rs:95-99` | `    tracing::info!("starting validator service");`<br>`    driver.run.await;`<br>``<br>`    Ok()`<br>`}` |
+| 5 | and `main` discards that outcome and returns `Ok()`, so the process exit code is 0 | E2 | `crates/validator/src/main.rs:95-99` | `    tracing::info!("starting validator service");`<br>`    driver.run.await;`<br>``<br>` Ok()`<br>`}` |
 | 6 | The only liveness surface is the metrics listener's `/health`, which defaults to an ephemeral port on loopback and so is unreachable from a container probe unless the operator overrides it | E2 | `crates/core/src/observability/mod.rs:23-26` | `    /// The address the Prometheus metrics HTTP listener binds to (see`<br>`    /// [`metrics::serve`]). Defaults to `127.0.0.1:0`, which picks an ephemeral`<br>`    /// port on the loopback interface.`<br>`    pub metrics_address: SocketAddr,` |
 | 7 | and the sample config ships that override commented out | E2 | `crates/validator/validator.sample.toml:61-64` | `# Optional: address the Prometheus metrics HTTP listener binds to. Defaults`<br>`# to an ephemeral port on loopback; set this to expose metrics outside a`<br>`# container (see the validator handbook's "Logging and Metrics" section).`<br>`# metrics_address = "0.0.0.0:3555"` |
 
@@ -67,7 +67,7 @@ Derived from `main.rs:32-99`, `crates/validator/Dockerfile` in full, `core/drive
 
 Three of four **Supported**; one is **Unsupported → `H`**.
 
-- **Exit code — Supported.** `Driver::run` returns ``, logging `error!` and `break`ing on both the unrecoverable-watcher and unrecoverable-driver arms (`core/driver.rs:186-196`), and `main` does `driver.run.await;` then `Ok()` (`main.rs:96-98`). Process status 0 on a fatal stop. The `ExceededMaxReorgDepth` path really is routed to `run` rather than retried (`core/driver.rs:211-215`), so A5's designed exit is one of the cases that returns 0.
+- **Exit code — Supported.** `Driver::run` returns ``, logging `error!`and`break`ing on both the unrecoverable-watcher and unrecoverable-driver arms (`core/driver.rs:186-196`), and `main`does`driver.run.await;`then`Ok()` (`main.rs:96-98`). Process status 0 on a fatal stop. The `ExceededMaxReorgDepth`path really is routed to`run` rather than retried (`core/driver.rs:211-215`), so A5's designed exit is one of the cases that returns 0.
 - **Health — Supported.** `observability::Config::default` is `metrics_address: SocketAddr::from((Ipv4Addr::LOCALHOST, 0))` (`core/observability/mod.rs:33`), `validator.sample.toml:61-64` ships the override commented out, and the Dockerfile declares no `EXPOSE` and no `HEALTHCHECK`. An ephemeral loopback port is not probeable from outside the container.
 - **Root — Supported.** No `USER` line exists in the file; the runtime stage is `FROM debian:trixie-slim`, `COPY --from=builder ... ./validator`, `ENTRYPOINT ["./validator"]` (`Dockerfile:24-37`). Floating base tags confirmed at `:5` and `:24`.
 - **`.dockerignore` — Unsupported, marked `H`.** The Claim states "there is no `.dockerignore` anywhere in the repository", and the Trail says the absence "was confirmed by grep over all three Dockerfiles and an `ls` at the repository root". The checkout contradicts it: `crates/validator/Dockerfile.dockerignore` exists (42 bytes, 4 lines) and contains
@@ -116,7 +116,7 @@ The exit-code claim is the only one with a mechanical check, and it is a shell o
 cargo run -p validator -- --config-file validator.toml ; echo "exit=$?"
 ```
 
-`Driver::run` returns `` (`crates/core/src/driver.rs:186-197`), so `main` returns `Ok()` and the process exits 0 whether the driver shut down cleanly or bailed out on a deep reorg. Asserting `exit != 0` after injecting a reorg deeper than `max_reorg_depth` is the acceptance test for remediation option 1, and the finding is right that the existing deep-reorg scenario in `integration.yml` already sets up the state it needs — extending that workflow is cheaper than building anything new.
+`Driver::run` returns `` (`crates/core/src/driver.rs:186-197`), so `main`returns`Ok()`and the process exits 0 whether the driver shut down cleanly or bailed out on a deep reorg. Asserting`exit != 0`after injecting a reorg deeper than`max_reorg_depth`is the acceptance test for remediation option 1, and the finding is right that the existing deep-reorg scenario in`integration.yml` already sets up the state it needs — extending that workflow is cheaper than building anything new.
 
 The other two claims — `/health` unreachable by default, container runs as root — are direct reads of `crates/validator/validator.sample.toml:61-64` and `crates/validator/Dockerfile:24-37`. They need no run and they are already `E2`.
 
@@ -125,7 +125,7 @@ The other two claims — `/health` unreachable by default, container runs as roo
 **Option 1 (make `Driver::run` report its outcome) is sound and is the load-bearing fix**, exactly as C-VAL-B says. Two notes for whoever implements it:
 
 - It is a **cross-crate** change: `Driver::run`'s signature is in `safenet-core` and both binaries end identically, so the sentinel's `main.rs` must move with it. Scope it as a core change with two call-site updates, not as a validator change.
-- The distinction that matters is _shutdown signal_ versus _fatal_, not `Result` versus ``. A plain `Result<, Error>` invites `main` to `?` it and print a message, which is right; but a clean SIGTERM shutdown must not become exit 1, or every rolling restart looks like a crash. The enum the option offers as an alternative is the better shape.
+- The distinction that matters is _shutdown signal_ versus _fatal_, not `Result` versus ``. A plain `Result<, Error>`invites`main`to`?` it and print a message, which is right; but a clean SIGTERM shutdown must not become exit 1, or every rolling restart looks like a crash. The enum the option offers as an alternative is the better shape.
 
 **Option 2 (non-root user) is sound and is the smallest of the four.** One thing to specify: the `USER 10001` line must come _after_ any `COPY` that needs root, and the data directory bind-mounted at runtime must be writable by that uid — which is a deployment-manifest change the image cannot make for itself. Say so, or the first deployment after the change fails to open its database and the change is reverted.
 
@@ -142,3 +142,21 @@ The other two claims — `/health` unreachable by default, container runs as roo
 ## Reconciliation (run 2)
 
 **Final combined status: Low, 72 %, Confirmed — split across run-2 canonicals.** Exit-0 and `/health` → `F2-VAL-066`, folded into `F2-CORE-031` (with run-1 `F-CORE-030`); root user and floating tags → `F2-VAL-068`, folded into `F2-XC-003` (with run-1 `F-XC-004`). Both run-2 Critics rate the pieces Low/Informational, so this composite is aligned from Medium 68 to Low so one defect does not carry two severities. See `state/run2/reconciliation/validator.md` (Sections 1, 5).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed `crates/validator/Dockerfile` (`git log fe9e84c..361aaf3` on it is empty) or the shutdown path in `main.rs`; the sample's `metrics_address` stays commented out |
+| Severity, certainty | unchanged, Low 72 (residual row; the exit-status half is the `known` item in settled.md section 2) |
+| Evidence | E2: the trace below |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- Exit status 0 after a fatal driver error: `main.rs:95-99` is now `crates/validator/src/main.rs:95-98` (`driver.run().await;` at `:96`, `Ok(())` at `:98`), and `Driver::run` still breaks its loop on an unrecoverable watcher or driver error without reporting why (`crates/core/src/driver.rs:172-200`). This half is counted under `F-CORE-030` and is listed as known (settled.md section 2).
+- `/health` unreachable by default: the metrics listener still defaults to `127.0.0.1:0` (`crates/core/src/observability/mod.rs:24-33`), and `crates/validator/validator.sample.toml:69` still ships `# metrics_address = "0.0.0.0:3555"` commented out. The handbook documents the override (`docs/validator-handbook.md:48-52`), which is the operator's mitigation.
+- Root container and floating base images: `crates/validator/Dockerfile:5` (`FROM rust:1-slim`) and `:24` (`FROM debian:trixie-slim`), no `USER`, `EXPOSE` or `HEALTHCHECK` in the 37 lines; no `.dockerignore` in the repository (`find . -name .dockerignore` outside `node_modules` is empty).
+
+Notes: the root-user and floating-tag points are counted under `F-XC-004` and the exit status under `F-CORE-030` (rv-xc and rv-core-a); this residual row keeps the default-unreachable `/health` and the composite at Low.

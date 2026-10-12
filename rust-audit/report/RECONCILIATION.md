@@ -1,404 +1,474 @@
-# Reconciliation — run 1 and run 2 of the Safenet Rust services audit
+# Reconciliation: runs 1, 2 and 3 of the Safenet Rust services audit
 
 | Field | Value |
 | --- | --- |
-| Audited commit (combined) | `fe9e84cc59b65367b31d5a3121774383cc422234` — `origin/main` `8b6a75d` merged into `audit/rust-services`; run 2's Phases 0–3 ran at `3ec8bc5`, whose `crates/core` and `crates/validator` are byte-identical to `fe9e84c`; `crates/sentinel` and the reference contracts were re-validated at `fe9e84c` (R7Δ, C2-SEN-Δ, QA2-SEN-Δ) |
-| Run 1 | audited `2893917` (post-merge re-validation at `a7f3915`); 85 surviving finding files `F-CORE-*` (33), `F-VAL-*` (25), `F-SEN-*` (16), `F-XC-*` (11); engine findings removed with the engine's scope |
-| Run 2 | a different model, no access to run-1 material; 69 finding files `F2-CORE-*` (26), `F2-VAL-*` (22), `F2-SEN-*` (11), `F2-XC-*` (10); Gate 3 tally: Critical 1, High 8, Medium 16, Low 32, Informational 12; 47 PoC directories |
-| Inputs to this document | the four per-crate reconciliation parts — [`core`](../state/run2/reconciliation/core.md), [`validator`](../state/run2/reconciliation/validator.md), [`sentinel`](../state/run2/reconciliation/sentinel.md), [`cross-cutting`](../state/run2/reconciliation/cross-cutting.md) — plus [`pr-review-threads.md`](../state/pr-review-threads.md), [`KNOWN-WORK.md`](KNOWN-WORK.md), [`IN-FLIGHT.md`](IN-FLIGHT.md), [`STATE.md`](../state/run2/STATE.md), [`coverage.md`](../state/run2/coverage.md) §6–§8, [`baseline-delta.md`](../state/run2/baseline-delta.md) §2 |
-| What this document is | the single ledger every number in `REPORT.md` is built from: one canonical ID per defect, its final severity, certainty, basis class, status and team disposition; every `path:line` is at `fe9e84c` unless marked |
-| Rules applied | canonical ID is the run-1 ID where both runs have the defect (the team's links keep working), else the run-2 ID; the run with executed evidence carries the number; where the runs disagree only on the severity band, the reconciliation states both positions and the reason for the carried one; every `## Reconciliation (run 2)` section in the 154 finding files states that file's final combined status |
+| Audited commit | `361aaf3b25e12d2e04f296184c326830968f3727`: merge of `origin/main` `c355af1` into `audit/rust-services`; outside `rust-audit/` byte-identical to `c355af1` |
+| Earlier commits | run 1 at `2893917` (re-validated at `a7f3915`); run 2 at `3ec8bc5` and `fe9e84c`; every `path:line` here is at `361aaf3` unless marked |
+| Runs | run 1; run 2 (Fable 5.1, blind to run 1); run 3 (Opus 5.5): blind discovery plus a separate re-validation track that met here |
+| Inputs | the previous version of this file (git history), the team's 13 PR #905 threads (now section 6), `report/KNOWN-WORK.md`, `state/run3/revalidation/`, every `findings/F3-*.md` with its Critic, QA, Practicality (PC3) and Confidence (CA3) sections, `state/run3/phase4/`, `state/run3/coverage.md`, the reviewer logs in `state/run3/agents/`, and the department reports of run 3 |
+| What this document is | the single source for every number in `REPORT.md`: one canonical ID per defect with its final severity, certainty, status and basis, the fold and resolved indexes, misses in both directions and the team's threads; it replaces the run-1 and run-2 ledger, which stays in git history |
+| Removal list | [`state/run3/removal-manifest.md`](../state/run3/removal-manifest.md) |
 
-## 1. Method and headline
+## 1. Method and headline counts
 
-Two independent runs, different models, same prompt, engine out of scope in both (run 1's engine artefacts were removed). Run 2 could not read run 1. After run 2's QA, four reconciliation agents (one per crate) mapped every run-2 finding to run 1, listed what run 2 did not rediscover, applied A16/A17 to run 1's surviving findings, answered the team's open questions and wrote per-crate ledger rows; this document merges the four parts and settles the conflicts between them.
+### 1.1 Method
 
-### 1.1 Agreement rate
+- **Two tracks.** Run 3's discovery agents (R1 to R8, L-crypto, L-rust, five Critics, QA with a second independent reproduction for every Medium or higher row, PC3, CA3) never read earlier material. The re-validation agents (rv-core-a, rv-core-b, rv-val, rv-sen, rv-xc) re-checked all 103 earlier rows at `361aaf3` and re-ran or adapted their PoCs. CA3-FIX re-verified every Fixed or Moot verdict on a row that was once High or Critical, plus `F-SEN-003` and `F2-VAL-003`. LT3 triaged the leads and filed `F3-SEN-060`, `F3-VAL-100` and `F3-XC-040`.
+- **Mapping.** Every `F3` file is mapped to the earlier rows as CONFIRMS (same defect), EXTENDS (same root, new trigger, scope or impact), CONTRADICTS or NEW; its `## Reconciliation (run 3)` section states the result, and each earlier file it maps to carries a `## Run 3 counterpart` note.
+- **Canonical choice.** An earlier ID stays canonical when run 3 confirms or extends a live row (longer trail, the team's links). A run-3 ID becomes canonical where the earlier row is resolved (`F2-XC-001` Fixed, so `F3-XC-040`) or where a merged change turned the earlier row's trigger into one only the run-3 file executed (`F2-VAL-004` folds into `F3-VAL-062`, section 3.3). Run-3 duplicates follow their run-3 canonical and stay as files this run.
+- **Band.** Run-3 rows carry CA3's final values. Earlier rows carry the re-validation proposal, unless CA3 set the row itself (`F-SEN-002`, `F-SEN-008`, `F-SEN-015`, `F-VAL-060`), CA3 proposed one band for a cross-run twin set, or the run-3 counterpart's CA3 band covers the leg that carries the earlier band (`F-CORE-066`, `F-VAL-063`). A counterpart that covers only another leg does not move the band (`F-CORE-060`, section 7).
+- **Certainty.** The strongest executed evidence across the twins carries the number, as in the earlier ledger. Where CA3 set an earlier row's certainty, that number stands unless the counterpart executed the same defect more strongly (`F-SEN-008` carries `F3-SEN-001`'s 97).
+- **Status and basis.** Confirmed means certainty 70 or more, Plausible 40 to 69; the re-validation verdict (Still valid, Changed) or New follows; `known` marks an item `settled.md` section 2 or an open team issue already lists (A12). Basis is the leading class of the row's headline claim: E1 executed, E2 traced in code.
 
-| Crate | Run-2 files | CONFIRMS | EXTENDS | CONTRADICTS | NEW | Folded within run 2 | Run-1 live findings | Not re-filed by run 2 | Run-2 canonical items | of which reachable at `2893917` (run-1 misses) |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| core | 26 | 13 | 8 | 0 | 4 | 1 (`F2-CORE-036` → `F2-XC-050`) | 31 | 10 (+1 partial) | 4 | 4 |
-| validator | 22 | 8 | 7 | 0 | 7 | 6 (2 in-crate duplicates, 4 cross-crate canonicals) | 22 | 9 (+1 partial) | 6 | 4 |
-| sentinel | 11 | 7 | 3 | 0 | 1 | 1 (`F2-SEN-009` → cross-cutting) | 14 | 2 (+3 partial) | 3 | 1 |
-| cross-cutting | 10 | 3 | 2 | 0 | 5 | 0 | 10 | 4 | 5 | 5 |
-| **total** | **69** | **31** | **20** | **0** | **17** | 8 | **77** | **25** (+5 partial) | **18** | **14** |
+### 1.2 Headline counts
 
-- **Existence and mechanism:** no run-2 finding contradicts a run-1 finding as its primary relation. Three sub-claim contradictions were found and settled by executed evidence (Section 1.3). Every run-1 finding that run 2 did not re-file is still valid at `fe9e84c` except where the merge fixed it (`F-VAL-005`), A17 removed it (`F-VAL-033`), or a five-minute source read settled it lower (`F-XC-051`, `F-VAL-067`).
-- **Rediscovery:** run 2 rediscovered 52 of run 1's 77 live findings (68 %), fully or in part. Of the 25 it did not re-file, 6 were examined by a run-2 reviewer and deliberately not filed (`F-CORE-008`, `F-CORE-010`, `F-CORE-036`, `F-CORE-037`, `F-CORE-038`, `F-XC-003`) and 19 are misses proper (Section 3). In the other direction, run 2 added 18 canonical findings of which 14 were reachable at `2893917` and are run-1 misses; the other 4 exist because of code run 1 did not have (`F2-VAL-031`, `F2-VAL-034`, `F2-SEN-010`, `F2-SEN-011`).
-- **Severity bands, before reconciliation:** over the 48 mapped pairs where run 1 had a rated counterpart, the two runs' bands agreed on 23, run 2 was one band lower on 23 (mostly core, where the run-2 Critics read A1/A4 and "bounded cost" strictly) and higher on 2 (`F2-CORE-030`, `F2-VAL-061`). The sentinel agreed on every pair. After reconciliation the carried band follows run 1 in most disagreements (run 1 holds the live-stack executed evidence); run 2's number is carried where its evidence was decisive: `F-CORE-031` up to High, `F-VAL-060` up to High (conditional), `F-CORE-011` down to Low, `F-VAL-064` split and down to Low, `F-XC-008`/`F-XC-011` down to Informational (engine out of scope), `F-XC-051` down to Informational (pinned-source read), `F-VAL-067` down to Low.
-- **Certainty:** run 2's execution raised eleven run-1 numbers (`F-CORE-004` 75 → 90, `F-CORE-006` 55 → 70, `F-CORE-007` 60 → 70, `F-CORE-011` 60 → 80, `F-CORE-039` 55 → 72, `F-CORE-061` 58 → 65, `F-CORE-064` 72 → 90, `F-CORE-066` 78 → 90, `F-VAL-040` 50 → 88, `F-VAL-060` 50 → 90, `F-XC-006` 78 → 90) and lifted four Plausible run-1 findings to Confirmed (`F-CORE-006`, `F-CORE-007`, `F-CORE-011`, `F-SEN-004` branch ii).
+| Measure | Count | Notes |
+| --- | --- | --- |
+| Live canonical rows | 90 | 67 run-1 IDs, 12 run-2 IDs, 11 run-3 IDs |
+| Critical | 0 | the only Critical, `F-VAL-001`, is Fixed by #1027 |
+| High | 4 | `F-CORE-060`, `F-SEN-008`, `F3-VAL-030`, `F3-XC-100` |
+| Medium | 26 | core 14, validator 5, sentinel 6, cross-cutting 1 |
+| Low | 36 | core 15, validator 10, sentinel 6, cross-cutting 5 |
+| Informational | 24 | core 4, validator 5, sentinel 3, cross-cutting 12 |
+| Confirmed, Plausible | 77, 13 | no row below 40 |
+| Basis E1, E2 | 73, 17 | every High row is E1 |
+| Rows found by more than one run | 53 | 12 by all three runs |
+| Resolved since run 2 | 22 | Fixed 8, Moot 7, Settled 3, Superseded 3, Refuted 1 (section 4) |
+| Finding files | 190 before, 115 after | 75 leave: the 22 resolved rows, 52 folded run-2 files (sections 3.3 and 3.4) and the union row `F-XC-002` |
+| PoC entries | 129 before, 108 after | 21 have no surviving citer; PoC folders of resolved rows that a surviving file cites stay |
+| Removal manifest | 111 paths | grouped by reason, with the link check |
 
-### 1.2 How conflicts were settled
+| Crate         | Rows   | High  | Medium | Low    | Informational |
+| ------------- | ------ | ----- | ------ | ------ | ------------- |
+| core          | 34     | 1     | 14     | 15     | 4             |
+| validator     | 21     | 1     | 5      | 10     | 5             |
+| sentinel      | 16     | 1     | 6      | 6      | 3             |
+| cross-cutting | 19     | 1     | 1      | 5      | 12            |
+| **total**     | **90** | **4** | **26** | **36** | **24**        |
 
-1. **Executed evidence wins.** Where one run executed the mechanism and the other traced it, the executed number is carried. Where both executed, the wider execution (live binaries against a real oracle in run 1's Phase 8; `StateMachine`/`Watcher`-level PoCs in run 2) carries the certainty, and the other is recorded as the independent confirmation.
-2. **Severity is settled against PROMPT §8's scale, not by averaging.** Each disagreement is written out in the per-crate part (core §1.1, validator §1 rows, sentinel §1, cross-cutting §1) with both positions; the ledger's trail column names the dissenting number so the report can show it.
-3. **Where nothing settles it, both positions stand.** That happened nowhere on existence or mechanism; the only open items are the ones the audit could not execute (Section 7).
+### 1.3 Run 3 against the earlier runs
 
-### 1.3 The three sub-claim contradictions, settled
+| Run-3 files | Count | IDs |
+| --- | --- | --- |
+| CONFIRMS an earlier live row | 16 | `F3-CORE-002`, `004`, `005`, `030`, `032`, `060`, `061`; `F3-SEN-001`, `002`, `003`, `004`; `F3-VAL-061`; `F3-XC-005`, `006`, `007`, `030` |
+| EXTENDS an earlier row | 4 | `F3-CORE-001` and `F3-XC-160` (earlier ID stays canonical); `F3-VAL-062` and `F3-XC-040` (run-3 ID canonical) |
+| CONTRADICTS an earlier row | 0 | one sub-claim contradiction, settled by execution (section 1.5) |
+| NEW | 9 | `F3-SEN-060`, `F3-VAL-030`, `031`, `032`, `100`, `F3-XC-003`, `004`, `100`, `130` |
+| Run-3 duplicates | 7 | follow their run-3 canonical (section 3.1) |
+| **total** | **36** | 29 canonical run-3 files: 18 counterparts of earlier rows, 11 run-3 canonical rows |
 
-| Where | Run 1 said | Run 2 said | Settled |
+- **Rediscovery.** Of the 80 earlier rows still live (the 79 kept plus `F2-VAL-004`), the blind track filed 20 as counterparts (25 %), reached 4 more inside other run-3 files, examined 48 without filing them (4 as known items) and never reached 8 (section 5.1). Run 2 had rediscovered 68 % of run 1, fully or in part; run 3 reaches 30 % on the same reading. Most of the gap is by design: the settled list told reviewers not to refile known items, and most examined rows were kept as observations under A1 or A3 or below the finding bar.
+- **Reverse misses.** 9 run-3 rows are NEW; 7 of them describe defects already present at `fe9e84c`, among them both new High rows (section 5.2).
+
+### 1.4 Band and certainty settlements
+
+- **Cross-run twins, one band each (CA3, using PC3's practicality).** `F-CORE-001`, `F2-CORE-001`, `F3-CORE-004`: Low, was High (a reorg deeper than `max_reorg_depth`; none of 3 or more blocks verified on Gnosis in 294.8 days; one diverged node). `F-CORE-002`, `F2-CORE-002`, `F3-CORE-002`: Medium, was High (a provider behaviour A4 names, not attacker input). `F-CORE-031`, `F-SEN-001`, `F3-CORE-032`, `F3-SEN-004`: Medium, `known`, was High (a lost effect or reveal after a restart or a live one-block reorg, recoverable by a manual `claim`; daily orphans and routine restarts keep it above Low).
+- **Earlier rows CA3 set itself.** `F-SEN-008` Low to High (the proxied fee token is now USDC.e); `F-SEN-002` High to Medium (funds locked, not lost); `F-SEN-015` High to Medium (restart-window residual only); `F-VAL-060` High to Medium (precondition false on Aegis).
+- **Earlier rows moved by a counterpart's band.** `F-CORE-066` Medium to Informational (`F3-CORE-061`); `F-VAL-063` Medium to Low (`F3-VAL-061`); `F2-CORE-007` stays Low (`F3-CORE-030`, which PC3 moved from Medium).
+- **Earlier rows moved by the re-validation.** `F-VAL-061` High to Medium; `F-VAL-066` Medium to Low; `F-VAL-002` Medium to Low, `known`; `F-VAL-035` from a Low observation to Informational.
+- **Run-3 rows whose final band differs from the reviewer's.** `F3-VAL-030` Critical impact class to High; `F3-CORE-002` Low to Medium; `F3-CORE-032` Low to Medium (CA3 over PC3); `F3-CORE-030` Medium to Low; `F3-VAL-100` and `F3-SEN-060` Medium to Low; `F3-XC-130` and `F3-XC-040` Low to Informational.
+- **Kept, with the dissent recorded (section 7).** `F-CORE-060` High (run 2 Medium; run 3's counterpart rates only the accepted arm, Low); `F-XC-050` Medium (its precondition is false on Aegis).
+- **Certainty raised by run-3 execution.** `F-SEN-008` 52 to 97, `F-VAL-035` 35 to 70, `F2-CORE-007` 75 to 95, `F-CORE-008` 70 to 92, `F-CORE-065` 70 to 90, `F-VAL-063` 72 to 90, `F-CORE-012` 70 to 85, `F-CORE-030` 85 to 95, `F-CORE-003` 70 to 80, `F-CORE-005` 75 to 85, `F-CORE-009` 78 to 85, `F-CORE-034` 80 to 85, `F-CORE-038` 85 to 90, `F2-CORE-003` 70 to 80, `F-SEN-014` 88 to 95, `F2-SEN-003` 90 to 95, `F2-XC-002` 92 to 95, `F-XC-008` 80 to 90, `F-XC-051` 85 to 90. **Lowered:** `F-SEN-002` 98 to 90, `F-SEN-015` 98 to 95, `F-VAL-061` 98 to 90, `F-VAL-040` 88 to 70, `F-VAL-066` 78 to 65, `F-VAL-002` 93 to 90.
+
+### 1.5 Contradictions settled
+
+| Where | One position | The other | Settled |
 | --- | --- | --- | --- |
-| `F-CORE-031` / `F2-CORE-030` | Critic note: `F-SEN-001`'s replay case is "the opposite … mutually exclusive" with the resume-loss defect | when the emitting block _is_ replayed, the replayed own `Committed` is applied synchronously before the re-spawned effect can resume, so the replayed case loses too | **run 2**, by execution (`poc/F2-CORE-030`, "replayed block 3 committed … resumes: []"); this is what lifts `F-CORE-031` to High 92 |
-| `F-CORE-060` / `F2-CORE-060` | "the cap bypassed ~28,700×" | the cap ratio is preserved through bumps (algebra verified) | **both right, about different quantities**: `cap_priority_fee` (`crates/core/src/tx/fees.rs:12-31`) bounds tip / own `maxFeePerGas` and that ratio survives bumping; it never bounds the tip against the chain's base fee once the ratchet runs (measured 28,744× the base-fee-derived cap). Both bump cadences are real (underpriced arm every block, accepted arm every `blocks_before_resubmit`). `cargo test -p safenet-core --lib -- tx::fees tx::tests::failed_replacements`: 4 passed. Wording for the report is in core §1.2 |
-| `F-SEN-015` / `F2-SEN-001` (c) | executed twice (in-process and on Anvil: `AlreadyCommitted` then `InvalidReveal`, −4,000) | "at most `I` (engine out of scope)" | **run 1**: variant 2 (`Unknown` on replay) needs no engine determinism, only a co-deployed engine still booting when the replayed effect fires (A3); E1 at the state-machine level; code unchanged at `fe9e84c` (`service.rs:156-171`, `176-179`, `214-224`) |
+| `F-SEN-015`, restart window | rv-sen: Fixed by #978 and #979 (6 variants); run 3's R7 rejected the verdict-prune race (Q52); LT3 first judged lead 14 unreachable | CA3-FIX: real binary under `integ`, 15 of 20 restarts inside the window never revealed, control 0 of 6 | by execution: not fixed in the restart window, fixed for live reorgs; CA3 16 of 16; LT3 withdrew its verdict; Medium 95 |
+| `F2-XC-050` and `F3-XC-030` | R8 R-12: a crash after the snapshot commit replays from the safe snapshot | C3-XC: during a warp the prune leaves the page's own snapshot, so the restart resumes after it (executed tests) | by execution: the window exists in warps; `F3-XC-030` confirms `F2-XC-050` |
+| `F-SEN-012`'s run-2 extension and `F3-XC-004` | run 2 (`F2-SEN-008` claim 6) and run 3's R7 O3: userinfo in the engine URL would be logged | `F3-XC-004` Basis 4: reqwest moves userinfo into the `Authorization` header | by execution (R8): userinfo is not logged; path and query tokens are |
+| `F3-CORE-032` band | PC3: Low (restart route only) | CA3: Medium (the live one-block reorg route) | CA3's final band; the cross-run band follows it |
+| `F3-SEN-002` variant a | PC3: practical | CA3: conditional (the honest race lost 0 of 4 runs) | the band is Medium either way; CA3's call stands |
+| Late rollover confirmation | R4 O2: the honest last confirmer is excluded | R6 Q29: nobody is excluded | C3-VAL: R6 is right; an observation only |
+| Divergent participant lists | R4 Q32: by design, not a finding | R6: a silent failure (`F3-VAL-061`) | C3-VAL Confirmed it; Low |
 
-## 2. Combined ledger
+### 1.6 Re-validator notes settled
 
-One row per canonical defect. **Runs**: `1` run 1 only, `2` run 2 only, `1+2` both. **Basis**: strongest class across both runs (`E1` executed, `E2` code-traced, `I` inference). **Status**: Confirmed (certainty ≥ 70), Plausible (40–69), Observation (< 40), Refuted, Fixed, Out of scope, Superseded, Forward-looking; "Verified" marks a run-1 finding whose headline leg was refuted by execution and whose residual stands. Links go to the canonical finding file; every run-2 file named in the counterpart column is itself listed in the fold index (Section 2.2).
+- **`F-CORE-068` folds into `F-CORE-063`.** The settled review low L4 covers the whole-batch revert. The residual, a call that fails inside a batch that succeeds and is marked executed by nonce, loses one action per failing call, the same loss a reverting standalone transaction has in Direct mode, which `F-CORE-063` already carries; its run-3 section records the batched-row remediation note. `F-CORE-068` leaves the folder as Superseded and its PoC folder stays, cited by `F-CORE-063`.
+- **`F2-XC-050` widened by #1017.** Same row, Low 92. `F3-XC-030` confirms it blind. Since #1017 warp pages run every block's transition, so a crash between the prune and the queue insert now also loses block-driven actions: `KeyGenSecretShare`, `KeyGenConfirm` and complaint responses on the validator, `TimeoutArbitration` and `Claim` (no expiry) on the sentinel. The band stays Low: the window is milliseconds per page and needs an independent hard failure.
+- **`F-XC-051` stays Informational 90 as hardening.** The truncated commitment is accepted only from an event the real coordinator would reject (the contract enforces `c.length`, L-crypto R14), so it needs `F-VAL-060`'s precondition, which PC3 showed false on Aegis. The length and identity check is cheap; take it with `F-VAL-060`'s emitter check.
+- **Stale comment, a note and not a finding.** `crates/sentinel/src/service.rs:481-483` says warp catch-up does not deliver a `NewBlock` for every block. Since #1017 it does (`crates/core/src/state/mod.rs:230-239`); the `<=` comparison is still correct. The comment right below it (`:487-492`) states the assumption `F3-SEN-060` disproves.
 
-### 2.1 Canonical rows
+## 2. Canonical rows
 
-| Canonical | Counterpart(s) | Runs | Short title | Severity | Cert. | Basis | Status | Team disposition | Trail |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [`F-CORE-001`](../findings/F-CORE-001.md) | `F2-CORE-001` | 1+2 | Reorg-depth protection not persisted; restart resumes from orphaned state | High | 99 | E1 | Confirmed | #820 closed-but-present; no thread | run 1 E1 live 99 High; run 2 E1 90 Medium (dissent recorded); A17 narrows only the restored-backup aside |
-| [`F-CORE-002`](../findings/F-CORE-002.md) | `F2-CORE-002` | 1+2 | Client-filtering completeness check disables itself after three failures | High | 99 | E1 | Confirmed | new; no thread | run 1 E1 live 99 (−4,500 on chain) High; run 2 E1 90 Medium (dissent recorded) |
-| [`F-CORE-003`](../findings/F-CORE-003.md) | `F2-CORE-006` | 1+2 | `null` header treated as an uncle | Medium | 70 | E2 | Confirmed | — | run 1 E2 70 Medium; run 2 E2 70 Low; Medium carried (routine A4 trigger, on-chain duplicates) |
-| [`F-CORE-004`](../findings/F-CORE-004.md) | `F2-CORE-005` | 1+2 | Event-fetch failures retry forever; block watcher starved, reorg detection stops | Medium | 90 | E1 | Confirmed | #820 class | run 1 E2 75; run 2 executes the starvation 90 |
-| [`F-CORE-005`](../findings/F-CORE-005.md) | `F2-CORE-008` | 1+2 | `max_reorg_depth = 0`: `recent` always empty, `-32001` path spins silently | Low | 75 | E2 | Confirmed | #820 closed-but-present | both E2 75 |
-| [`F-CORE-006`](../findings/F-CORE-006.md) | `F2-CORE-004` (service side: `F-VAL-060`) | 1+2 | Filtering and decoding are address-agnostic (core half) | Low | 70 | E2 | Confirmed | — | run 1 Plausible 55; run 2 70 with the alloy `__Invalid` precision |
-| [`F-CORE-007`](../findings/F-CORE-007.md) | `F2-CORE-009` | 1+2 | Initialization range scan restarts without bound or delay | Low | 70 | E2 | Confirmed | — | run 1 Plausible 60; run 2 70 |
-| [`F-CORE-008`](../findings/F-CORE-008.md) | — | 1 | Block polling scheduled against the host wall clock | Low | 70 | E2 | Confirmed | — | run 1 E2 70; run 2 examined (R1 O3), not filed |
-| [`F-CORE-009`](../findings/F-CORE-009.md) | — | 1 | Block-watcher config unvalidated (`block_time = 0`, unbounded depth, `start_block > head`) | Low | 78 | E2 | Confirmed | — | run 1 78; run 2 covers case 1 only (R1 O4) — miss for cases 2–3 |
-| [`F-CORE-010`](../findings/F-CORE-010.md) | — | 1 | `-32001` recovery commits the rewind before the event watcher validates it | Low | 45 | E2 | Plausible | — | run 1 45 (no trigger); run 2 R1 rejected 2 independently finds no trigger |
-| [`F-CORE-011`](../findings/F-CORE-011.md) | `F2-CORE-033` | 1+2 | Indexer hangs behind a live-but-silent peer; nothing signals it | Low | 80 | E2 | Confirmed (narrowed) | — | run 1 Plausible 60 Medium; run 2 settles the reqwest premise (`tcp_user_timeout` 30 s on Linux) → Low 80 |
-| [`F-CORE-012`](../findings/F-CORE-012.md) | — | 1 | Bloom equality blind to the loss of a repeated-shape log; `check_logs_limit` skipped on the client-filtered path | Medium | 70 | E2 | Confirmed | — | run 1 70; **run 2 missed** (the most significant core miss) |
-| [`F-CORE-030`](../findings/F-CORE-030.md) | `F2-CORE-031`, `F2-VAL-066`, exit-status half of `F-VAL-064` | 1+2 | Fatal driver errors exit with status 0; `/health` is a constant `OK` | Medium | 85 | E2 | Confirmed | #820 closed-but-present | run 1 85 Medium; run 2 85 Low (its Critic offered Medium); Medium carried |
-| [`F-CORE-031`](../findings/F-CORE-031.md) | `F2-CORE-030` (sentinel loss: `F-SEN-001`; in-flight case: `F-SEN-011`) | 1+2 | Snapshot commits before the effect spawns; rollback and replay discard resumes | High | 92 | E1 | Confirmed | #614/#799 partial | run 1 E2 78 Medium; run 2 E1 92 High (ordering variant executed; deterministic across a ≥ 25 s restart); **raised** |
-| [`F-CORE-032`](../findings/F-CORE-032.md) | — | 1 | A panicking effect task is logged and skipped; the resume is gone | Low | 45 | E2 | Plausible | #799/#614 partial | run 1 45; **run 2 missed** |
-| [`F-CORE-033`](../findings/F-CORE-033.md) | `F2-CORE-035` (sentinel side: `F-SEN-004`) | 1+2 | Effect fan-out unbounded; no cap, queue or backpressure | Medium | 70 | E2 | Confirmed | **question answered** (§5.2); #614 partial | run 1 70 Medium; run 2 70 Low, adds "no `NewBlock` in a warp page" |
-| [`F-CORE-034`](../findings/F-CORE-034.md) | `F2-CORE-010` | 1+2 | Retry storm without backoff; deterministic errors never escalate | Medium | 80 | E2 | Confirmed | — | run 1 80; run 2 quantifies ×17 validator / ×11 sentinel per 100 ms |
-| [`F-CORE-035`](../findings/F-CORE-035.md) | (`F2-CORE-067` metrics leg) | 1 | Every `tx::Error::Rpc` is "intermittent" and swallowed forever | Medium | 78 | E2 | Confirmed | — | run 1 78; **run 2 missed** the swallow |
-| [`F-CORE-036`](../findings/F-CORE-036.md) | (`F-XC-002` union) | 1 | `Debug` bound on `Effect`/`Resume`; five trace sinks | Low | 85 | E1 (secret leg refuted) | Verified | #113 understated | run 1 Phase 5 refuted the secret leg; run 2 R2 rejected 1 / O7 agree, not filed |
-| [`F-CORE-037`](../findings/F-CORE-037.md) | (`F2-CORE-066` version half) | 1 | Snapshots are unversioned JSON | Low | 62 | E2 | Plausible | — | run 1 62; run 2 R2 O10 examined, not filed |
-| [`F-CORE-038`](../findings/F-CORE-038.md) | — | 1 | `kdf::derive_key` multi-part `info` is plain concatenation | Informational | 85 | E2 | Confirmed | — | run 1 85; run 2 R2 O9 adds HMAC salt-normalisation nuance |
-| [`F-CORE-039`](../findings/F-CORE-039.md) | `F2-CORE-034` | 1+2 | Graceful shutdown blocked inside `update`; inline `housekeeping` is a second unbounded await | Low | 72 | E2 | Confirmed | — | run 1 55; run 2 72, closes run 1's dependency question |
-| [`F-CORE-040`](../findings/F-CORE-040.md) | — | 1 | `next_input` `select!` drops the watcher's in-flight RPC on every resume | Low | 65 | E2 | Plausible | #614 partial | run 1 65; run 2 examined cancel-safety only — cost **missed** |
-| [`F-CORE-060`](../findings/F-CORE-060.md) | `F2-CORE-060` | 1+2 | Fee ratchet unbounded; `priority_fee_cap_percentage` never bounds against the base fee | High | 98 | E1 | Confirmed | #656 closed-but-present | run 1 E1 live 98 High; run 2 E1 92 Medium (accepted arm, ×311.9 after 60 bumps); cap sentence settled both ways (§1.3); A17 removes the restored-backup starter |
-| [`F-CORE-061`](../findings/F-CORE-061.md) | `F2-CORE-062` | 1+2 | First-submission "underpriced" rejection retried forever at the same fee | Medium | 65 | E1 (in-crate) | Plausible | #656 (introduced by the fix) | run 1 58; run 2 65 (zero-tip arithmetic); node wording still `I` |
-| [`F-CORE-062`](../findings/F-CORE-062.md) | (`F2-CORE-061` gap, `F2-CORE-064` no-cancellation) | 1 | Allocated nonce never released; one bad nonce wedges the queue | Medium | 60 | E2 (gap E1) | Plausible | — | run 1 60; run 2 rediscovers both halves, not as a standalone |
-| [`F-CORE-063`](../findings/F-CORE-063.md) | `F2-CORE-061` | 1+2 | Execution inferred from the account nonce; mark irrevocable | Medium | 55 | E1 (irrevocability) | Plausible | — | run 1 55; run 2 executes the mark and narrows the trigger (gap closes unless an action is queued inside retention) |
-| [`F-CORE-064`](../findings/F-CORE-064.md) | `F2-CORE-064` | 1+2 | `expires_at` void once a nonce is allocated | Medium | 90 | E1 | Confirmed | — | run 1 72 Medium; run 2 90 Low (never-accepted case executed; "clear the nonce" fix branch unsafe); Medium carried |
-| [`F-CORE-065`](../findings/F-CORE-065.md) | `F2-CORE-066` | 1+2 | Transactions table bound to neither chain id nor signer | Low | 70 | E2 | Confirmed, `known` | `known` (A12) | run 1 55; run 2 70; **A17: trigger 1 (reused/restored database) out of scope** |
-| [`F-CORE-066`](../findings/F-CORE-066.md) | `F2-CORE-065` | 1+2 | `tx::Config` accepts degenerate values (zero in-flight, zero window, `nan`) | Medium | 90 | E1 | Confirmed | — | run 1 78 Medium; run 2 90 Low (all three values executed); Medium carried |
-| [`F-CORE-067`](../findings/F-CORE-067.md) | `F2-CORE-063`, `F2-CORE-032` (service sides: `F-VAL-065`, `F-SEN-006`) | 1+2 | No idempotency key on `enqueue`; replay re-submits actions | Medium | 98 | E1 | Confirmed | **question answered** (§5.2); `known` tag retained | run 1 E1 live 98 Medium; run 2 E1 90 Low; Medium carried (replayed `Sign` and the `F-SEN-001` path are not gas-only) |
-| [`F-CORE-068`](../findings/F-CORE-068.md) | — | 1 | UNMERGED batex: a batch's execution status is unobservable | High / Medium (forward-looking) | 85 | static | Forward-looking | re-validate when #904 merges | not in the tree at `fe9e84c` |
-| [`F-CORE-069`](../findings/F-CORE-069.md) | — | 1 | UNMERGED batex: two-nonce delegation writes a permanent nonce gap | High / Medium (forward-looking) | 80 | static | Forward-looking | re-validate when #904 merges | not in the tree at `fe9e84c` |
-| [`F2-CORE-003`](../findings/F2-CORE-003.md) | — | 2 | Default-path log fetch has no completeness check; dead `may_contain_log` | Informational | 70 | E2 | Confirmed | — | run 2 only; run-1 miss |
-| [`F2-CORE-007`](../findings/F2-CORE-007.md) | — | 2 | Restart against a lagging node exits with an opaque `BadUpdate` | Low | 75 | E2 | Confirmed | — | run 2 only; run-1 miss |
-| [`F2-CORE-011`](../findings/F2-CORE-011.md) | — | 2 | No rollback anchor persisted on a fresh start; in-window reorg exits `MissingSnapshot` | Low | 92 | E1 | Confirmed | — | run 2 only; run-1 miss |
-| [`F2-CORE-067`](../findings/F2-CORE-067.md) | (`F-CORE-035` observability leg) | 2 | Transaction queue exports no metrics; hash never persisted | Informational | 85 | E2 | Confirmed | — | run 2 only |
-| [`F-VAL-001`](../findings/F-VAL-001.md) | `F2-VAL-001` | 1+2 | DKG encryption key `q` has no proof of possession; peer's signing share recoverable | Critical | 97 | E1 | Confirmed | none yet | run 1 E1 97 (crypto + real bytecode 5/5 + post-merge); run 2 independent E1 95 (`s_a_recovered == s_a_ref`) |
-| [`F-VAL-002`](../findings/F-VAL-002.md) | `F2-VAL-002` | 1+2 | ECDH share pad is a raw symmetric x-coordinate | Medium | 93 | E1 | Confirmed | none | run 1 E1 93 Medium; run 2 E1 90 Low (standalone); Medium kept for the executed second-share leak |
-| [`F-VAL-003`](../findings/F-VAL-003.md) | `F2-VAL-006` | 1+2 | Complaint responses unconditional and unbounded per plaintiff | Medium | 82 | E1 | Confirmed | #69 partial | run 1 E2 80 Medium; run 2 E1 82 Low; Medium kept (on-demand disclosure primitive plus honest-side exclusion race) |
-| [`F-VAL-004`](../findings/F-VAL-004.md) | `F2-VAL-063`, `F2-VAL-005` | 1+2 | Lost or failed `KeyGenSetup` never re-issued (genesis: permanent halt; rollover: epoch forfeited) | Medium (rollover); genesis Informational `known` | 69 (rollover) / 93 (genesis) | E1 gap / E2 trigger | Plausible (rollover); genesis accepted | **accepted (genesis exception, A16)**; rollover instance is the "other flow" the team asked about | run 1 E1 93 High (genesis live); A16 → Informational `known`; run 2 E2 69 Medium for numbered epochs |
-| [`F-VAL-005`](../findings/F-VAL-005.md) | `F2-VAL-035`, `F2-VAL-031`, `F-VAL-068` D2 | 1+2 | Reorg across the `KeyGen` block deleted the DKG secrets | — (High at `2893917`) | 99 at `2893917`; fix E1 | E1 | **Fixed by merge** (#909/#910) for the reproduced trigger; residual D2 Informational `known` | **fix claimed — confirmed** (§5.2) | 13/13 store tests at `fe9e84c`; the restart-window race survives under `F-VAL-066` |
-| [`F-VAL-030`](../findings/F-VAL-030.md) | `F2-VAL-030`, `F2-VAL-062` | 1+2 | Failed `NonceTree` leaves a phantom reservation; `expected_chunk` cascade | High | 97 | E1 | Confirmed | #799/#666 partial | run 1 E1 97 live, unforced after a reorg; run 2 E1 90 plus the cascade (~90 % of later ceremonies); C2-VAL-B's Medium overruled by the reorg trigger |
-| [`F-VAL-031`](../findings/F-VAL-031.md) | — | 1 | Dead nonce-generation worker never detected or restarted | Low | 42 | E2 | Plausible | none | run 1 42; **run 2 missed** |
-| [`F-VAL-032`](../findings/F-VAL-032.md) | `F2-VAL-032` | 1+2 | `handle_sign` drops a `WaitingForRequest` session on a `Sign` from any untracked group | High | 93 | E1 | Confirmed | **accepted** | run 1 E1 93; run 2 E1 92 with an unconditional attacker trigger (attacker-created 2-of-2 group) |
-| [`F-VAL-033`](../findings/F-VAL-033.md) | — | 1 | Database restore after a reorg reuses a burned nonce | (High measured) | 72 | E1 mechanism | **Out of scope (A17)** | objection → A17; remediation-1 objection upheld | mechanism real (`store.rs:281-291`); trigger is an operator restore |
-| [`F-VAL-034`](../findings/F-VAL-034.md) | — | 1 | `handle_nonces` applies a resume without checking the signature id | Low | 55 | E1 (benign) | Plausible (outcome executed benign) | none | run 1 executed; **run 2 missed** |
-| [`F-VAL-035`](../findings/F-VAL-035.md) | (`F2-XC-005` adjacent) | 1 | Unzeroised nonce JSON; abandoned chunks of retained groups never reclaimed | Low | 35 | E2 / E1 (leg c refuted) | Observation | #666 partial | run 1 35; run 2 did not re-raise (a)/(b) |
-| [`F-VAL-036`](../findings/F-VAL-036.md) | (`F2-VAL-061` scenario b, forward only) | 1 | `observe` accepts a non-monotonic sequence and rewinds | Low | 40 | E2 | Plausible | none | run 1 40; **run 2 missed** |
-| [`F-VAL-037`](../findings/F-VAL-037.md) | — | 1 | Merkle trees pad with `B256::ZERO`; no leaf/internal separation | Informational | 60 | E2 | Plausible | none | run 1 60; **run 2 missed** |
-| [`F-VAL-038`](../findings/F-VAL-038.md) | — | 1 | Chunk generation saturates every core; 1025 statements hold the SQLite writer | Low | 55 | E2 | Plausible | flow-test epic partial | run 1 55; **run 2 missed**; pruning adds an inline writer |
-| [`F-VAL-039`](../findings/F-VAL-039.md) | (`F2-VAL-032` names the endpoint) | 1 | Top-up threshold gives ~100 sequences of headroom against a permissionless counter | High | 58 | E2 | Plausible | new | run 1 Critic-drafted 58; **run 2 missed**; cost model unexecuted (§7) |
-| [`F-VAL-040`](../findings/F-VAL-040.md) | `F2-VAL-033` | 1+2 | A signer re-reveals to become `last_signer`, then does nothing | Low | 88 | E1 | Confirmed | #777 partial | run 1 E2 50; run 2 E1 88 |
-| [`F-VAL-060`](../findings/F-VAL-060.md) | `F2-VAL-061` (core half: `F-CORE-006`) | 1+2 | Coordinator/Consensus events accepted from any watched address | High (conditional on a malicious or compromised allow-listed oracle) | 90 | E1 | Confirmed | none | run 1 E2 50 Medium (precondition); run 2 E1 90 High, three scenarios; **raised** |
-| [`F-VAL-061`](../findings/F-VAL-061.md) | `F2-VAL-030/031/062/063` (policy leg) | 1+2 | Every effect error maps to `Resume::Noop`; no retry, no marker | High | 98 | E1 | Confirmed | #799 partial | run 1 E1 98 live; run 2 confirms the policy in four files and widens the window (`F2-VAL-031`) |
-| [`F-VAL-062`](../findings/F-VAL-062.md) | (`F-XC-002` union) | 1 | Secret-bearing effects and resumes derive `Debug`, printed at `warn` | Informational | 88 | E1 (leak refuted) / E2 | Confirmed (hygiene) | #113 understated | run 1 88; **run 2 missed** the hygiene gap |
-| [`F-VAL-063`](../findings/F-VAL-063.md) | `F2-VAL-067` (timing), `F2-XC-008` item 3, `F2-XC-006` | 1+2 | Consensus-critical config unvalidated; rollover livelock when `blocks_per_epoch <= key_gen_timeout` | Medium | 72 | E2 | Confirmed; points (1), (3) run-2 miss | none | run 1 72; run 2 75 on the timing relation, folded in |
-| [`F-VAL-064`](../findings/F-VAL-064.md) | `F2-VAL-066` (→ `F-CORE-030`), `F2-VAL-068` (→ `F-XC-004`) | 1+2 | Validator deployment: exit 0, `/health` unreachable in the shipped deployment, root container | Low | 72 | E2 | Confirmed (split; residual row) | #820 partial | run 1 68 Medium composite; exit-status half counted under `F-CORE-030`, root half under `F-XC-004`; the residual keeps this row at Low (merge note 1) |
-| [`F-VAL-065`](../findings/F-VAL-065.md) | (core: `F-CORE-067`) | 1 | `SetValidatorStaker` accumulates across restarts; `Preprocess` never expires; a replayed `Sign` burns a sequence for the whole group | Low | 70 | E2 | Confirmed | none | run 1 70; **run 2 missed** the validator legs |
-| [`F-VAL-066`](../findings/F-VAL-066.md) | `F2-VAL-035`, `F-VAL-068` D3 | 1+2 | Retention set computed before the block's logs; reconcile-vs-prune race across a restart | Medium | 78 | E1 | Confirmed (changed shape) | #666/#801 partial | run 1 E1 92 (unqualified `DELETE`, removed by #909); run 2 E1 78 (19/20 rounds at the driver seam) |
-| [`F-VAL-067`](../findings/F-VAL-067.md) | `F2-VAL-006` para. 2 | 1+2 | Rust counts complaints cumulatively, the contract nets them | Low | 70 | E2 | Confirmed (impact bounded) | #118/#69 partial | run 1 Critic 48 Medium; run 2 "consistency issue"; `restart_key_gen_excluding` check settles Low 70 |
-| [`F-VAL-068`](../findings/F-VAL-068.md) | `F2-VAL-031` (D1), `F-VAL-005` residual (D2), `F2-VAL-035` (D3), `F2-XC-006` (D4) | 1 | UNMERGED pruning branch D1–D4 | — | — | — | **Superseded** (branch merged; split) | none | every part now has a critiqued home except D4's specific form |
-| [`F2-VAL-003`](../findings/F2-VAL-003.md) | — | 2 | Replay warp over an epoch boundary drops the key-gen round; epoch forfeited | Medium | 85 | E1 / E2 | Confirmed | none | run 2 QA E1 85; run-1 miss |
-| [`F2-VAL-004`](../findings/F2-VAL-004.md) | — | 2 | Late-setup branch derives a divergent share-round deadline | Low (genesis case Informational `known`) | 50 | E2 | Plausible | none | run 2 50, QA not attempted; run-1 miss |
-| [`F2-VAL-007`](../findings/F2-VAL-007.md) | — | 2 | `active_epoch` only advances through self-staged epochs; phantom rollover session | Low | 65 | E2 | Plausible | none | run 2 65, QA not attempted; run-1 miss |
-| [`F2-VAL-031`](../findings/F2-VAL-031.md) | `F-VAL-068` D1, `F-VAL-061` | 2 (predicted by run 1 on the branch) | Nonce generators cold after every restart; below-marker return precedes `generator.start` | Medium | 80 | E1 (partial) | Confirmed | none | new code (#909/#910); run 1 predicted it as D1 |
-| [`F2-VAL-034`](../findings/F2-VAL-034.md) | — | 2 | No schema-version check; a pre-#908 database opens then fails every reconciliation | Informational `known` | 85 | E1 | Confirmed | none | new code since run 1 |
-| [`F2-VAL-064`](../findings/F2-VAL-064.md) | — | 2 | Documented `--config-file=<path>` spelling rejected by `argh` (both binaries) | Informational | 95 | E1 | Confirmed | none | run-1 miss |
-| [`F-SEN-001`](../findings/F-SEN-001.md) | `F2-SEN-001` (a, b) (core root cause: `F-CORE-031`) | 1+2 | Replay or rollback discards own `Committed`; no reveal; bond slashed | High | 99 | E1 | Confirmed | **none yet** — highest-certainty irreversible loss in the crate, unassigned; #614 closed-but-present | run 1 E1 Anvil 99; run 2 independent E1 92, re-run at `fe9e84c` |
-| [`F-SEN-002`](../findings/F-SEN-002.md) | `F2-SEN-002` (sibling: `F2-SEN-010`) | 1+2 | Commits before the verdict not tallied; early finalize; bond never claimed or `Finalize` reverts and parks | High | 98 | E1 | Confirmed | **assigned @rmeissner** — must also close `F2-SEN-010` | run 1 E1 98; run 2 E1 90 at `fe9e84c` (adds the adversarial stall) |
-| [`F-SEN-003`](../findings/F-SEN-003.md) | `F2-SEN-003` (b), `F2-SEN-011` trigger | 1+2 | Warp delivers no `NewBlock`; reveals discarded; bogus `timed_out` finalize | Low | 80 | E1 | Confirmed (residual; funds impact fixed by `199629e`) | **question answered** (§5.2); #667 partial | run 1 80 (Medium → Low post-merge); run 2 executed the route, did not re-file |
-| [`F-SEN-004`](../findings/F-SEN-004.md) | `F2-SEN-005` | 1+2 | No bound on concurrent engine checks or outstanding bonds; flood → abstention or expired reveals | Medium | 78 | E1 | Confirmed (branch ii) | #614 partial | run 1 Plausible 62; run 2 E1 78 (starvation onset ≈ 8 proposals/block at `3ec8bc5`; narrowed, not fixed, at `fe9e84c`) |
-| [`F-SEN-005`](../findings/F-SEN-005.md) | `F2-SEN-004` | 1+2 | Waiting states never expire; arbitration deadline discarded; no `timeoutArbitration` | Medium | 95 | E1 | Confirmed | **assigned @rmeissner (easy fix)** — do not expire-and-drop | run 1 95; run 2 E1 90 at `fe9e84c` |
-| [`F-SEN-006`](../findings/F-SEN-006.md) | `F2-SEN-007` (+ bondless `Claim`), `F-SEN-014` | 1+2 | Actions not idempotent under replay; `handle_arbitration_timeout` claims without a bond | Low | 90 | E1 | Confirmed | — | run 1 E2 85; run 2 E1 90, option 3 compiled |
-| [`F-SEN-007`](../findings/F-SEN-007.md) | `F2-SEN-006` | 1+2 | No startup or per-request pre-flight; silent per-request gas burn | Low | 82 | E1 (partial) | Confirmed | — | run 1 E2 80; run 2 82 (`voting_window` sub-claim executed) |
-| [`F-SEN-008`](../findings/F-SEN-008.md) | — | 1 | Hard-coded gas limits; unconditional non-zero `approve`; non-plain fee token | Low | 52 | E2 | Plausible | — | run 1 52; **run 2 missed**; the contract now documents the fee-token requirements (`SentinelOracle.sol:62-68`) |
-| [`F-SEN-009`](../findings/F-SEN-009.md) | `F2-SEN-006` claim 6, `F2-SEN-008` claim 3, `F2-SEN-009` b3 | 1+2 | Engine timeout derived from unvalidated `voting_window` | Low | 82 | E1 | Confirmed, `known` | `main.rs` TODO + #799 | run 1 82; run 2 executes `voting_window = 0` acceptance and the 1 s floor |
-| [`F-SEN-010`](../findings/F-SEN-010.md) | `F2-SEN-009` b1 (via `F-XC-009`) | 1+2 | Sample ships zero addresses and a placeholder key that parse and start | Informational | 85 | E2 | Confirmed, `known` | `config.rs` TODO | both 85 |
-| [`F-SEN-011`](../findings/F-SEN-011.md) | (`F2-CORE-030` in-flight sub-case) | 1 | Restart orphans an in-flight check whose proposal predates the anchor | Low | 82 | E2 | Confirmed | #614 partial | run 1 82; run 2 carried the mechanism generically, not as a sentinel finding |
-| [`F-SEN-012`](../findings/F-SEN-012.md) | `F2-SEN-008` | 1+2 | Engine client: single attempt; any failure is a permanent abstention | Low | 90 | E1 | Confirmed | — | run 1 E2 85; run 2 E1 90 |
-| [`F-SEN-013`](../findings/F-SEN-013.md) | — | 1 | Non-UTF-8 `reason` stalls the indexer | Informational (refuted as filed) | 98 (refutation) | E1 | **Refuted** | — | run 1 refuted by source read and execution; `alloy-sol-types` unchanged at `fe9e84c` |
-| [`F-SEN-014`](../findings/F-SEN-014.md) | (`F2-SEN-007`, one sentence) | 1 | Every participant submits `finalize`; `K − 1` revert | Informational | 88 | E2 | Confirmed | — | run 1 88; run 2 mentioned, not filed |
-| [`F-SEN-015`](../findings/F-SEN-015.md) | `F2-SEN-001` (c) | 1+2 | A replayed engine check re-decides a committed vote; `InvalidReveal` or untracked; slashed | High | 98 | E1 | Confirmed | **assigned @rmeissner** — same fix as `F-SEN-001` | run 1 E1 98 (Anvil); run 2 inference only (under-weighted, §1.3) |
-| [`F-SEN-016`](../findings/F-SEN-016.md) | D1 → `F2-SEN-010` | 1 | UNMERGED #914/#915 bundle | — | — | — | D1 **Superseded**; D2–D4 Forward-looking (#915 unmerged) | — | run 2 confirms D1 on the merged tree |
-| [`F2-SEN-003`](../findings/F2-SEN-003.md) | `F-SEN-002` basis 4, `F-SEN-003` route, `F-SEN-004` C&R | 2 | `finalize()` drops a bonded entry whenever our own reveal was not observed | Medium | 90 | E1 | Confirmed | none — pairs with the `F-SEN-002`/`F-SEN-005` fixes | run 1 recorded the drop as a consequence only; run 2 E1 90, both routes at `fe9e84c`, option 1 compiled (42 tests) |
-| [`F2-SEN-010`](../findings/F2-SEN-010.md) | `F-SEN-016` D1 | 2 (probed by run 1 on the branch) | Commits mined in the commit-deadline block are never tallied (#914) | High | 93 | E1 | Confirmed | none — route to `F-SEN-002`'s assignee | run 1 probe E1 85 on the unmerged branch; run 2 93 (Rust + forge), option 1 compiled 47/47 |
-| [`F2-SEN-011`](../findings/F2-SEN-011.md) | — | 2 | `handle_arbitration_timeout` doc and metric assume a full refund | Informational | 80 | E2 | Confirmed | none — fold into the `F-SEN-005` fix | exposed by the delta's contract comments |
-| [`F-XC-001`](../findings/F-XC-001.md) | `F2-XC-009` | 1+2 | No release profile; overflow checks off in shipped binaries | Informational | 93 | E1 | Confirmed | — | run 1 E1 93 (rustc flags); run 2 E1 90 (dev panic / release wrap) |
-| [`F-XC-002`](../findings/F-XC-002.md) | — | 1 | Debug-derived secret types reach log sinks (union of `F-VAL-062` and `F-CORE-036`) | Low | 88 | E1 (leak refuted) / E2 | Verified (reduced); **not counted** — counted under `F-VAL-062` and `F-CORE-036` | #113 understated | run 1 88; run 2 checked the redaction, filed nothing |
-| [`F-XC-003`](../findings/F-XC-003.md) | — | 1 | `deny_unknown_fields` + `flatten`: behaviour correct, no in-tree test | Informational | 96 | E1 | Verified (test gap) | — | run 1 six tests pass; run 2 re-executed as a rejected hypothesis |
-| [`F-XC-004`](../findings/F-XC-004.md) | `F2-XC-003`, `F2-VAL-068`, `F2-SEN-009` b4, root half of `F-VAL-064` | 1+2 | Runtime images run as root on floating tags; no toolchain pin | Low | 85 | E2 | Confirmed | — | run 1 E2 85; run 2 E2 82 (+ `--version`, no `rust-toolchain.toml`) |
-| [`F-XC-006`](../findings/F-XC-006.md) | `F2-XC-006` (related: `F-CORE-065`) | 1+2 | Persistent state not bound to chain, deployment or signer | Low | 90 | E1 | Confirmed | — | run 1 E2 78; run 2 E1 90 (two Anvil chains, request re-signed on chain B); A17 drops the restore trigger only |
-| [`F-XC-007`](../findings/F-XC-007.md) | (`F2-XC-004` gate and surface extension) | 1+2 | No `cargo audit` gate in CI; feature width | Informational | 92 | E1 | Confirmed (item 2 refuted in run 1) | — | run 1 92; run 2 extends |
-| [`F-XC-008`](../findings/F-XC-008.md) | (`F2-SEN-008` items 2/3) | 1 | Unconfigured `reqwest` clients follow redirects and honour proxy env | Informational (was Low) | 80 | E2 | Confirmed, narrowed; item 1 out of scope (engine) | — | items 2/3 `I` → E2 from pinned `reqwest`/`hyper-util` |
-| [`F-XC-009`](../findings/F-XC-009.md) | `F2-XC-008`, `F2-SEN-009` b1 (items 3/4: `F-VAL-063`) | 1+2 | Samples ship a parseable well-known key and a live mainnet RPC | Low | 75 | E2 | Confirmed (item 2 refuted in run 1) | — | run 1 72; run 2 75 Informational; Low carried (the key parses and the service signs while the adjacent zero address fails loudly) |
-| [`F-XC-011`](../findings/F-XC-011.md) | `F2-XC-004` | 1+2 | Dependency advisories: linked, no in-scope connection path | Informational (was Low) | 90 | E1 | Confirmed | — | run 1 95 Low (engine h2); engine out of scope → Informational; run 2 adds `rustls`, `lru`; `cargo tree -i` re-run agrees |
-| [`F-XC-050`](../findings/F-XC-050.md) | (`F2-VAL-061` is its precondition) | 1 | No DKG membership check; pure-cardinality close; silent `None` finalisation | Medium (rollover) / Informational `known` (genesis, A16) | 48 | E2 | Plausible | — | run 1 48; **run 2 missed** the consequence while strengthening the precondition; stale comment `state/keygen.rs:451-452` |
-| [`F-XC-051`](../findings/F-XC-051.md) | — | 1 | `verify_commitment` delegates structural checks to `frost-core` | Informational (was Low) | 85 | E2 | Settled in the code's favour | — | run 1 42; empty `c` → `Err(MissingCommitment)`, identity `c[0]` → `Err(InvalidIdentityElement)`; hardening option 1 stands |
-| [`F2-XC-001`](../findings/F2-XC-001.md) | `F2-VAL-060` | 2 | Any configuration parse error prints the whole file, signer key included | High | 95 | E1 | Confirmed | — | run 2 five executions on both binaries; **run-1 miss** (the most consequential one) |
-| [`F2-XC-002`](../findings/F2-XC-002.md) | `F2-VAL-065` | 2 | Sample `database` URL lacks `?mode=rwc`; documented first start fails | Low | 92 | E1 | Confirmed | — | run-1 miss |
-| [`F2-XC-005`](../findings/F2-XC-005.md) | — | 2 | Secret deletion is logical only: bundled SQLite without `SECURE_DELETE` | Informational | 90 | E1 | Confirmed | — | one `H` row corrected in QA; conclusion strengthened |
-| [`F2-XC-007`](../findings/F2-XC-007.md) | `F2-SEN-009` b2 | 2 | Signer key lingers in un-zeroized configuration buffers | Informational | 75 | E2 | Confirmed | — | run-1 lead SEN-H15 recorded, never filed |
-| [`F2-XC-050`](../findings/F2-XC-050.md) | `F2-CORE-036` | 2 | Snapshot committed and pruned before the block's actions are enqueued; crash window | Low | 92 | E1 | Confirmed | — | fault-injected at the warp page and depth 0; sentinel `Claim` loss executed; run-1 miss |
+One row per live defect. **Runs**: which runs filed or confirmed it; parentheses in the counterpart column mark partial or cross-referenced rows. **Status**: certainty band, then the run-3 re-validation verdict or New. **Deciding evidence**: the one line that sets the band and the certainty. Every `F3` counterpart and duplicate is listed in section 3.
 
-### 2.2 Fold index — every run-2 file that is not itself canonical
+### 2.1 Core (34)
 
-| Run-2 ID | Canonical | Relation | Run-2 ID | Canonical | Relation |
+| Canonical | Counterparts | Runs | Short title | Severity | Cert. | Status | Basis | Deciding evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [`F-CORE-001`](../findings/F-CORE-001.md) | `F2-CORE-001`, `F3-CORE-004` | 1+2+3 | Reorg-depth protection not persisted; a restart resumes from orphaned state | Low | 99 | Confirmed, Still valid | E1 | CA3 one band for the three twins: no reorg deeper than 5 blocks verified on Gnosis, one diverged node (was High); certainty from rv-core-a's real-binary run |
+| [`F-CORE-002`](../findings/F-CORE-002.md) | `F2-CORE-002`, `F3-CORE-002` | 1+2+3 | Client-filtering completeness check gives up after three attempts and accepts the empty answer | Medium | 99 | Confirmed, Still valid | E1 | CA3 one band: a provider behaviour A4 names, live on Nethermind 1.32 to 1.35 and 1.39+ (PC3 consult) (was High) |
+| [`F-CORE-003`](../findings/F-CORE-003.md) | `F2-CORE-006`, `F3-XC-160` | 1+2+3 | A lagging backend's `null` header is read as an uncle; spurious rollback, and the sentinel loses its reveal | Medium | 80 | Confirmed, Still valid | E1 | `F3-XC-160` executed the bond lock end to end (CA3 80); needs mixed backends: Reth, Nethermind up to 1.35.8, or 1RPC's `-32001` rate-limit answer (PC3) |
+| [`F-CORE-004`](../findings/F-CORE-004.md) | `F2-CORE-005` (`F3-CORE-001` in part) | 1+2 | Event-fetch failures retry forever; the block watcher starves and reorg detection stops | Medium | 90 | Confirmed, Still valid | E1 | re-validation (#1049, #1050 add a `MissingBlock` route); PC3 fact: Erigon v3.7.0+ answers `-32000` for a side-chain hash, a concrete client for `F2-CORE-005`'s orphaned-hash trigger |
+| [`F-CORE-005`](../findings/F-CORE-005.md) | `F2-CORE-008` | 1+2 | `max_reorg_depth = 0`: `recent` stays empty and the `-32001` path spins silently | Low | 85 | Confirmed, Still valid | E1 | re-validation; run 3's R1 kept it as a non-default configuration (O3) |
+| [`F-CORE-006`](../findings/F-CORE-006.md) | `F2-CORE-004` | 1+2 | Filtering and decoding are address-agnostic (core half of `F-VAL-060`) | Low | 70 | Confirmed, Still valid | E2 (decode leg E1) | re-validation |
+| [`F-CORE-007`](../findings/F-CORE-007.md) | `F2-CORE-009` | 1+2 | Initialization range scan restarts without bound or delay | Low | 70 | Confirmed, Still valid | E2 | re-validation |
+| [`F-CORE-008`](../findings/F-CORE-008.md) | `F3-CORE-005` | 1+3 | Block polling paced by the host wall clock; a slow clock delays every block | Low | 92 | Confirmed, Still valid | E1 | `F3-CORE-005`'s real-binary reproduction (QA3-CORE, CA3 92) |
+| [`F-CORE-009`](../findings/F-CORE-009.md) | none | 1 | Block-watcher configuration unvalidated (`block_time = 0`, unbounded depth, `start_block` above head) | Low | 85 | Confirmed, Still valid | E1 | re-validation (cases 1 and 3 executed) |
+| [`F-CORE-010`](../findings/F-CORE-010.md) | none | 1 | `-32001` recovery commits the rewind before the event watcher validates it | Low | 45 | Plausible, Still valid | E2 | re-validation; no trigger in three runs (run 3: R1 Q6) |
+| [`F-CORE-011`](../findings/F-CORE-011.md) | `F2-CORE-033` | 1+2 | Indexer hangs behind a live-but-silent peer | Low | 80 | Confirmed, Still valid | E2 | re-validation; run 3's L-rust called it outside A4 (section 7) |
+| [`F-CORE-012`](../findings/F-CORE-012.md) | none | 1 | Bloom equality is blind to a lost repeated-shape log; `check_logs_limit` skipped on the client-filtered path | Medium | 85 | Confirmed, Still valid | E1 | re-validation's first executed PoC; run 3's R1 described the same loss and C3-COV kept it as an observation (section 7) |
+| [`F-CORE-030`](../findings/F-CORE-030.md) | `F2-CORE-031`, `F2-VAL-066` | 1+2 | Fatal driver errors exit with status 0; `/health` is a constant OK | Medium | 95 | Confirmed, Still valid, `known` | E1 | re-validation on the real binary; `known` per `settled.md` section 2 |
+| [`F-CORE-031`](../findings/F-CORE-031.md) | `F2-CORE-030`, `F3-CORE-032` | 1+2+3 | Snapshot commits before the effect spawns; a rollback or restart loses the resume | Medium | 93 | Confirmed, Still valid, `known` | E1 | CA3 one band with `F-SEN-001`, `F3-CORE-032`, `F3-SEN-004`: recoverable by hand, daily one-block orphans (was High); known #961, #973 |
+| [`F-CORE-032`](../findings/F-CORE-032.md) | none | 1 | A panicking effect task is logged and skipped; the resume is gone | Low | 45 | Plausible, Still valid | E1 (mechanism) | re-validation; no reachable panic site (run 3: L-rust Q71) |
+| [`F-CORE-033`](../findings/F-CORE-033.md) | `F2-CORE-035` | 1+2 | Effect fan-out unbounded: no cap, queue or backpressure | Medium | 70 | Confirmed, Still valid | E2 | re-validation (#1017 corrects one run-2 sub-claim only) |
+| [`F-CORE-034`](../findings/F-CORE-034.md) | `F2-CORE-010`, `F3-CORE-001` | 1+2+3 | Watcher errors retried every 100 ms forever; under a rate limit the per-event fallback stalls the indexer for good | Medium | 85 | Confirmed, Changed | E1 | `F3-CORE-001`'s driver and real-binary stall (CA3 85); #1062 removed the handbook backoff sentence |
+| [`F-CORE-035`](../findings/F-CORE-035.md) | (`F2-CORE-067` metrics leg) | 1 | Every `tx::Error::Rpc` is intermittent and swallowed forever | Medium | 78 | Confirmed, Changed | E2 | re-validation (#999 adds `eth_getProof`; one case overlaps settled L2) |
+| [`F-CORE-036`](../findings/F-CORE-036.md) | (`F-XC-002` union) | 1 | `Debug` bound on `Effect` and `Resume`; five trace sinks (secret leg refuted) | Low | 85 | Confirmed, Still valid | E1 | re-validation (redaction holds for the Direct Nonce payloads) |
+| [`F-CORE-038`](../findings/F-CORE-038.md) | none | 1 | `kdf::derive_key` multi-part `info` is plain concatenation | Informational | 90 | Confirmed, Still valid | E1 | re-validation; one caller (run 3: R2 H14) |
+| [`F-CORE-039`](../findings/F-CORE-039.md) | `F2-CORE-034` | 1+2 | Graceful shutdown blocked inside `update`; inline housekeeping is a second unbounded await | Low | 72 | Confirmed, Still valid | E2 | re-validation |
+| [`F-CORE-040`](../findings/F-CORE-040.md) | none | 1 | `next_input` `select!` drops the watcher's in-flight RPC on every resume | Low | 65 | Plausible, Still valid, `known` | E2 | re-validation; cancel safety of `next_input` is a known item (`settled.md` section 2) |
+| [`F-CORE-060`](../findings/F-CORE-060.md) | `F2-CORE-060`, `F3-CORE-060` (accepted arm) | 1+2+3 | Fee ratchet unbounded; underpriced rejections bump every block; the cap never bounds against the base fee | High | 98 | Confirmed, Still valid | E1 | re-validation; run 3's counterpart rates only the accepted arm (Low); PC3 did not weigh the underpriced arm (section 7) |
+| [`F-CORE-061`](../findings/F-CORE-061.md) | `F2-CORE-062` | 1+2 | First-submission underpriced rejection retried forever at the same fee | Medium | 65 | Plausible, Still valid | E1 (in-crate) | re-validation; node wording `I` (run 3: R3 O2) |
+| [`F-CORE-062`](../findings/F-CORE-062.md) | (`F2-CORE-061` gap, `F2-CORE-064`) | 1 | Allocated nonce never released; one bad nonce wedges the queue | Medium | 60 | Plausible, Still valid | E2 (gap E1) | re-validation (a batched variant wedges the batched queue) |
+| [`F-CORE-063`](../findings/F-CORE-063.md) | `F2-CORE-061`, `F-CORE-068` residual | 1+2 | Execution inferred from the account nonce; the mark is irrevocable, and a mid-batch `CallFailed` is marked executed | Medium | 55 | Plausible, Still valid | E1 (irrevocability) | re-validation; `F-CORE-068`'s residual folded here (section 1.6) |
+| [`F-CORE-064`](../findings/F-CORE-064.md) | `F2-CORE-064` | 1+2 | `expires_at` void once a nonce is allocated | Medium | 90 | Confirmed, Still valid | E1 | re-validation |
+| [`F-CORE-065`](../findings/F-CORE-065.md) | `F2-CORE-066` | 1+2 | Transaction tables bound to neither chain id nor signer | Low | 90 | Confirmed, Still valid, `known` | E1 | re-validation (rotated signer executed; 70 to 90) |
+| [`F-CORE-066`](../findings/F-CORE-066.md) | `F2-CORE-065`, `F3-CORE-061` | 1+2+3 | `tx::Config` accepts degenerate values (zero in-flight, zero window, NaN cap) | Informational | 90 | Confirmed, Still valid | E1 | `F3-CORE-061`'s CA3 value: operator values under A1, PC3 theoretical (run 1 Medium, run 2 Low as dissent) |
+| [`F-CORE-067`](../findings/F-CORE-067.md) | `F2-CORE-063`, `F2-CORE-032` | 1+2 | No idempotency key on `enqueue`; replays re-submit actions | Medium | 98 | Confirmed, Still valid, `known` | E1 | re-validation (#1015 adds a replay source) |
+| [`F2-CORE-003`](../findings/F2-CORE-003.md) | none | 2 | Default-path log fetch has no completeness check; `may_contain_log` is dead code | Informational | 80 | Confirmed, Still valid | E1 | re-validation; PC3's Nethermind 1.39+ fact asks for a fresh practicality look (section 7) |
+| [`F2-CORE-007`](../findings/F2-CORE-007.md) | `F3-CORE-030`, `F3-CORE-003` | 2+3 | A restart against a node behind the oldest snapshot exits with `BadUpdate` | Low | 95 | Confirmed, Still valid | E1 | `F3-CORE-030`'s real-binary reproduction (CA3 95); reviewer and Critic Medium, PC3 and CA3 Low |
+| [`F2-CORE-011`](../findings/F2-CORE-011.md) | none | 2 | No rollback anchor on a fresh start; an in-window reorg exits `MissingSnapshot` | Low | 92 | Confirmed, Still valid | E1 | re-validation |
+| [`F2-CORE-067`](../findings/F2-CORE-067.md) | (`F-CORE-035` observability leg) | 2 | Transaction queue exports no in-flight or fee metrics | Informational | 85 | Confirmed, Changed | E2 | re-validation (#1003 batch histograms narrow the gap) |
+
+### 2.2 Validator (21)
+
+| Canonical | Counterparts | Runs | Short title | Severity | Cert. | Status | Basis | Deciding evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [`F-VAL-002`](../findings/F-VAL-002.md) | `F2-VAL-002` | 1+2 | ECDH share pad is a raw symmetric x-coordinate | Low | 90 | Confirmed, Changed, `known` | E1 | re-validation: the proof of possession (#1027) narrows the leak to the pair; the team closed the KDF change (#1026) |
+| [`F-VAL-003`](../findings/F-VAL-003.md) | `F2-VAL-006` | 1+2 | Complaint responses unconditional and unbounded per plaintiff | Medium | 82 | Confirmed, Still valid | E1 | re-validation (plaintext response to an unshared plaintiff executed) |
+| [`F-VAL-004`](../findings/F-VAL-004.md) | `F2-VAL-063`, `F2-VAL-005` | 1+2 | Lost or failed `KeyGenSetup` never re-issued: rollover epoch forfeited (genesis accepted under A16) | Medium (rollover); genesis Informational `known` | 69 | Plausible, Still valid | E1 (gap) | re-validation; run 3's `F3-CORE-032` reaches the same lost setup through a rollback |
+| [`F-VAL-034`](../findings/F-VAL-034.md) | none | 1 | `handle_nonces` applies a resume without checking the signature id (outcome benign) | Low | 55 | Plausible, Still valid | E1 | re-validation; run 3's R5 reached the same benign outcome (Q33) |
+| [`F-VAL-035`](../findings/F-VAL-035.md) | none | 1 | Nonce JSON in the secret store is not zeroized | Informational | 70 | Confirmed, Changed | E2 | re-validation (#1033, #1040 narrowed leg b and removed leg c) |
+| [`F-VAL-037`](../findings/F-VAL-037.md) | none | 1 | Merkle trees pad with zero; no leaf and node separation | Informational | 60 | Plausible, Still valid | E1 | re-validation; run 3's L-crypto found it not exploitable (Q66: the zero leaf is `address(0)`) |
+| [`F-VAL-040`](../findings/F-VAL-040.md) | `F2-VAL-033` | 1+2 | The last sharer becomes responsible for the share-round restart | Low | 70 | Confirmed, Changed | E1 | re-validation (#1008, #1036 removed the reveal-round leg) |
+| [`F-VAL-060`](../findings/F-VAL-060.md) | `F2-VAL-061` (core half `F-CORE-006`) | 1+2 | Coordinator and Consensus events accepted from any watched address | Medium | 90 | Confirmed, Changed | E1 | PC3 and CA3: precondition false on Aegis, executed (the listed oracle is the immutable SentinelOracle, no `DELEGATECALL`, no shared topic0) (was High conditional) |
+| [`F-VAL-061`](../findings/F-VAL-061.md) | (`F2-VAL-030`, `031`, `062`, `063` policy leg) | 1+2 | Every effect error maps to `Resume::Noop`; no retry, no marker | Medium | 90 | Confirmed, Changed | E1 | re-validation: #1038, #1040 removed the NonceTree placeholder and the generator race; a lost resume costs one ceremony (was High) |
+| [`F-VAL-062`](../findings/F-VAL-062.md) | (`F-XC-002` union) | 1 | Secret-bearing effects derive `Debug` and are printed at `warn` (redacted) | Informational | 90 | Confirmed (hygiene), Changed | E1 | re-validation |
+| [`F-VAL-063`](../findings/F-VAL-063.md) | `F2-VAL-067`, `F3-VAL-061` | 1+2+3 | Consensus-critical configuration unvalidated (participants, salt, `blocks_per_epoch`, oracles, timing relations) | Low | 90 | Confirmed, Still valid | E1 | `F3-VAL-061`'s CA3 value: operator configuration under A1, PC3 gate 3 (runs 1 and 2 and rv-val Medium as dissent) |
+| [`F-VAL-064`](../findings/F-VAL-064.md) | (exit half `F-CORE-030`, root half `F-XC-004`) | 1+2 | Validator deployment residual: `/health` unreachable in the shipped deployment | Low | 72 | Confirmed, Still valid | E2 | re-validation |
+| [`F-VAL-065`](../findings/F-VAL-065.md) | (core side `F-CORE-067`) | 1 | `SetValidatorStaker` re-queued on every restart before inclusion | Low | 70 | Confirmed, Changed | E2 | re-validation (Preprocess leg removed, duplicate `Sign` leg defused by #1036); run 3's R6 measured one transaction per restart (Q44) |
+| [`F-VAL-066`](../findings/F-VAL-066.md) | `F2-VAL-035` | 1+2 | Unordered reconcile spawn and inline prune; a short outage loses a group's secrets | Low | 65 | Plausible, Changed | E1 | re-validation (#1015, #1017 changed the sequencing; the documented store concession remains) (was Medium) |
+| [`F2-VAL-007`](../findings/F2-VAL-007.md) | none | 2 | `active_epoch` advances only through self-staged epochs; phantom rollover session | Low | 65 | Plausible, Still valid | E1 | re-validation (consequences executed, trigger unforced) |
+| [`F2-VAL-064`](../findings/F2-VAL-064.md) | none | 2 | Documented `--config-file=<path>` spelling rejected by `argh` (both binaries) | Informational | 95 | Confirmed, Still valid | E1 | re-validation |
+| [`F3-VAL-030`](../findings/F3-VAL-030.md) | none | 3 | Shares sent on a non-final oracle approval can attest a transaction on a branch where the oracle did not approve it | High | 97 | Confirmed, New | E1 | CA3: a real SentinelOracle at Aegis windows and a depth-4 reorg give `FROZEN` plus `TransactionAttested`; PC3 conditional (no reorg of 3 or more verified on Gnosis); present at `fe9e84c` |
+| [`F3-VAL-031`](../findings/F3-VAL-031.md) | none | 3 | A one-block reorg at the nonce-commitment deadline splits honest shares; the restart rule drops the ceremony | Low | 60 | Plausible, New | E2 (drop rule E1) | CA3; PC3 conditional |
+| [`F3-VAL-032`](../findings/F3-VAL-032.md) | none | 3 | Secret store documentation overstates the nonce guarantees (code safe) | Informational | 90 | Confirmed, New | E1 | CA3 |
+| [`F3-VAL-062`](../findings/F3-VAL-062.md) | `F2-VAL-004` (folded) | 2+3 | A restart early in a key generation drops peer secret shares; the validator loses that epoch | Medium | 90 | Confirmed, New | E1 | CA3; PC3 conditional (a restart in the first 20 to 25 s after an epoch boundary with 30 s or more down) |
+| [`F3-VAL-100`](../findings/F3-VAL-100.md) | none | 3 | A reorg that puts a participant's epoch-1 commitment ahead of the final genesis confirmation excludes it from epoch 1 | Low | 88 | Confirmed, New | E1 | CA3; PC3 conditional (one window per deployment, about one in a million) |
+
+### 2.3 Sentinel (16)
+
+| Canonical | Counterparts | Runs | Short title | Severity | Cert. | Status | Basis | Deciding evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [`F-SEN-001`](../findings/F-SEN-001.md) | `F2-SEN-001` (a, b), `F3-SEN-004` | 1+2+3 | Replay or rollback ignores the sentinel's own `Committed`; no reveal; bond locked or slashed | Medium | 99 | Confirmed, Still valid, `known` | E1 | CA3 one band: recoverable by a manual `claim`, every restart in a commit phase (was High); known #961, #973 |
+| [`F-SEN-002`](../findings/F-SEN-002.md) | `F2-SEN-002`, `F3-SEN-002`, `F3-XC-001` | 1+2+3 | Commits before the engine verdict are not tallied; early finalize drops or parks a bonded request | Medium | 90 | Confirmed, Changed | E1 | PC3 and CA3: funds locked, not lost; #964 recovers the mirror case (was High) |
+| [`F-SEN-004`](../findings/F-SEN-004.md) | `F2-SEN-005` | 1+2 | No bound on concurrent engine checks or outstanding bonds | Medium | 78 | Confirmed, Changed | E1 | re-validation: at Aegis parameters starvation needs more than 16 proposals per block; bond exposure is the operative branch |
+| [`F-SEN-005`](../findings/F-SEN-005.md) | `F2-SEN-004` | 1+2 | `WaitingForOutcome` never expires (the dispute half fixed by #974) | Medium | 95 | Confirmed, Changed | E1 | re-validation |
+| [`F-SEN-006`](../findings/F-SEN-006.md) | `F2-SEN-007` | 1+2 | Actions not idempotent under replay; `handle_arbitration_timeout` claims without a bond | Low | 90 | Confirmed, Still valid | E1 | re-validation (#1015 adds a replay site) |
+| [`F-SEN-007`](../findings/F-SEN-007.md) | `F2-SEN-006` | 1+2 | No startup or per-request pre-flight; silent per-request gas burn | Low | 82 | Confirmed, Still valid | E1 | re-validation |
+| [`F-SEN-008`](../findings/F-SEN-008.md) | `F3-SEN-001` | 1+3 | Direct-mode `approve` gas limit 55,000 runs out of gas on USDC.e; no Aegis sentinel on the documented configuration commits | High | 97 | Confirmed, Changed | E1 | PC3 practical, CA3 High; `F3-SEN-001`'s real-binary run (97); the USDT-family half does not apply on Aegis (was Low 52) |
+| [`F-SEN-009`](../findings/F-SEN-009.md) | (`F2-SEN-006` claim 6, `F2-SEN-008` claim 3, `F2-SEN-009` b3) | 1+2 | Engine timeout derived from an unvalidated `voting_window` | Low | 82 | Confirmed, Still valid, `known` | E1 | re-validation |
+| [`F-SEN-010`](../findings/F-SEN-010.md) | (`F2-SEN-009` b1) | 1+2 | Sample ships zero addresses and a placeholder key that parse and start | Informational | 85 | Confirmed, Still valid, `known` | E1 | re-validation |
+| [`F-SEN-011`](../findings/F-SEN-011.md) | (`F2-CORE-030` in-flight case, `F3-CORE-032` restore point) | 1 | A restart orphans an in-flight check whose proposal predates the anchor | Low | 82 | Confirmed, Still valid, `known` | E1 | re-validation; known #973; no bond at stake, so it stays Low |
+| [`F-SEN-012`](../findings/F-SEN-012.md) | `F2-SEN-008` | 1+2 | Engine client makes one attempt; any failure is a permanent abstention | Low | 90 | Confirmed, Still valid | E1 | re-validation; `F3-XC-004` settles the userinfo sub-claim of the run-2 extension the other way |
+| [`F-SEN-014`](../findings/F-SEN-014.md) | `F3-XC-006` | 1+3 | The early `Finalize` always reverts (all K since #964) | Informational | 95 | Confirmed, Changed | E1 | `F3-XC-006`'s CA3 value |
+| [`F-SEN-015`](../findings/F-SEN-015.md) | `F2-SEN-001` (c) | 1+2 | A restart warp prunes the recorded verdict before the replayed check reads it; the committed vote is re-decided and never revealed | Medium | 95 | Confirmed, Changed | E1 | CA3-FIX Not fixed (15 of 20 restarts in the window, control 0 of 6), CA3 16 of 16; #978, #979 fixed the live-reorg route (was High) |
+| [`F2-SEN-003`](../findings/F2-SEN-003.md) | `F3-SEN-003`, `F3-XC-002` | 2+3 | `finalize()` drops a bonded entry when the own reveal was not observed; the recovery path cannot run | Medium | 95 | Confirmed, Changed, `known` | E1 | `F3-SEN-003`'s real-binary run (CA3 95); #1017 closed trigger b |
+| [`F2-SEN-011`](../findings/F2-SEN-011.md) | none | 2 | `handle_arbitration_timeout` doc and metric assume a full refund | Informational | 80 | Confirmed, Changed | E1 | re-validation (#1017 removes the warp trigger; #974 adds a second metric site) |
+| [`F3-SEN-060`](../findings/F3-SEN-060.md) | none | 3 | The dispute-timeout arm drops the entry even when its own `timeoutArbitration` and `claim` revert (introduced by #974) | Low | 85 | Confirmed, New | E1 (sentinel half) | CA3; PC3 conditional (Circle blacklist, frozen dispute, 28 days of silence); the contract half is being re-derived offline (section 7) |
+
+### 2.4 Cross-cutting (19)
+
+| Canonical | Counterparts | Runs | Short title | Severity | Cert. | Status | Basis | Deciding evidence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [`F-XC-001`](../findings/F-XC-001.md) | `F2-XC-009` | 1+2 | No release profile; overflow checks off in shipped binaries | Informational | 93 | Confirmed, Still valid | E1 | re-validation |
+| [`F-XC-003`](../findings/F-XC-003.md) | none | 1 | `deny_unknown_fields` with `flatten` behaves correctly but has no in-tree test | Informational | 96 | Confirmed (test gap), Still valid | E1 | re-validation; run 3's R2 and R6 re-executed the behaviour |
+| [`F-XC-004`](../findings/F-XC-004.md) | `F2-XC-003`, `F2-VAL-068`, `F2-SEN-009` b4 | 1+2 | Runtime images run as root on floating tags; no toolchain pin | Low | 85 | Confirmed, Still valid | E2 | re-validation |
+| [`F-XC-006`](../findings/F-XC-006.md) | `F2-XC-006` | 1+2 | Persistent state not bound to chain, deployment or signer | Low | 90 | Confirmed, Still valid | E1 | re-validation (two local Anvil chains) |
+| [`F-XC-007`](../findings/F-XC-007.md) | (`F2-XC-004` and `F3-XC-007` gate halves) | 1+2+3 | No `cargo audit` gate in CI | Informational | 92 | Confirmed, Still valid | E1 | re-validation |
+| [`F-XC-008`](../findings/F-XC-008.md) | (`F2-SEN-008` items 2, 3) | 1 | Unconfigured `reqwest` engine client follows redirects and honours proxy variables | Informational | 90 | Confirmed, Still valid | E1 | re-validation (a 307 redirect re-posts the transaction) |
+| [`F-XC-009`](../findings/F-XC-009.md) | `F2-XC-008`, `F2-SEN-009` b1 | 1+2 | Samples ship a parseable well-known key and a live mainnet RPC | Low | 75 | Confirmed, Still valid | E1 | re-validation |
+| [`F-XC-011`](../findings/F-XC-011.md) | `F2-XC-004`, `F3-XC-007` | 1+2+3 | Dependency advisories linked, none reachable from the services | Informational | 90 | Confirmed, Still valid | E1 | re-validation and `F3-XC-007` (the same five advisories) |
+| [`F-XC-050`](../findings/F-XC-050.md) | (`F2-VAL-061` is its precondition) | 1 | No DKG membership check; cardinality close; silent `None` finalisation | Medium (rollover); genesis Informational `known` | 48 | Plausible, Still valid | E2 | re-validation; its precondition is false on Aegis per PC3's `F-VAL-060` check (band unsettled, section 7) |
+| [`F-XC-051`](../findings/F-XC-051.md) | none | 1 | `verify_commitment` accepts a short commitment (structural checks left to frost-core) | Informational | 90 | Confirmed, Still valid | E1 | re-validation (first run of the run-1 PoC); needs `F-VAL-060`'s precondition (section 1.6) |
+| [`F2-XC-002`](../findings/F2-XC-002.md) | `F2-VAL-065`, `F3-XC-005`, `F3-VAL-060`, `F3-SEN-005` | 2+3 | Sample database URLs lack `?mode=rwc`; a fresh node fails to start | Low | 95 | Confirmed, Still valid | E1 | `F3-XC-005`'s CA3 value |
+| [`F2-XC-005`](../findings/F2-XC-005.md) | none | 2 | Secret deletion is logical only (bundled SQLite without `SECURE_DELETE`) | Informational | 90 | Confirmed, Changed | E1 | re-validation |
+| [`F2-XC-007`](../findings/F2-XC-007.md) | `F2-SEN-009` b2 | 2 | Signer key lingers in un-zeroized configuration buffers | Informational | 75 | Confirmed, Changed | E2 | re-validation (#1046 removed the error-retention leg) |
+| [`F2-XC-050`](../findings/F2-XC-050.md) | `F2-CORE-036`, `F3-XC-030` | 2+3 | Snapshot committed and pruned before the actions are queued; a crash in the window loses them (wider since #1017) | Low | 92 | Confirmed, Still valid | E1 | re-validation's fault injection; run 3 rediscovered it (C3-XC over R8's R-12) |
+| [`F3-XC-003`](../findings/F3-XC-003.md) | none | 3 | Dockerfiles say the binaries use the system SQLite; the build bundles 3.51.3 | Informational | 95 | Confirmed, New | E1 | CA3 |
+| [`F3-XC-004`](../findings/F3-XC-004.md) | (`F2-SEN-008` claim 6, side claim) | 3 | Engine errors log the full engine URL, path and query tokens included | Informational | 90 | Confirmed, New, `known` | E1 | CA3; #1046 trade-off |
+| [`F3-XC-040`](../findings/F3-XC-040.md) | (residual of the Fixed `F2-XC-001`) | 3 | A key pasted into a typed config field is printed in the startup parse error | Informational | 90 | Confirmed, New | E1 | CA3 |
+| [`F3-XC-100`](../findings/F3-XC-100.md) | `F3-VAL-001` | 3 | A last committer forces an honest verifying share to the identity; the contract rejects it and every Aegis rollover is skipped | High | 95 | Confirmed, New | E1 | CA3, three routes; PC3 conditional (one Byzantine member, inside A2); the team's review of #1025 rates it Medium |
+| [`F3-XC-130`](../findings/F3-XC-130.md) | `F3-CORE-031` | 3 | An RPC URL with an unsupported scheme is printed with its key at startup | Informational | 95 | Confirmed, New, `known` | E1 | CA3; #113, #1046 |
+
+## 3. Fold index
+
+### 3.1 Run-3 duplicates (files stay this run)
+
+| Duplicate | Run-3 canonical | Ledger canonical |
+| --- | --- | --- |
+| [`F3-CORE-003`](../findings/F3-CORE-003.md) | [`F3-CORE-030`](../findings/F3-CORE-030.md) | [`F2-CORE-007`](../findings/F2-CORE-007.md) |
+| [`F3-CORE-031`](../findings/F3-CORE-031.md) | [`F3-XC-130`](../findings/F3-XC-130.md) | [`F3-XC-130`](../findings/F3-XC-130.md) |
+| [`F3-SEN-005`](../findings/F3-SEN-005.md) | [`F3-XC-005`](../findings/F3-XC-005.md) | [`F2-XC-002`](../findings/F2-XC-002.md) |
+| [`F3-VAL-001`](../findings/F3-VAL-001.md) | [`F3-XC-100`](../findings/F3-XC-100.md) | [`F3-XC-100`](../findings/F3-XC-100.md) |
+| [`F3-VAL-060`](../findings/F3-VAL-060.md) | [`F3-XC-005`](../findings/F3-XC-005.md) | [`F2-XC-002`](../findings/F2-XC-002.md) |
+| [`F3-XC-001`](../findings/F3-XC-001.md) | [`F3-SEN-002`](../findings/F3-SEN-002.md) | [`F-SEN-002`](../findings/F-SEN-002.md) |
+| [`F3-XC-002`](../findings/F3-XC-002.md) | [`F3-SEN-003`](../findings/F3-SEN-003.md) | [`F2-SEN-003`](../findings/F2-SEN-003.md) |
+
+### 3.2 Run-3 counterparts of earlier canonical rows (files stay)
+
+| Run-3 file | Relation | Ledger canonical |
+| --- | --- | --- |
+| [`F3-CORE-001`](../findings/F3-CORE-001.md) | EXTENDS | [`F-CORE-034`](../findings/F-CORE-034.md) |
+| [`F3-CORE-002`](../findings/F3-CORE-002.md) | CONFIRMS | [`F-CORE-002`](../findings/F-CORE-002.md) |
+| [`F3-CORE-004`](../findings/F3-CORE-004.md) | CONFIRMS | [`F-CORE-001`](../findings/F-CORE-001.md) |
+| [`F3-CORE-005`](../findings/F3-CORE-005.md) | CONFIRMS | [`F-CORE-008`](../findings/F-CORE-008.md) |
+| [`F3-CORE-030`](../findings/F3-CORE-030.md) | CONFIRMS | [`F2-CORE-007`](../findings/F2-CORE-007.md) |
+| [`F3-CORE-032`](../findings/F3-CORE-032.md) | CONFIRMS | [`F-CORE-031`](../findings/F-CORE-031.md) |
+| [`F3-CORE-060`](../findings/F3-CORE-060.md) | CONFIRMS (accepted arm only) | [`F-CORE-060`](../findings/F-CORE-060.md) |
+| [`F3-CORE-061`](../findings/F3-CORE-061.md) | CONFIRMS | [`F-CORE-066`](../findings/F-CORE-066.md) |
+| [`F3-SEN-001`](../findings/F3-SEN-001.md) | CONFIRMS (gas-limit half) | [`F-SEN-008`](../findings/F-SEN-008.md) |
+| [`F3-SEN-002`](../findings/F3-SEN-002.md) | CONFIRMS | [`F-SEN-002`](../findings/F-SEN-002.md) |
+| [`F3-SEN-003`](../findings/F3-SEN-003.md) | CONFIRMS | [`F2-SEN-003`](../findings/F2-SEN-003.md) |
+| [`F3-SEN-004`](../findings/F3-SEN-004.md) | CONFIRMS | [`F-SEN-001`](../findings/F-SEN-001.md) |
+| [`F3-VAL-061`](../findings/F3-VAL-061.md) | CONFIRMS (participant, salt and epoch-length legs) | [`F-VAL-063`](../findings/F-VAL-063.md) |
+| [`F3-XC-005`](../findings/F3-XC-005.md) | CONFIRMS | [`F2-XC-002`](../findings/F2-XC-002.md) |
+| [`F3-XC-006`](../findings/F3-XC-006.md) | CONFIRMS | [`F-SEN-014`](../findings/F-SEN-014.md) |
+| [`F3-XC-007`](../findings/F3-XC-007.md) | CONFIRMS (gate half also under `F-XC-007`) | [`F-XC-011`](../findings/F-XC-011.md) |
+| [`F3-XC-030`](../findings/F3-XC-030.md) | CONFIRMS | [`F2-XC-050`](../findings/F2-XC-050.md) |
+| [`F3-XC-160`](../findings/F3-XC-160.md) | EXTENDS | [`F-CORE-003`](../findings/F-CORE-003.md) |
+
+### 3.3 Earlier rows folded in run 3 (files leave)
+
+| Earlier ID | Folded into | Why |
+| --- | --- | --- |
+| `F2-VAL-004` | [`F3-VAL-062`](../findings/F3-VAL-062.md) | same mechanism; #1017 made the trigger a deterministic restart path that only `F3-VAL-062` executed; no team thread. Its run-3 execution of both cases stays at `poc/F2-VAL-004/run3/` |
+| `F-CORE-068` | [`F-CORE-063`](../findings/F-CORE-063.md) | the whole-batch half is settled L4; the residual is `F-CORE-063`'s loss (section 1.6). Also in the resolved index as Superseded |
+| `F-XC-002` | [`F-VAL-062`](../findings/F-VAL-062.md) and [`F-CORE-036`](../findings/F-CORE-036.md) | union row, never counted; both halves are live rows |
+
+### 3.4 Run-2 files folded in run 2 (51 files leave)
+
+The relation is the one the run-2 reconciliation recorded; the canonical is the row that carries it now. A canonical marked Fixed or Moot left the folder in run 3 (section 4).
+
+| Run-2 ID | Canonical now | Relation |
+| --- | --- | --- |
+| `F2-CORE-001` | [`F-CORE-001`](../findings/F-CORE-001.md) | CONFIRMS |
+| `F2-CORE-002` | [`F-CORE-002`](../findings/F-CORE-002.md) | CONFIRMS |
+| `F2-CORE-004` | [`F-CORE-006`](../findings/F-CORE-006.md) | CONFIRMS |
+| `F2-CORE-005` | [`F-CORE-004`](../findings/F-CORE-004.md) | EXTENDS |
+| `F2-CORE-006` | [`F-CORE-003`](../findings/F-CORE-003.md) | CONFIRMS |
+| `F2-CORE-008` | [`F-CORE-005`](../findings/F-CORE-005.md) | CONFIRMS |
+| `F2-CORE-009` | [`F-CORE-007`](../findings/F-CORE-007.md) | CONFIRMS |
+| `F2-CORE-010` | [`F-CORE-034`](../findings/F-CORE-034.md) | EXTENDS |
+| `F2-CORE-030` | [`F-CORE-031`](../findings/F-CORE-031.md) | EXTENDS |
+| `F2-CORE-031` | [`F-CORE-030`](../findings/F-CORE-030.md) | CONFIRMS |
+| `F2-CORE-032` | [`F-CORE-067`](../findings/F-CORE-067.md) | CONFIRMS |
+| `F2-CORE-033` | [`F-CORE-011`](../findings/F-CORE-011.md) | CONFIRMS, narrows |
+| `F2-CORE-034` | [`F-CORE-039`](../findings/F-CORE-039.md) | CONFIRMS |
+| `F2-CORE-035` | [`F-CORE-033`](../findings/F-CORE-033.md) | EXTENDS |
+| `F2-CORE-036` | [`F2-XC-050`](../findings/F2-XC-050.md) | duplicate |
+| `F2-CORE-060` | [`F-CORE-060`](../findings/F-CORE-060.md) | EXTENDS |
+| `F2-CORE-061` | [`F-CORE-063`](../findings/F-CORE-063.md) | EXTENDS (also `F-CORE-062`) |
+| `F2-CORE-062` | [`F-CORE-061`](../findings/F-CORE-061.md) | EXTENDS |
+| `F2-CORE-063` | [`F-CORE-067`](../findings/F-CORE-067.md) | CONFIRMS |
+| `F2-CORE-064` | [`F-CORE-064`](../findings/F-CORE-064.md) | EXTENDS (also `F-CORE-062`) |
+| `F2-CORE-065` | [`F-CORE-066`](../findings/F-CORE-066.md) | CONFIRMS |
+| `F2-CORE-066` | [`F-CORE-065`](../findings/F-CORE-065.md) | CONFIRMS |
+| `F2-VAL-001` | `F-VAL-001` (Fixed) | CONFIRMS |
+| `F2-VAL-002` | [`F-VAL-002`](../findings/F-VAL-002.md) | CONFIRMS |
+| `F2-VAL-005` | [`F-VAL-004`](../findings/F-VAL-004.md) | CONFIRMS |
+| `F2-VAL-006` | [`F-VAL-003`](../findings/F-VAL-003.md) | CONFIRMS |
+| `F2-VAL-030` | `F-VAL-030` (Moot) | EXTENDS |
+| `F2-VAL-032` | `F-VAL-032` (Fixed) | EXTENDS |
+| `F2-VAL-033` | [`F-VAL-040`](../findings/F-VAL-040.md) | CONFIRMS |
+| `F2-VAL-035` | [`F-VAL-066`](../findings/F-VAL-066.md) | EXTENDS |
+| `F2-VAL-060` | `F2-XC-001` (Fixed) | duplicate |
+| `F2-VAL-061` | [`F-VAL-060`](../findings/F-VAL-060.md) | EXTENDS |
+| `F2-VAL-062` | `F-VAL-030` (Moot) | CONFIRMS |
+| `F2-VAL-063` | [`F-VAL-004`](../findings/F-VAL-004.md) | EXTENDS |
+| `F2-VAL-065` | [`F2-XC-002`](../findings/F2-XC-002.md) | duplicate |
+| `F2-VAL-066` | [`F-CORE-030`](../findings/F-CORE-030.md) | CONFIRMS |
+| `F2-VAL-067` | [`F-VAL-063`](../findings/F-VAL-063.md) | EXTENDS |
+| `F2-VAL-068` | [`F-XC-004`](../findings/F-XC-004.md) | CONFIRMS |
+| `F2-SEN-001` | [`F-SEN-001`](../findings/F-SEN-001.md) (variant c: `F-SEN-015`) | CONFIRMS |
+| `F2-SEN-002` | [`F-SEN-002`](../findings/F-SEN-002.md) | CONFIRMS |
+| `F2-SEN-004` | [`F-SEN-005`](../findings/F-SEN-005.md) | CONFIRMS |
+| `F2-SEN-005` | [`F-SEN-004`](../findings/F-SEN-004.md) | CONFIRMS |
+| `F2-SEN-006` | [`F-SEN-007`](../findings/F-SEN-007.md) | CONFIRMS |
+| `F2-SEN-007` | [`F-SEN-006`](../findings/F-SEN-006.md) | EXTENDS |
+| `F2-SEN-008` | [`F-SEN-012`](../findings/F-SEN-012.md) | CONFIRMS |
+| `F2-SEN-009` | [`F-XC-009`](../findings/F-XC-009.md) | CONFIRMS |
+| `F2-XC-003` | [`F-XC-004`](../findings/F-XC-004.md) | CONFIRMS |
+| `F2-XC-004` | [`F-XC-011`](../findings/F-XC-011.md) (gate half `F-XC-007`) | EXTENDS |
+| `F2-XC-006` | [`F-XC-006`](../findings/F-XC-006.md) | CONFIRMS |
+| `F2-XC-008` | [`F-XC-009`](../findings/F-XC-009.md) | EXTENDS |
+| `F2-XC-009` | [`F-XC-001`](../findings/F-XC-001.md) | CONFIRMS |
+
+## 4. Resolved index
+
+One row per finding that leaves the folder as resolved (`PROMPT.md` Section 12). The evidence is in the run-3 review commit; the finding files and their uncited PoC folders are deleted after it.
+
+| ID | Short title | Verdict | PR or decision | How verified | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| `F2-CORE-001` | `F-CORE-001` | CONFIRMS | `F2-VAL-001` | `F-VAL-001` | CONFIRMS |
-| `F2-CORE-002` | `F-CORE-002` | CONFIRMS | `F2-VAL-002` | `F-VAL-002` | CONFIRMS |
-| `F2-CORE-004` | `F-CORE-006` | CONFIRMS | `F2-VAL-005` | `F-VAL-004` | CONFIRMS (in-crate duplicate of `F2-VAL-063`) |
-| `F2-CORE-005` | `F-CORE-004` | EXTENDS | `F2-VAL-006` | `F-VAL-003` | CONFIRMS |
-| `F2-CORE-006` | `F-CORE-003` | CONFIRMS | `F2-VAL-030` | `F-VAL-030` | EXTENDS |
-| `F2-CORE-008` | `F-CORE-005` | CONFIRMS | `F2-VAL-032` | `F-VAL-032` | EXTENDS |
-| `F2-CORE-009` | `F-CORE-007` | CONFIRMS | `F2-VAL-033` | `F-VAL-040` | CONFIRMS |
-| `F2-CORE-010` | `F-CORE-034` | EXTENDS | `F2-VAL-035` | `F-VAL-066` | EXTENDS (post-refactor shape) |
-| `F2-CORE-030` | `F-CORE-031` | EXTENDS | `F2-VAL-060` | `F2-XC-001` | duplicate |
-| `F2-CORE-031` | `F-CORE-030` | CONFIRMS | `F2-VAL-061` | `F-VAL-060` | EXTENDS |
-| `F2-CORE-032` | `F-CORE-067` | CONFIRMS (in-crate duplicate of `F2-CORE-063`) | `F2-VAL-062` | `F-VAL-030` | CONFIRMS (in-crate duplicate of `F2-VAL-030`) |
-| `F2-CORE-033` | `F-CORE-011` | CONFIRMS, narrows | `F2-VAL-063` | `F-VAL-004` | EXTENDS (rollover instance) |
-| `F2-CORE-034` | `F-CORE-039` | CONFIRMS | `F2-VAL-065` | `F2-XC-002` | duplicate |
-| `F2-CORE-035` | `F-CORE-033` | EXTENDS | `F2-VAL-066` | `F-CORE-030` | CONFIRMS (via `F2-CORE-031`) |
-| `F2-CORE-036` | `F2-XC-050` | duplicate | `F2-VAL-067` | `F-VAL-063` | EXTENDS |
-| `F2-CORE-060` | `F-CORE-060` | EXTENDS | `F2-VAL-068` | `F-XC-004` | CONFIRMS (via `F2-XC-003`) |
-| `F2-CORE-061` | `F-CORE-063` | EXTENDS (also `F-CORE-062`) | `F2-SEN-001` | `F-SEN-001` | CONFIRMS (variant c → `F-SEN-015`) |
-| `F2-CORE-062` | `F-CORE-061` | EXTENDS | `F2-SEN-002` | `F-SEN-002` | CONFIRMS |
-| `F2-CORE-063` | `F-CORE-067` | CONFIRMS | `F2-SEN-004` | `F-SEN-005` | CONFIRMS |
-| `F2-CORE-064` | `F-CORE-064` | EXTENDS (also `F-CORE-062`) | `F2-SEN-005` | `F-SEN-004` | CONFIRMS, settles the trigger |
-| `F2-CORE-065` | `F-CORE-066` | CONFIRMS | `F2-SEN-006` | `F-SEN-007` | CONFIRMS |
-| `F2-CORE-066` | `F-CORE-065` | CONFIRMS | `F2-SEN-007` | `F-SEN-006` | EXTENDS |
-| `F2-XC-003` | `F-XC-004` | CONFIRMS | `F2-SEN-008` | `F-SEN-012` | CONFIRMS |
-| `F2-XC-004` | `F-XC-011` | EXTENDS (gate half cross-referenced from `F-XC-007`) | `F2-SEN-009` | `F-XC-009` | CONFIRMS (b2 → `F2-XC-007`, b3 → `F-SEN-009`, b4 → `F-XC-004`) |
-| `F2-XC-006` | `F-XC-006` | CONFIRMS | `F2-XC-008` | `F-XC-009` | EXTENDS |
-| `F2-XC-009` | `F-XC-001` | CONFIRMS |  |  |  |
+| `F-VAL-001` | DKG encryption key `q` had no proof of possession; a peer's signing share was recoverable (Critical 97) | Fixed | #1027 (`14750ea`) on #1022 (`010a09f`) | rv-val: original PoC adapted (0 of 3 pass), 8 Rust variants and 7 onchain tests pass, PoP-removal mutation brings the attack back; CA3-FIX 95: 6 new Rust and 3 onchain variants, mutation bites | the run-3 review commit |
+| `F-VAL-005` | A reorg across the `KeyGen` block deleted the DKG secrets (High at `2893917`) | Fixed | #909 (`8b88f4a`), #910 (`c87c054`), before run 2 | rv-val: store tests 12 of 12; CA3-FIX 88: live reorg past the epoch-1 round start keeps the commitment byte-identical, 3 of 3; its lead L2 became `F3-VAL-100` | the run-3 review commit |
+| `F-VAL-032` | `handle_sign` dropped a waiting session on a `Sign` from any untracked group (High 93; team-accepted risk) | Fixed (was accepted risk) | #1036 (`82d5419`), #1038 (`a9023ac`) | rv-val: 6 variants pass, restoring the drop arm fails 3; CA3-FIX 93: 4 new oracle-backed variants, the restored arm fails V1, V2, V5 and W3. The accepted-risk entry in `settled.md` no longer describes reachable behaviour | the run-3 review commit |
+| `F-VAL-067` | Rust counted complaints cumulatively while the contract netted them (Low 70) | Fixed | #1019 (`97f4cd1`) | rv-val: Rust aborts at the threshold-th complaint, the contract test passes, a netting mutation fails it | the run-3 review commit |
+| `F2-VAL-003` | A restart warp over an epoch boundary dropped the key-generation round (Medium 85) | Fixed | #1017 (`24eaf8d`) | rv-val 4 of 4 with mutation; CA3-FIX 90, deletion conditional on `F3-VAL-062` staying live (it does) | the run-3 review commit |
+| `F-SEN-003` | A warp delivered no `NewBlock`; reveals were discarded and a bogus timeout finalize followed (Low 80) | Fixed | #1017 (`24eaf8d`) with #1015 | rv-sen route b passes; CA3-FIX 92: 3 variants, removing the warp tick fails all three; deletion conditional on `F2-SEN-003` and `F3-SEN-003` staying live (they do) | the run-3 review commit |
+| `F2-SEN-010` | Commits mined in the commit-deadline block were never tallied (#914) (High 93) | Fixed | #1014 (`fef8cfd`) with #1015, #1017 | rv-sen 5 variants; CA3-FIX 92: warp ending at and warp split at the deadline both tally the peer; the stopgap and the warp-tick removal each fail them | the run-3 review commit |
+| `F2-XC-001` | Any configuration parse error printed the whole file, signer key included (High 95) | Fixed | #1046 (`55d811e`); env route #1007 (`1a292af`) | rv-xc: 23 variants and a control, mutation check, 213,312-document span fuzz; CA3-FIX 93: 319,360-document echo fuzz through the real loader; the narrower residual is `F3-XC-040` | the run-3 review commit |
+| `F-VAL-030` | A failed `NonceTree` left a phantom reservation and an `expected_chunk` cascade (High 97) | Moot | code removed by #1038 (`a9023ac`), #1040 (`392d7c8`); replacement #1035 (`3154a05`), #1036 | rv-val: a lost `GenerateNonces` costs one ceremony; CA3-FIX 92: handler-level replay, nonce-overwrite mutation fails the variant | the run-3 review commit |
+| `F-VAL-031` | A dead nonce-generation worker was never detected (Low 42) | Moot | code removed by #1039 (`5e694c4`), #1040 (`392d7c8`) | rv-val: the file deletion in git history; no thread or generator left | the run-3 review commit |
+| `F-VAL-036` | `observe` accepted a non-monotonic sequence (Low 40) | Moot | code removed by #1038 (`a9023ac`) | rv-val: `git log -S 'fn observe'`; the sequence is only logged | the run-3 review commit |
+| `F-VAL-038` | Chunk generation saturated every core (Low 55) | Moot | code removed by #1040 (`392d7c8`) | rv-val: no `rayon` and no parallel iterator left | the run-3 review commit |
+| `F-VAL-039` | The nonce top-up threshold left about 100 sequences of headroom (High 58) | Moot | code removed by #1038 (`a9023ac`), #1036 (`82d5419`) | rv-val V4; CA3-FIX 92: W1 and W4 (300 junk `Sign` calls) behave | the run-3 review commit |
+| `F2-VAL-031` | Nonce generators were cold after every restart (Medium 80) | Moot | code removed by #1039 (`5e694c4`), #1040 (`392d7c8`) | rv-val: no generator left; consult tests on the replacement | the run-3 review commit |
+| `F-CORE-069` | Unmerged batex two-nonce delegation would write a permanent nonce gap (forward-looking) | Moot | batex never merged; #993, #995, #996 cancel an unused authorization nonce in the same block | rv-core-b: 2 new tests, both fail with the recovery disabled; CA3-FIX 92: 4 variants | the run-3 review commit |
+| `F-CORE-037` | Snapshots are unversioned JSON (Low 62) | Settled | Aegis fresh start | rv-core-a against `settled.md` section 1 | the run-3 review commit |
+| `F-VAL-033` | A database restore after a reorg reused a burned nonce | Settled | A17 (PR #905 thread, nlordell) | rv-val: trigger unchanged (an operator restore) | the run-3 review commit |
+| `F2-VAL-034` | No schema-version check; a pre-#908 database opened and failed (Informational) | Settled | Aegis fresh start | rv-val against `settled.md` section 1 | the run-3 review commit |
+| `F-VAL-068` | Unmerged pruning branch, parts D1 to D4 | Superseded | branch merged; D1 by `F2-VAL-031` (Moot), D2 the store concession, D3 `F-VAL-066`, D4 `F-XC-006` | rv-val | the run-3 review commit |
+| `F-SEN-016` | Unmerged #914 and #915 bundle, parts D1 to D4 | Superseded | D1 by `F2-SEN-010` (Fixed), D3 by `F-SEN-006`; D2 and D4 moot in the merged design (#1014, #1015, #1017) | rv-sen | the run-3 review commit |
+| `F-CORE-068` | Unmerged batex: a batch's execution status is unobservable | Superseded | whole-batch revert settled as L4; the mid-batch `CallFailed` residual folded into `F-CORE-063` | rv-core-b: queue tests show the batch marked executed by nonce; executor Foundry tests for reference | the run-3 review commit |
+| `F-SEN-013` | A non-UTF-8 `reason` stalls the indexer | Refuted | run 1 (alloy decodes `string` lossily) | rv-sen: `alloy-sol-types` 1.6.0 unchanged; run 3's R1, R7 and R8 rejected it independently | the run-3 review commit |
 
-### 2.3 Merge notes — conflicts between the four parts and how they were resolved
+## 5. Misses both ways
 
-1. **`F-VAL-064` versus `F-CORE-030` (one defect, two severities).** REC-VAL aligned `F-VAL-064` to Low to match the run-2 canonical `F2-CORE-031` (Low), while REC-CORE carried `F-CORE-030` at Medium 85 with reasons (#820 asked for an observable failure; the fix is two lines). Resolved: the exit-status defect is canonical under `F-CORE-030` at **Medium 85**; `F-VAL-064` keeps a row of its own at Low 72 only for its validator-deployment residual (`/health` unreachable in the shipped deployment), with its root-container sub-claim under `F-XC-004`.
-2. **Chained folds.** Several run-2 files pointed at another run-2 file that is itself folded (`F2-VAL-066` → `F2-CORE-031` → `F-CORE-030`; `F2-VAL-068` → `F2-XC-003` → `F-XC-004`; `F2-VAL-005` → `F2-VAL-063` → `F-VAL-004`; `F2-VAL-062` → `F2-VAL-030` → `F-VAL-030`; `F2-CORE-032` → `F2-CORE-063` → `F-CORE-067`). Each now points at exactly one canonical (Section 2.2).
-3. **`F2-SEN-009` split four ways.** REC-SEN folded its bullets into `F2-XC-008` (b1, b3), `F2-XC-007` (b2) and `F2-XC-003` (b4); REC-XC said REC-SEN keeps b3. Resolved: one canonical, `F-XC-009` (the file's primary claim, via `F2-XC-008`); b2, b3 and b4 are cross-references to `F2-XC-007`, `F-SEN-009` and `F-XC-004`.
-4. **`F2-XC-004` folded into two run-1 rows** (`F-XC-011` and `F-XC-007`). Resolved: canonical `F-XC-011` (advisory reachability is the file's claim); the CI-gate and feature-width extension is cross-referenced from `F-XC-007`.
-5. **`F2-CORE-010` named two run-1 parents** (`F-CORE-034`, `F-CORE-011`); `F2-CORE-061` and `F2-CORE-064` each named two (`F-CORE-063`/`F-CORE-062`, `F-CORE-064`/`F-CORE-062`). Resolved to the first-named parent in each case, the other kept as a cross-reference; `F-CORE-062` stays a canonical row of its own (the wedge is not stated by either run-2 file).
-6. **`F2-CORE-036` / `F2-XC-050` claimed by two parts.** REC-CORE and REC-XC both discussed it; REC-XC wrote the ledger row and REC-CORE excluded it from its counts. Counted once, under cross-cutting.
-7. **`F2-VAL-035` has no canonical row of its own.** `STATE.md` lists it as Confirmed Medium 78 in its own right; REC-VAL carried it under `F-VAL-066` (same root cause — retention set computed before the block's logs; same severity). Resolved as REC-VAL did; the `F2-VAL-035` ID remains the citation for the executed 19/20 evidence and is the ID the `F-VAL-005` reply names.
-8. **`F-XC-002` union row.** REC-XC does not count it (its two halves are `F-VAL-062` and `F-CORE-036`); recorded here so the total of 95 is reproducible.
-9. **`F-CORE-006` and `F-VAL-060` both counted.** Different layers (core cannot bind an event to an address; the validator accepts events from any watched address) and different remediations; both parts agree.
-10. **`F-SEN-016`.** REC-SEN's status is "D1 superseded; D2–D4 forward-looking". Counted under Forward-looking with `F-CORE-068`/`069`; D1's pointer is `F2-SEN-010`.
-11. **Status vocabulary unified by certainty band.** REC-VAL's ledger labelled `F-VAL-034` "Confirmed (benign)" at 55 and `F-VAL-037` "Confirmed" at 60 while its own status tally counted both as Plausible; here Plausible is 40–69 throughout, as PROMPT §8 defines it.
-12. **`F2-SEN-001` variant (c).** REC-SEN keeps `F-SEN-015` as its own High row and records variant (c) as run 2's under-weighted counterpart; `F2-SEN-001`'s primary counterpart stays `F-SEN-001`.
+### 5.1 Earlier live rows the blind track did not file (60)
 
-### 2.4 Final counts
+Of 80 earlier live rows, 20 have a run-3 counterpart (section 3.2 and `F2-VAL-004`). The other 60, with the run-3 log line that shows whether a reviewer examined the topic:
 
-**Live canonical findings: 95** — 77 run-1 IDs and 18 run-2 IDs. Excluded from "live": `F-VAL-005` (Fixed), `F-VAL-033` (Out of scope, A17), `F-VAL-068` (Superseded), `F-SEN-013` (Refuted), `F-CORE-068`, `F-CORE-069`, `F-SEN-016` (Forward-looking), `F-XC-002` (union counted under its halves), and the 51 folded run-2 files.
+- rediscovered in part inside another run-3 file: 4; known items examined as known: 4; examined and not filed (rejected, kept as an observation, or examined in part): 44; never reached: 8.
 
-| Severity | Count | Canonical IDs |
-| --- | --- | --- |
-| Critical | 1 | `F-VAL-001` |
-| High | 14 | `F-CORE-001`, `F-CORE-002`, `F-CORE-031`, `F-CORE-060`, `F-VAL-030`, `F-VAL-032`, `F-VAL-039` (Plausible), `F-VAL-060` (conditional), `F-VAL-061`, `F-SEN-001`, `F-SEN-002`, `F-SEN-015`, `F2-SEN-010`, `F2-XC-001` |
-| Medium | 24 | `F-CORE-003`, `004`, `012`, `030`, `033`, `034`, `035`, `061`, `062`, `063`, `064`, `066`, `067`; `F-VAL-002`, `003`, `004` (rollover), `063`, `066`, `F2-VAL-003`, `F2-VAL-031`; `F2-SEN-003`, `F-SEN-004`, `F-SEN-005`; `F-XC-050` (rollover) |
-| Low | 38 | `F-CORE-005`, `006`, `007`, `008`, `009`, `010`, `011`, `032`, `036`, `037`, `039`, `040`, `065`, `F2-CORE-007`, `F2-CORE-011`; `F-VAL-031`, `034`, `035` (observation), `036`, `038`, `040`, `064`, `065`, `067`, `F2-VAL-004`, `F2-VAL-007`; `F-SEN-003`, `006`, `007`, `008`, `009`, `011`, `012`; `F-XC-004`, `006`, `009`, `F2-XC-002`, `F2-XC-050` |
-| Informational | 18 | `F-CORE-038`, `F2-CORE-003`, `F2-CORE-067`; `F-VAL-037`, `062`, `F2-VAL-034`, `F2-VAL-064`; `F-SEN-010`, `014`, `F2-SEN-011`; `F-XC-001`, `003`, `007`, `008`, `011`, `051`, `F2-XC-005`, `F2-XC-007` |
-
-| Status | Count | Notes |
-| --- | --- | --- |
-| Confirmed (incl. Verified, narrowed, residual, split, `known`) | 76 | of the live 95 |
-| Plausible (40–69) | 18 | `F-CORE-010`, `032`, `037`, `040`, `061`, `062`, `063`; `F-VAL-004` (rollover), `031`, `034`, `036`, `037`, `038`, `039`, `F2-VAL-004`, `F2-VAL-007`; `F-SEN-008`; `F-XC-050` |
-| Observation (< 40) | 1 | `F-VAL-035` |
-| Fixed by merge | 1 | `F-VAL-005` (residual D2 Informational `known`; restart race under `F-VAL-066`) |
-| Out of scope (A17) | 1 | `F-VAL-033` |
-| Superseded | 1 | `F-VAL-068` (+ `F-SEN-016` D1) |
-| Refuted | 1 | `F-SEN-013` |
-| Forward-looking (unmerged code) | 3 files | `F-CORE-068`, `F-CORE-069`, `F-SEN-016` D2–D4 |
-| Folded run-2 files | 51 | Section 2.2 |
-
-`F-CORE-037` (62) is Plausible by band although REC-CORE's row labelled it Confirmed; the severity table counts it under Low either way. The per-crate split is core 35 (High 4, Medium 13, Low 15, Informational 3), validator 28 (Critical 1, High 5, Medium 7, Low 11 incl. the observation, Informational 4), sentinel 17 (High 4, Medium 3, Low 7, Informational 3), cross-cutting 15 (High 1, Medium 1, Low 5, Informational 8).
-
-**Executed evidence (E1) among the live 95: 49 rows** — core 12 (`F-CORE-001`, `002`, `004`, `031`, `036`, `060`, `061`, `063`, `064`, `066`, `067`, `F2-CORE-011`), validator 16 (`F-VAL-001`, `002`, `003`, `004`, `030`, `032`, `034`, `040`, `060`, `061`, `062`, `066`, `F2-VAL-003`, `F2-VAL-031`, `F2-VAL-034`, `F2-VAL-064`), sentinel 12 (`F-SEN-001`, `002`, `003`, `004`, `005`, `006`, `007`, `009`, `012`, `015`, `F2-SEN-003`, `F2-SEN-010`), cross-cutting 9 (`F-XC-001`, `003`, `006`, `007`, `011`, `F2-XC-001`, `002`, `005`, `050`). The remaining 46 are E2; no live row rests on inference alone, though several carry an `I` sub-claim (Section 7). Every Critical and High row except `F-VAL-039` is E1.
-
-### 2.5 Moves made by reconciliation
-
-- **Severity up:** `F-CORE-031` Medium → High (run 2's executed ordering extension makes the loss deterministic across a restart); `F-VAL-060` Medium → High, conditional (run 2 executed three scenarios); `F-VAL-032` Medium/High → High unconditional (run 2's attacker-created group removes the precondition).
-- **Severity down:** `F-CORE-011` Medium → Low (pinned `reqwest` source: `tcp_user_timeout` 30 s); `F-VAL-064` Medium → Low (split; its halves are canonical elsewhere); `F-VAL-067` Medium → Low (code check plus A16); `F-VAL-066` Medium/High → Medium (the unqualified `DELETE` is gone; the race remains); `F-XC-008` and `F-XC-011` Low → Informational (engine out of scope); `F-XC-051` Low → Informational (pinned `frost-core`/`frost-secp256k1`); `F-VAL-004` High → Medium rollover / Informational genesis (A16); `F-XC-050` genesis instance → Informational `known` (A16); `F-VAL-033` High → out of scope (A17).
-- **Lifted from Plausible to Confirmed:** `F-CORE-006`, `F-CORE-007`, `F-CORE-011`, `F-SEN-004` (branch ii).
-- **Run-2 numbers not carried, recorded as dissent in the finding files:** Medium on `F-CORE-001`/`002`; Low on `F-CORE-003`/`030`/`033`/`064`/`066`/`067`, `F-VAL-002`/`003`; Medium on `F-VAL-030` (C2-VAL-B); Informational on `F2-XC-008` (→ `F-XC-009`) and `F2-VAL-068` (→ `F-XC-004`).
-- **Run-1 numbers not carried:** Medium 78 on `F-CORE-031`; Medium 60 on `F-CORE-011`; Medium 50 on `F-VAL-060`; Plausible 62 on `F-SEN-004`; the "cap bypassed ~28,700×" sentence of `F-CORE-060` is rewritten (§1.3), the number itself stands.
-- **Nothing was dropped.** Every run-1 finding keeps a row; the only removals are by fix (`F-VAL-005`), by assumption (`F-VAL-033`) or by supersession (`F-VAL-068`, `F-SEN-016` D1), each with a pointer.
-
-## 3. Run-1 findings run 2 did not rediscover
-
-A miss is information about run 2's coverage, not a reason to drop the finding. "Examined" means a run-2 reviewer log records the topic and a decision not to file; "missed" means no trace of it. Status is at `fe9e84c`.
-
-| Run-1 finding | Severity / cert. | Run-2 coverage | Classification |
+| Earlier row | Ledger band | Run-3 coverage | Evidence |
 | --- | --- | --- | --- |
-| `F-CORE-008` wall-clock polling | Low 70 | examined (R1 O3, ~40 %), not filed | still valid |
-| `F-CORE-009` block-watcher config | Low 78 | case 1 only (R1 O4) | still valid; **miss** for cases 2–3 |
-| `F-CORE-010` `-32001` rewind before validation | Low 45 | examined and rejected (R1 rejected 2) — independent confirmation of "no trigger" | still valid as filed |
-| `F-CORE-012` bloom-equality blind spot | Medium 70 | **missed** | still valid — the second independent route to `F-CORE-002`'s outcome |
-| `F-CORE-032` panicking effect task | Low 45 | **missed** (R2 rejected 9 covers cancel-safety only) | still valid |
-| `F-CORE-035` `Rpc` errors swallowed forever | Medium 78 | **missed** the mechanism (`F2-CORE-067` covers the metrics leg) | still valid |
-| `F-CORE-036` `Debug` bound, trace sinks | Low 85 | examined (R2 rejected 1, O7) | still valid |
-| `F-CORE-037` unversioned snapshots | Low 62 | examined (R2 O10; `F2-CORE-066` asks for a schema version) | still valid |
-| `F-CORE-038` KDF `info` concatenation | Informational 85 | examined (R2 rejected 13, O9 adds a nuance) | still valid |
-| `F-CORE-040` abandoned `eth_getLogs` per resume | Low 65 | safety examined, cost **missed** | still valid |
-| `F-CORE-062` nonce never released (as a standalone) | Medium 60 | halves rediscovered (`F2-CORE-061`, `F2-CORE-064`) | still valid; partial |
-| `F-VAL-031` dead nonce worker | Low 42 | **missed** | still valid (`nonces.rs:101`, `117`) |
-| `F-VAL-034` nonce resume without signature-id check | Low 55 | **missed** | still valid (`state/sign.rs:359-377`) |
-| `F-VAL-036` non-monotonic `observe` | Low 40 | **missed** (forward jump only, in `F2-VAL-061` b) | still valid (`preprocess.rs:194`) |
-| `F-VAL-037` Merkle padding | Informational 60 | **missed** | still valid |
-| `F-VAL-038` chunk generation saturates cores | Low 55 | **missed** | still valid; the pruning series adds an inline writer |
-| `F-VAL-039` top-up headroom | High 58 | **missed** (both runs' R5 declined the drain framing; run 1's Critic filed it) | still valid; needs an executed cost model (§7) |
-| `F-VAL-062` `Debug` on secret-bearing effects | Informational 88 | **missed** (hygiene gap) | still valid |
-| `F-VAL-065` validator legs of non-idempotent actions | Low 70 | **missed** (core side rediscovered) | still valid (`action.rs:252-254`, `368-378`, `main.rs:82-92`) |
-| `F-VAL-063` points (1) and (3) | Medium 72 | partial (timing relation, `genesis_salt`, chain binding rediscovered) | still valid; partial |
-| `F-VAL-035` (a)/(b) | Low 35 | **missed** as an observation | still true, below threshold |
-| `F-VAL-068` D4 (marker is a number, no hash) | — | not filed in that form (`F2-XC-006` nearest) | superseded (branch merged) |
-| `F-VAL-005` | High 99 | residual rediscovered (`F2-VAL-035`) | **fixed by the merge** for the reproduced trigger |
-| `F-VAL-033` | High 72 | not looked for | **out of scope (A17)** — not a miss |
-| `F-SEN-008` gas limits and fee-token assumptions | Low 52 | **missed** (`F2-SEN-006`/`007` cite the literals as facts) | still valid; contract now documents the fee-token precondition |
-| `F-SEN-011` restart orphans an in-flight check | Low 82 | mechanism carried by `F2-CORE-030`, sentinel fact not restated | still valid |
-| `F-SEN-003` warp residual | Low 80 | route executed in `F2-SEN-003` (b), residual not re-filed | still valid; partial |
-| `F-SEN-014` `finalize` herd | Informational 88 | one sentence in `F2-SEN-007` | still valid; partial |
-| `F-SEN-015` replayed check re-decides | High 98 | `F2-SEN-001` (c), inference only | still valid; partial (under-weighted) |
-| `F-SEN-013` | refuted | correctly not re-filed | refutation holds |
-| `F-XC-002` union | Low 88 | redaction checked, hygiene gap not filed | still valid (soft miss) |
-| `F-XC-003` unknown-fields test gap | Informational 96 | behaviour re-executed as a rejected hypothesis | still valid as a test gap |
-| `F-XC-050` DKG membership check | Medium 48 | **missed** (precondition strengthened by `F2-VAL-061`, consequence not filed) | still valid; A16 split |
-| `F-XC-051` structural checks delegated | Low 42 | **missed**, then settled from pinned sources | settled → Informational 85 |
-| `F-CORE-068`, `F-CORE-069`, `F-SEN-016` D2–D4 | forward-looking | not in the tree | not a miss |
+| [`F-CORE-004`](../findings/F-CORE-004.md) | Medium | rediscovered in part | `F3-CORE-001`'s stall is this row's starvation; R1 O9 (`state/run3/agents/R1.md:102`) described `F2-CORE-005`'s orphaned-hash trigger and kept it pending client data, which PC3 then supplied (Erigon v3.7.0+) |
+| [`F-VAL-004`](../findings/F-VAL-004.md) | Medium | rediscovered in part | `F3-CORE-032`'s validator consequence (setup lost after a rollback); R2 O3 (`state/run3/agents/R2.md:92`) and L-rust O10 (`state/run3/agents/L-rust.md:117`) kept the failed-setup case as an observation |
+| [`F-SEN-005`](../findings/F-SEN-005.md) | Medium | rediscovered in part | `F3-SEN-002` case 2 parks the request in `WaitingForOutcome`; R7 O9 (`state/run3/agents/R7.md:120`) |
+| [`F-SEN-011`](../findings/F-SEN-011.md) | Low | rediscovered in part | `F3-CORE-032` covers the in-flight check at the restore point (known #973) |
+| [`F-CORE-030`](../findings/F-CORE-030.md) | Medium | known item, examined | `settled.md` section 2 lists the exit status; L-rust O9 (`state/run3/agents/L-rust.md:116`), R2 O4 (`state/run3/agents/R2.md:93`) |
+| [`F-CORE-040`](../findings/F-CORE-040.md) | Low | known item, examined | `settled.md` section 2 lists cancel safety of `next_input`; L-rust Q70 (`state/run3/agents/L-rust.md:51`), R2 O1 (`state/run3/agents/R2.md:90`) |
+| [`F-VAL-002`](../findings/F-VAL-002.md) | Low | known item, examined | `settled.md` section 2 lists the ECDH pad; L-crypto Q63 and O1 (`state/run3/agents/L-crypto.md:59`, `:100`) |
+| [`F-SEN-009`](../findings/F-SEN-009.md) | Low | known item, examined | TODO markers (`settled.md` section 2); R7 O7 (`state/run3/agents/R7.md:118`) |
+| [`F-CORE-005`](../findings/F-CORE-005.md) | Low | examined, not filed | R1 O3 (`state/run3/agents/R1.md:96`): non-default configuration |
+| [`F-CORE-006`](../findings/F-CORE-006.md) | Low | examined, not filed | R6 O2 (`state/run3/agents/R6.md:83`): defense in depth; R7 R4 (`state/run3/agents/R7.md:99`) |
+| [`F-CORE-009`](../findings/F-CORE-009.md) | Low | examined in part | R1 O12 (`state/run3/agents/R1.md:105`): zero timings only, as configuration (A1); cases 2 and 3 not reached |
+| [`F-CORE-010`](../findings/F-CORE-010.md) | Low | examined and rejected | R1 Q6 and rejected 6 (`state/run3/agents/R1.md:57`, `:81`): no trigger, the third independent agreement |
+| [`F-CORE-011`](../findings/F-CORE-011.md) | Low | examined and rejected | L-rust R-5 and O8 (`state/run3/agents/L-rust.md:92`, `:115`): outside A4; R1 O11 (`state/run3/agents/R1.md:104`) |
+| [`F-CORE-012`](../findings/F-CORE-012.md) | Medium | examined, not filed | R1 O2 (`state/run3/agents/R1.md:95`) described the repeated-shape loss; C3-COV kept it because the documented provider failure is an empty array (`state/run3/coverage.md:147`) |
+| [`F-CORE-032`](../findings/F-CORE-032.md) | Low | examined, not filed | R2 H20 (`state/run3/agents/R2.md:86`) and L-rust Q71 (`state/run3/agents/L-rust.md:60`): the resume is lost, no reachable panic site |
+| [`F-CORE-033`](../findings/F-CORE-033.md) | Medium | examined, not filed | L-rust O2 and Q74 (`state/run3/agents/L-rust.md:109`, `:72`): A3; R7 O4 (`state/run3/agents/R7.md:115`) |
+| [`F-CORE-035`](../findings/F-CORE-035.md) | Medium | examined in part | R2 H17 (`state/run3/agents/R2.md:84`) noted that RPC errors are never fatal; the swallow itself was not raised |
+| [`F-CORE-036`](../findings/F-CORE-036.md) | Low | examined, not filed | L-rust Q57 (`state/run3/agents/L-rust.md:80`), R5 H5 (`state/run3/agents/R5.md:86`), R4 H7 (`state/run3/agents/R4.md:64`): the leak is refuted, the hygiene gap not filed |
+| [`F-CORE-038`](../findings/F-CORE-038.md) | Informational | examined and rejected | R2 H14 (`state/run3/agents/R2.md:81`) and L-crypto Q62 (`state/run3/agents/L-crypto.md:58`): one caller, sound |
+| [`F-CORE-039`](../findings/F-CORE-039.md) | Low | examined, not filed | L-rust Q15 and O8 (`state/run3/agents/L-rust.md:78`, `:115`): outside A4 |
+| [`F-CORE-061`](../findings/F-CORE-061.md) | Medium | examined, not filed | R3 Q20 and O2 (`state/run3/agents/R3.md:50`, `:84`): client wording not verifiable offline |
+| [`F-CORE-062`](../findings/F-CORE-062.md) | Medium | examined in part | R3 O3 (`state/run3/agents/R3.md:85`): an unincludable nonce stalls later Direct-mode nonces; the wedge not filed |
+| [`F-CORE-063`](../findings/F-CORE-063.md) | Medium | examined, not filed | R3 O3 (`state/run3/agents/R3.md:85`): a marker from a sibling block is never re-checked; the batch half is settled L4 |
+| [`F-CORE-064`](../findings/F-CORE-064.md) | Medium | examined, not filed | R3 Q21 and O4 (`state/run3/agents/R3.md:51`, `:86`): gas only |
+| [`F-CORE-067`](../findings/F-CORE-067.md) | Medium | examined and rejected | R3 O7 (`state/run3/agents/R3.md:89`) and R2 Q16 and O9 (`state/run3/agents/R2.md:60`, `:98`): gas only |
+| [`F2-CORE-003`](../findings/F2-CORE-003.md) | Informational | examined, not filed | R1 O1 and O8 (`state/run3/agents/R1.md:94`, `:101`); `F3-CORE-002` Considered and rejected |
+| [`F2-CORE-011`](../findings/F2-CORE-011.md) | Low | examined and rejected | R1 O4 (`state/run3/agents/R1.md:97`) and R2 O13 (`state/run3/agents/R2.md:102`): theoretical |
+| [`F2-CORE-067`](../findings/F2-CORE-067.md) | Informational | examined, not filed | R3 O8 (`state/run3/agents/R3.md:90`): operability |
+| [`F-VAL-003`](../findings/F-VAL-003.md) | Medium | examined in part | R4 Q30 and INV-V6 (`state/run3/agents/R4.md:42`, `:53`) and L-crypto Q63 (`state/run3/agents/L-crypto.md:59`); the response to an unshared plaintiff, which the re-validation executed, was not raised |
+| [`F-VAL-034`](../findings/F-VAL-034.md) | Low | examined and rejected | R5 Q33 (`state/run3/agents/R5.md:50`): the same benign outcome as the row |
+| [`F-VAL-035`](../findings/F-VAL-035.md) | Informational | examined, not filed | R5 O7 (`state/run3/agents/R5.md:109`), L-rust Q73 (`state/run3/agents/L-rust.md:70`): A1 |
+| [`F-VAL-037`](../findings/F-VAL-037.md) | Informational | examined and rejected | L-crypto Q66 and R4 (`state/run3/agents/L-crypto.md:62`, `:81`), R5 H14 (`state/run3/agents/R5.md:95`): not exploitable, consistent with the row's rating |
+| [`F-VAL-060`](../findings/F-VAL-060.md) | Medium | examined, not filed | R6 O2 (`state/run3/agents/R6.md:83`): defense in depth |
+| [`F-VAL-061`](../findings/F-VAL-061.md) | Medium | examined, not filed | R2 O3 (`state/run3/agents/R2.md:92`), R5 O2 (`state/run3/agents/R5.md:104`), L-rust O10 (`state/run3/agents/L-rust.md:117`) |
+| [`F-VAL-062`](../findings/F-VAL-062.md) | Informational | examined, not filed | R6 rejected 2 (`state/run3/agents/R6.md:67`), R5 H5 (`state/run3/agents/R5.md:86`): redaction holds |
+| [`F-VAL-064`](../findings/F-VAL-064.md) | Low | examined, not filed | R6 O3 and O8 (`state/run3/agents/R6.md:84`, `:89`), R8 O-3 (`state/run3/agents/R8.md:203`) |
+| [`F-VAL-065`](../findings/F-VAL-065.md) | Low | examined and rejected | R6 Q44 and rejected 9 (`state/run3/agents/R6.md:59`, `:74`): one extra transaction per restart |
+| [`F-VAL-066`](../findings/F-VAL-066.md) | Low | examined, not filed | R5 O4 (`state/run3/agents/R5.md:106`): documented trade-off; L-rust R-12 (`state/run3/agents/L-rust.md:99`) |
+| [`F-SEN-004`](../findings/F-SEN-004.md) | Medium | examined, not filed | R7 O4 (`state/run3/agents/R7.md:115`), L-rust O2 (`state/run3/agents/L-rust.md:109`): A3 |
+| [`F-SEN-006`](../findings/F-SEN-006.md) | Low | examined and rejected | R7 R13 and O5 (`state/run3/agents/R7.md:108`, `:116`): duplicates revert; the guardless claim is unreachable |
+| [`F-SEN-007`](../findings/F-SEN-007.md) | Low | examined in part | R7 O6 (`state/run3/agents/R7.md:117`): no startup check of the oracle's proposer (A1) |
+| [`F-SEN-010`](../findings/F-SEN-010.md) | Informational | examined, not filed | R8 O-4 (`state/run3/agents/R8.md:204`) |
+| [`F-SEN-012`](../findings/F-SEN-012.md) | Low | examined, not filed | R7 Q53 and INV-S3 (`state/run3/agents/R7.md:69`, `:77`): every failure maps to `Unknown`, treated as intended |
+| [`F-SEN-015`](../findings/F-SEN-015.md) | Medium | examined and rejected, then overturned | R7 Q52 and table row R7 (`state/run3/agents/R7.md:68`, `:102`): same `safe` boundary for both prunes; CA3-FIX's execution overturned it (section 5.3) |
+| [`F-XC-001`](../findings/F-XC-001.md) | Informational | examined, not filed | R2 O12 (`state/run3/agents/R2.md:101`), L-rust (`state/run3/agents/L-rust.md:66`), R8 O-8 (`state/run3/agents/R8.md:208`) |
+| [`F-XC-003`](../findings/F-XC-003.md) | Informational | examined, behaviour correct | R2 Q13 and H1 (`state/run3/agents/R2.md:57`, `:68`), R6 rejected 1 (`state/run3/agents/R6.md:66`): the same result as the row (a test gap) |
+| [`F-XC-004`](../findings/F-XC-004.md) | Low | examined, not filed | R6 O8 (`state/run3/agents/R6.md:89`), R7 O11 (`state/run3/agents/R7.md:122`), R8 O-3 (`state/run3/agents/R8.md:203`) |
+| [`F-XC-009`](../findings/F-XC-009.md) | Low | examined, not filed | R8 O-4 (`state/run3/agents/R8.md:204`) |
+| [`F-XC-050`](../findings/F-XC-050.md) | Medium | examined and rejected | R4 Q25 and H4 (`state/run3/agents/R4.md:37`, `:61`): the contract gatekeeps membership for genuine coordinator events; the row needs `F-VAL-060`'s precondition |
+| [`F-XC-051`](../findings/F-XC-051.md) | Informational | examined, not filed | L-crypto R14 (`state/run3/agents/L-crypto.md:91`) and R4 O1 (`state/run3/agents/R4.md:68`): length is contract-enforced for genuine events |
+| [`F2-XC-005`](../findings/F2-XC-005.md) | Informational | examined, not filed | R2 O10 (`state/run3/agents/R2.md:99`), L-crypto O3 (`state/run3/agents/L-crypto.md:102`): A1 |
+| [`F2-XC-007`](../findings/F2-XC-007.md) | Informational | examined, not filed | L-rust Q73 and O4 (`state/run3/agents/L-rust.md:70`, `:111`): A1 |
+| [`F-CORE-007`](../findings/F-CORE-007.md) | Low | never reached | R1 rejected 15 (`state/run3/agents/R1.md:90`) looked at a mid-initialization reorg, not the unbounded retry loop |
+| [`F-CORE-065`](../findings/F-CORE-065.md) | Low | never reached | no trace in any run-3 log |
+| [`F-VAL-040`](../findings/F-VAL-040.md) | Low | never reached | no trace of the share-round `last_signer` rule |
+| [`F2-VAL-007`](../findings/F2-VAL-007.md) | Low | never reached | R4 INV-V7 (`state/run3/agents/R4.md:54`) checked the normal epoch timing only |
+| [`F2-VAL-064`](../findings/F2-VAL-064.md) | Informational | never reached | R2 and L-rust ran `--config-file <cfg>` with a space (`state/run3/agents/R2.md:41`, `state/run3/agents/L-rust.md:42`) |
+| [`F2-SEN-011`](../findings/F2-SEN-011.md) | Informational | never reached | R7 O5 (`state/run3/agents/R7.md:116`) looked at the same handler's guard, not its doc or metric |
+| [`F-XC-006`](../findings/F-XC-006.md) | Low | never reached | no trace in any run-3 log |
+| [`F-XC-008`](../findings/F-XC-008.md) | Informational | never reached | R7 verified the engine client's URL handling (`state/run3/agents/R7.md:85`), not redirects or proxy variables |
 
-## 4. A16 and A17 — consolidated status changes
+### 5.2 Run-3 NEW rows whose defect was present at `fe9e84c`
 
-A16 (genesis need not be recoverable; genesis-only liveness findings are Informational and `known`) and A17 (only the services touch their databases; out-of-band database triggers are out of scope) were proposed by the team on PR #905 and adopted for run 2. Applied to run 1's surviving findings:
-
-| Finding | Assumption | Change | Justification |
+| Run-3 row | Band | Present at `fe9e84c` | Earlier trace |
 | --- | --- | --- | --- |
-| `F-VAL-004` | A16 | High 93 → genesis instance Informational `known`; rollover instance **Medium 69** (in scope) | the filed impact was genesis liveness (team: accepted); `F2-VAL-063` shows the same lost `KeyGenSetup` forfeits a numbered epoch |
-| `F-VAL-033` | A17 | High 72 → **out of scope** | trigger is an operator database restore; mechanism recorded as real |
-| `F-VAL-067` | A16 + evidence | Medium 48 → **Low 70** | genesis `Halted` branch is A16-Informational; for numbered epochs the abort is one coordinated extra ceremony |
-| `F-XC-050` | A16 | **split**: genesis instance Informational `known`; rollover instance Medium / Plausible 48 | the cardinality close also feeds `finalize_key_gen` for rollovers (`state/keygen.rs:512`, `552-557`, `599`), reaching later epochs |
-| `F-CORE-065` | A17 | trigger 1 (reused or restored database) out of scope; Low and `known` unchanged | triggers 2–3 are in-band configuration changes |
-| `F-CORE-060` | A17 | "database restored from backup" starter out of scope; High unchanged | the foreign-transaction and stricter-node starters remain |
-| `F-CORE-033` | A17 | "restore from backup" dropped from the trigger list; unchanged | `start_block` back-fill and restart after an outage remain |
-| `F-CORE-001` | A17 | restored-backup aside out of scope; unchanged | primary triggers are process restarts |
-| `F-XC-006` | A17 | "restore into a differently-configured host" trigger out of scope; Low unchanged | the config-edit trigger is the one run 2 executed |
-| `F-VAL-005`, `F-VAL-060`, `F-VAL-066`, `F-VAL-063` point 2 | A16/A17 | no change | not genesis-only; config-only repoint stays in scope |
-| all sentinel findings, all other core and cross-cutting findings | — | no change | none is genesis-scoped; every restart trigger is a plain process restart against an intact database |
-| run-2 files | — | as set by their Critics | `F2-VAL-004` (b) genesis case Informational `known`; `F2-VAL-003` regular epochs only; `F2-VAL-034` in scope (a service upgrade is not out-of-band access); `F2-SEN-001`/`003`'s A17 tag is informational only |
+| [`F3-VAL-030`](../findings/F3-VAL-030.md) | High | yes: the approving result was acted on at once (`F3-VAL-030` Basis 12) | none in runs 1 and 2 |
+| [`F3-XC-100`](../findings/F3-XC-100.md) | High | yes: same `set`, same `y` computation, same share-timeout exclusion (L-crypto) | none; the team's PR review holds it as an item from the review of #1025 |
+| [`F3-VAL-100`](../findings/F3-VAL-100.md) | Low | yes: the same drop arm and the log-opened epoch-1 round (`git show fe9e84c:crates/validator/src/state/keygen.rs`, lines 263 and 499) | none; found by CA3-FIX while verifying `F-VAL-005` |
+| [`F3-VAL-031`](../findings/F3-VAL-031.md) | Low | in part: the all-committed path burned the nonce on entering the share round; the timeout path (#1008) and optimistic `NewBlock` (#1015) are new | none |
+| [`F3-XC-003`](../findings/F3-XC-003.md) | Informational | yes: Dockerfiles, `Cargo.toml` and the locked `sqlx` unchanged | run 2's `F2-XC-005` treats the SQLite as bundled but did not flag the comments |
+| [`F3-XC-004`](../findings/F3-XC-004.md) | Informational | yes: `engine.rs` logging unchanged | run 2's `F2-SEN-008` claim 6, as a side claim |
+| [`F3-XC-130`](../findings/F3-XC-130.md) | Informational | yes: the same connect path and `alloy-rpc-client` 2.0.5 | none |
 
-No finding was removed by A16; one (`F-VAL-033`) was removed by A17.
+Not reverse misses: `F3-SEN-060` (introduced by #974), `F3-VAL-032` (Direct Nonce store, #1032 to #1044) and `F3-XC-040` (at `fe9e84c` the whole-document echo of `F2-XC-001` covered it).
 
-## 5. Team dispositions and draft replies
+### 5.3 Run-3 rejections overturned by later execution
 
-### 5.1 Dispositions from PR #905, folded in
+- `F-SEN-015`: R7 rejected the verdict-prune race (`state/run3/agents/R7.md:68`, `:102`) and LT3 at first agreed; CA3-FIX reproduced it on the real binary (section 1.5) and LT3 withdrew (`state/run3/agents/LT3.md`, section Revisited).
+- `F2-XC-050`: R8 rejected the family for the steady state (`state/run3/agents/R8.md:188`); C3-XC showed it holds in warps and promoted `F3-XC-030`.
 
-| Finding | Reviewer | Disposition | Run-2 evidence bearing on it | Combined status |
-| --- | --- | --- | --- | --- |
-| `F-ENG-030` | @rmeissner | scope | — | engine out of scope in both runs |
-| `F-VAL-005` | @rmeissner | fix claimed (prune refactor) | store tests 13/13 at `fe9e84c`; `F2-VAL-035` (19/20), `F2-VAL-031` | **fixed** for the reproduced trigger; two residuals (§5.2) |
-| `F-SEN-002` | @rmeissner | assigned | `F2-SEN-002` E1; `F2-SEN-010` second undercount source | Confirmed High 98; fix must also close `F2-SEN-010` |
-| `F-SEN-015` | @rmeissner | assigned | code unchanged; `F2-SEN-001` (c) | Confirmed High 98 |
-| `F-VAL-004` | @rmeissner | accepted (genesis exception) | `F2-VAL-063` rollover instance | genesis accepted (A16); rollover Medium 69 in scope |
-| `F-VAL-032` | @rmeissner | accepted | `F2-VAL-032` unconditional trigger | Confirmed High 93 |
-| `F-CORE-067` | @rmeissner | question | `F2-CORE-063`/`032`; `F2-CORE-030`; contract at `fe9e84c` | answered (§5.2) |
-| `F-SEN-005` | @rmeissner | assigned (easy fix) | `F2-SEN-004` E1; `F2-SEN-003` trap; `F2-SEN-011` | Confirmed Medium 95 |
-| `F-SEN-003` | @rmeissner → @nlordell | design question | `F2-SEN-003` (b) executed at `fe9e84c`; `F2-VAL-003` | answered with the executed consequence (§5.2) |
-| `F-VAL-033` (three threads) | @nlordell | objection + proposed assumption | — | out of scope (A17) |
-| `F-CORE-033` | @nlordell | question | `F2-CORE-035`, `F2-SEN-005` | answered: the deadline does not bound the effects (§5.2) |
+## 6. Team dispositions
 
-Not yet assigned or commented: every other High (`F-CORE-001`, `F-CORE-002`, `F-CORE-031`, `F-CORE-060`, `F-VAL-030`, `F-VAL-039` (Plausible), `F-VAL-060`, `F-VAL-061`, `F-SEN-001`, `F2-SEN-010`, `F2-XC-001` — eleven) and the Critical `F-VAL-001`.
+The 13 team threads on PR #905, status at `361aaf3`. Nothing was posted from the audit; the draft replies of the earlier ledger are in its git history.
 
-### 5.2 Draft replies (one per open thread; addressed to the reviewer; the operator can paste them)
+| # | Finding | Reviewer | Thread at `57044af` | Disposition then | Status now |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `F-ENG-030` | @rmeissner | `report/REPORT.md:123` | scope: ignore engine changes | engine out of scope in all three runs; nothing open |
+| 2 | `F-VAL-005` | @rmeissner | `report/REPORT.md:131` | fix claimed (prune refactor) | Fixed by #909 and #910 (store tests 12 of 12, CA3-FIX 88); the restart race lives on as [`F-VAL-066`](../findings/F-VAL-066.md) (Low 65); CA3-FIX's lead on the same trigger is [`F3-VAL-100`](../findings/F3-VAL-100.md) (Low); the file leaves |
+| 3 | [`F-SEN-002`](../findings/F-SEN-002.md) | @rmeissner | `report/REPORT.md:134` | assigned to @rmeissner | open, Medium 90: #964 recovers the mirror case, #1014 and #1015 removed the deadline-block undercount (`F2-SEN-010` Fixed); the primary path is unchanged; run 3 found it again blind |
+| 4 | [`F-SEN-015`](../findings/F-SEN-015.md) | @rmeissner | `report/REPORT.md:137` | assigned to @rmeissner | partly fixed: #978 and #979 close the live-reorg route; the restart window is not fixed (CA3-FIX 15 of 20, CA3 16 of 16); open, Medium 95 |
+| 5 | [`F-VAL-004`](../findings/F-VAL-004.md) | @rmeissner | `report/REPORT.md:142` | accepted (genesis exception), became A16 | genesis instance accepted; the rollover instance stays open, Medium 69, code unchanged |
+| 6 | `F-VAL-032` | @rmeissner | `report/REPORT.md:143` | accepted (accepted risk, remedcu 2026-10-08) | Fixed by #1036 and #1038 (rv-val, CA3-FIX 93); the accepted-risk entry in `settled.md` no longer describes reachable behaviour; the file leaves |
+| 7 | [`F-CORE-067`](../findings/F-CORE-067.md) | @rmeissner | `report/REPORT.md:148` | question: one of them reverts? | answered yes in run 2; still valid, Medium 98; #1015 adds a replay source |
+| 8 | [`F-SEN-005`](../findings/F-SEN-005.md) | @rmeissner | `report/REPORT.md:151` | assigned (easy fix) | partly fixed: #974 times out the dispute state and claims; `WaitingForOutcome` still never expires, open, Medium 95; #974 introduced [`F3-SEN-060`](../findings/F3-SEN-060.md) (Low) |
+| 9 | `F-SEN-003` | @rmeissner to @nlordell | `report/REPORT.md:164` | design question: why no `NewBlock` on warp | Fixed by #1017 (CA3-FIX 92): warp pages now apply every block's transition; the bond loss without an own reveal stays with [`F2-SEN-003`](../findings/F2-SEN-003.md); the file leaves |
+| 10 | `F-VAL-033` | @nlordell | `report/REPORT.md:46` | objection, proposed assumption | Settled under A17; the file leaves |
+| 11 | `F-VAL-033` | @nlordell | finding file, line 210 | objection to remediation option 1 | Settled under A17; the objection stands; the file leaves |
+| 12 | `F-VAL-033` | @nlordell | finding file, line 1 | databases touched only by the services | adopted as A17; Settled |
+| 13 | [`F-CORE-033`](../findings/F-CORE-033.md) | @nlordell | finding file, line 19 | question: the deadline should prevent the fan-out | answered no in run 2; still valid, Medium 70; #1017 makes warp pages run deadline transitions, but effects are still spawned for every proposal in a page |
 
-**`F-ENG-030` — @rmeissner.** Done: the engine is out of scope for both runs and every engine artefact was removed from the PR.
-
-**`F-VAL-005` — @rmeissner ("this should be fixed with the prune refactor").** Confirmed fixed at `fe9e84c` for the case the audit reproduced (a reorg within `max_reorg_depth`, no restart): reconciliations are ordered by the stored marker (`crates/validator/src/secrets/store.rs:323-328`), collection waits for `safe` (`store.rs:356-375`), and the store tests pin it (13/13). Two residuals remain. (1) A group absent for more than `max_reorg_depth` blocks still loses the ceremony — the module doc concedes it (`store.rs:38-41`); we record it as known/Informational. (2) The driver spawns the block's `ReconcileGroupSecrets` (`crates/core/src/driver.rs:278`) and then prunes inline (`driver.rs:292-294`) with no join between them, so on the first live block after a restart a schedule the old branch wrote is collected before the replayed branch's reconciliation can cancel it — executed at the driver seam, secret lost in 19 of 20 rounds (`F2-VAL-035`, carried under `F-VAL-066`, Medium 78). Awaiting the reconciliation before `housekeeping`, or a synchronous first reconciliation on resume, closes (2) and also `F2-VAL-031`'s cold-generator window (`service/effect.rs:245-256`, where the below-marker early return precedes `generator.start`).
-
-**`F-SEN-002` — @rmeissner (assigned).** Run 2 confirmed this independently at `fe9e84c` (`F2-SEN-002`). Two things before designing the fix. (1) #914 added a second undercount source: commits mined in block `commitDeadline` are discarded because the `CollectingVotes` switch at `crates/sentinel/src/service.rs:423-425` runs before that block's logs (`F2-SEN-010`, High). Counting from `NewRequest` onward closes this finding but not that one; keeping the tally live in `CollectingVotes` (`F2-SEN-010` option 1 — compiled, 47/47 tests) or not early-finalizing on local counts closes both. (2) The mirror case is now a stall, not only wasted gas: a reverted `Finalize` parks the entry in `WaitingForOutcome` with no deadline and no retry (`service.rs:657-671`, `484`), so a single registered sentinel that commits late and never reveals parks every honest sentinel. A deadline on `WaitingForOutcome` that re-emits `Finalize` belongs in the same change as `F-SEN-005`. Independently of the tally fix, "never drop a bonded entry" (`F2-SEN-003` option 1, compiled, all existing tests pass) converts the silent loss into a recoverable park.
-
-**`F-SEN-015` — @rmeissner (assigned).** Unchanged at `fe9e84c` (`service.rs:156-171`, `176-179`, `214-224`; `hashCommitment` is bound at `bindings.rs:54-60` and never called). Both runs converge on the same fix as `F-SEN-001`: either a three-state `getCommitment(id, self)` effect (`Committed(hash)` / `NotCommitted` / `Unavailable`, where `Unavailable` keeps the entry and reveals from stored state), or persist `(request_id, approve, reason)` idempotently when the check resolves and let `handle_committed` in `WaitingForEngineCheck` record `self_committed` and emit a verdict-recovery effect. Both runs reject "snapshot the resume": the restart anchor is `latest − max_reorg_depth` (`crates/core/src/index/blocks.rs:255-266`), so a snapshot at `latest` is discarded anyway.
-
-**`F-VAL-004` — @rmeissner (accepted, genesis exception).** Agreed for genesis — adopted as A16; the genesis instance is Informational/known. On "if this affects other flows this could change": it does. The same swallowed error and missing re-emission (`crates/validator/src/service/effect.rs:264-276`) forfeits a numbered epoch when a `KeyGenSetup` is failed or lost during a rollover, and a rolling upgrade escalates it to an epoch skip (`F2-VAL-063`: structural gap executed in `poc/F2-VAL-063`, trigger Plausible 69). We carry the rollover instance under this ID at Medium.
-
-**`F-VAL-032` — @rmeissner (accepted).** Noted. For the record, run 2 removed the precondition: an attacker-created 2-of-2 group plus one `sign(G_att, m)` in the deterministic post-timeout block drops every honest validator's `WaitingForRequest` session (`crates/validator/src/state/sign.rs:106-114`), and a timed-out rollover has no re-proposal path (`F2-VAL-032`, executed). The finding no longer depends on `F-VAL-030` or `F-VAL-039`; High is unconditional.
-
-**`F-CORE-067` — @rmeissner ("different nonces and one of them will revert, right?").** Yes. At `fe9e84c` `contracts/src/libraries/SentinelOracleCommitments.sol:92-96` rejects a duplicate `commit` with `AlreadyCommitted()` (now via `vote == NONE`), and run 1 observed exactly that live (nonces 2 and 3 in one block, revert `0xbfec5558`). Five qualifications: (1) the paired duplicate `approve` succeeds — one successful and one reverted transaction per replayed request; (2) the revert is invisible to the service — execution is inferred from the account nonce (`crates/core/src/tx/mod.rs:185-197`, `tx/storage.rs:224-231`), nothing is logged or metered; (3) it is not always gas only — the replayed duplicate `Commit` is what pins `self_committed = false` on the `F-SEN-001` bond-loss path (`F2-CORE-030`, executed), and the validator's replayed `Sign` burns a nonce sequence for the whole group (`F-VAL-065`); (4) the surface grew with #914 — `Claim` rows with `expires_at: None` from four handlers are never pruned; (5) the dedup must be keyed on identity — `(block hash, log index, action kind)` with `INSERT OR IGNORE` on a `UNIQUE` column — not on calldata, since a `request`-keyed dedup would drop a legitimate repeated `approve` and fail the following `Commit`.
-
-**`F-SEN-005` — @rmeissner (assigned, easy fix).** Confirmed at `fe9e84c` (`F2-SEN-004`): both waiting states are retained unconditionally (`service.rs:484-485`), `DisputeTriggered.deadline` is decoded (`bindings.rs:44`) and dropped (`760-768`), and there is no `timeoutArbitration` binding or action kind. One trap: expiring the state by dropping the entry recreates the bonded-entry abandonment of `F2-SEN-003`, because every terminal handler ignores an untracked id (`521-527`, `576-582`, `692-698`, `798-804`). Fix shape both runs agree on: store the deadline in `WaitingForDisputeResolution`, emit a `TimeoutArbitration { id }` action once at `block > deadline`, keep the entry until `ArbitrationTimedOut`/`DisputeResolved`, and give `WaitingForOutcome` a deadline that re-emits `Finalize`. Fix the doc and metric of `handle_arbitration_timeout` in the same change (`service.rs:550-557`, `585`): the contract now states the non-revealer's slash is never refunded (`SentinelOracleRequests.sol:288-296`; `F2-SEN-011`).
-
-**`F-SEN-003` — @rmeissner → @nlordell ("why no `NewBlock` when warping?").** The design intent is yours to state; what run 2 adds is that the consequence is executed and current at `fe9e84c`: the warp arm returns no `NewBlock` (`crates/core/src/state/mod.rs:173-181`), so no deadline advances across a replayed range. In `poc/F2-SEN-003` (b) our own `Revealed@122` inside the warp page is discarded (`service.rs:347-362`), `NewBlock(125)` re-emits a `Reveal` that reverts `AlreadyRevealed`, and the entry is later dropped with no `Claim` — bond plus fee share unclaimed, no metric. The validator has the same gap (`F2-VAL-003`: a warp over an epoch boundary drops the key-gen round and forfeits the epoch). Two remediations both runs endorse: synthesise `Message::NewBlock(to)` at the end of a warp page, emitted before the page's logs (a core change the sentinel's comparisons already tolerate), or, sentinel-side, never drop a bonded entry (`F2-SEN-003` option 1, compiled, all tests pass) and reconcile a `Revealed(self)` seen in `CollectingCommitments`.
-
-**`F-VAL-033` — @nlordell (three threads).** Adopted as A17: the database is modified only by the services, so this finding is out of scope. The mechanism it claims is real — `take_nonce` deletes the row on the spot and nothing records consumption (`crates/validator/src/secrets/store.rs:281-291`), so a restored file re-offers a burned nonce — but the only trigger is an operator restore, which A17 excludes. Your objection to remediation option 1 stands: a restore can drop the consumed-nonce row as easily as the chunk row. In the live run the validator self-halted before any reuse.
-
-**`F-CORE-033` — @nlordell ("I would expect the transaction deadline to prevent this fan-out").** Checked in run 2: it does not. The deadline bounds the `ApproveToken`/`Commit` rows (`expires_at = commit_deadline`, `crates/sentinel/src/service.rs:226-242`; expired rows skipped at allocation, `crates/core/src/tx/storage.rs:150-155`), not the `EngineCheck` effects that precede them: the effect is emitted unconditionally on `TransactionProposed` (`service.rs:137-144`) and carries no deadline (`crates/sentinel/src/effect.rs:21-25`); deadlines are consulted only in `handle_block_advance` on `NewBlock`, and a warp page delivers `Event`s only (`crates/core/src/state/mod.rs:173-181`, `200-239`), so every proposal in a catch-up page (up to 100 blocks) is checked, including ones whose deadline passed during the downtime. The only per-effect bound is `engine_timeout` (≈ 371 s with the sample config), which bounds duration, not count. Executed downstream in `poc/F2-SEN-005`: reveals starve behind commits from about 8 proposals per block at parity windows. Fix: a concurrency cap in `EffectManager` (option 1 in both runs), plus either passing the request deadline into the effect so expired checks resolve immediately, or a synthetic `NewBlock(to)` at the end of each warp page — which is also the answer to the `F-SEN-003` question.
-
-## 6. The merge of `main` (`3ec8bc5` → `fe9e84c`)
-
-`origin/main` moved `5cc096e` → `8b6a75d` (20 commits) during run 2's Phase 3 and was merged locally. In scope, only two files changed: `crates/sentinel/src/service.rs` (+189) and `crates/sentinel/src/bindings.rs` (+2); `crates/core` and `crates/validator` are byte-identical, `Cargo.lock` differs by two engine-only lines ([`baseline-delta.md`](../state/run2/baseline-delta.md) §2).
-
-**PR #914 "Adjust deadline handling for quicker reaction" (`8b6a75d`).** Every deadline comparison in `handle_block_advance` moved one block earlier (`<=` → `<`): `WaitingForEngineCheck` and `WaitingForRequest` drop at `block == deadline`; `CollectingCommitments` switches to `CollectingVotes` and emits `Reveal` at `block == commit_deadline` (previously `+ 1`), while an entry with `self_committed == false` is kept through the deadline block so a `Committed` of ours mined in that block is not forfeited. A `STOPGAP` note (`service.rs:390-402`) says the compensation must be reverted with safe-research/safenet#471 (block transitions against the _pending_ block, PR #915). Two tests were added.
-
-- **Fixed: nothing of ours.** R7Δ re-validated all nine pre-merge sentinel findings as still valid; QA2-SEN-Δ re-ran the twelve sentinel PoC tests: seven byte-identical, `F2-SEN-005` narrowed (the one-block reveal shift moves the FIFO knife-edge, 85 → 78) but not fixed. `F-SEN-005` is untouched (`event.deadline` still unread, waiting states still never expire); `F-SEN-003`'s restart variant narrowed by one block; `F-SEN-002`'s trigger set broadened.
-- **Introduced: `F2-SEN-010`, High 93.** A `Committed` accepted on chain at `block.number <= commitDeadline` (`SentinelOracleRequests.sol:117`) but mined in the deadline block arrives after the local switch to `CollectingVotes` (`service.rs:423-425` precedes that block's logs, `state/mod.rs:190-216`) and is discarded; the undercount feeds `revealed_count >= committed_count` and `finalize()`. Honest ordering takes outcome 2 (reverted `Finalize`, parked forever in `WaitingForOutcome`); the peer-first ordering takes outcome 1 (entry dropped, bond unclaimed). Executed in Rust and forge; option 1 (keep tallying in `CollectingVotes`) compiled in-tree, 47/47 tests.
-- **Relation to run 1's in-flight warning.** Run 1 wrote, of the unmerged branch, "#914 alone worsens `F-SEN-002`: a valid peer commit in the deadline block is discarded" (`F-SEN-016` D1, executed probe 85). Same hunk, same consequence chain; run 2 books it as a separate defect because root cause and remediation are disjoint from `F-SEN-002`'s (a counter born at zero on the engine resume versus a tally frozen at the phase switch). Only "stop early-finalizing on local tallies" closes both. `F-SEN-016` D1 is superseded by `F2-SEN-010`; D2–D4 stay forward-looking because #915 is not merged (`origin/feat/optimistic_block_transition` `b2aad06`, 2 ahead / 31 behind `main`).
-
-**Oracle-audit contract fixes (#939–#945) and #946–#950.** `SentinelOracleCommitments.sol` gained `InvalidCommitHash()` and now checks `vote == NONE` for `AlreadyCommitted()`: the duplicate `commit` of `F-CORE-067`/`F-SEN-006`/`F2-SEN-007` reverts exactly as before (`F2-SEN-007` re-validated). `SentinelOracle.sol` comment-only changes document the fee-token requirements ("standard, non-rebasing ERC20 … no transfer hooks") — the contract-side half of `F-SEN-008` option 4; the hooked-token variant is now a documented precondition, the proxy-gas and allowance-reset variants are not — and state that a non-revealer's slash is never refunded, which exposed `F2-SEN-011` and superseded `F2-SEN-004` claim 5. `SentinelOracleRequests.sol`'s DAO-fee rounding has no Rust counterpart. The `NewRequest` event gained `daoFeeShare` (mirrored in `bindings.rs`; ABI absorbed, no finding). Nothing in this series touched a core or validator finding. The engine phases (#918–#928) are out of scope; #917 (SEF veto epic) merged a document only.
-
-### 6.1 Remediation convergence
-
-Both runs, independently, arrive at the same fixes. The report can present them as one list; each closes several canonical rows.
-
-1. **A durable pending-effect set re-issued on resume, plus a concurrency cap in `EffectManager`** — `F-CORE-031`, `F-CORE-033`, `F-SEN-004`, `F-SEN-011`, `F-VAL-004` (rollover), `F-VAL-061`'s policy. Run-1 QA's caveat: a queued-but-unspawned effect is lost on shutdown exactly like an in-flight one, so the cap's pending queue must be the same durable structure.
-2. **A verdict-reconciliation effect (`getCommitment(id, self)` as a three-state result, or persisting the verdict idempotently when the check resolves)** — `F-SEN-001` and `F-SEN-015` together; helps `F-SEN-006`. Both runs reject "snapshot the resume".
-3. **Never drop a bonded entry; deadlines on `WaitingForOutcome` and `WaitingForDisputeResolution`; a `TimeoutArbitration` action** — `F2-SEN-003`, `F-SEN-005`, `F-SEN-002` outcome 1, `F2-SEN-010` outcome 2's parking, `F2-SEN-011`'s doc/metric. Compiled by run-2 QA, existing tests pass.
-4. **Tally through block `commitDeadline`, or stop early-finalizing on local counts** — `F-SEN-002` and `F2-SEN-010`. Only the second closes both and run 1's A4 trigger (a `Committed` lost to an incomplete `eth_getLogs`).
-5. **A synthetic `Message::NewBlock(to)` at the end of each warp page, emitted before the page's logs** — `F-SEN-003`'s route, `F2-VAL-003`, the warp half of `F-CORE-033`. The validator needs the same `<`/`<=` check the sentinel got in #914 before this lands.
-6. **An identity-keyed idempotency column on `enqueue` (`(block hash, log index, action kind)`, `UNIQUE`, `INSERT OR IGNORE`), retained beyond the row's lifetime or with `F-CORE-063` fixed first** — `F-CORE-067`, `F-VAL-065`, `F-SEN-006`.
-7. **Await the block's reconciliation before `housekeeping`, or run a synchronous first reconciliation on resume** — `F-VAL-066`/`F2-VAL-035`, `F2-VAL-031`.
-8. **A proof of possession for `q` and a KDF-bound share pad** — `F-VAL-001`, `F-VAL-002`. Needs a coordinator/`keyGenChallenge` change; does not break honest late joiners (run-2 QA).
-9. **Persist and verify the rollback anchor's hash, including on a fresh start; return a non-zero status from `main` on a fatal driver error** — `F-CORE-001`, `F2-CORE-011`, `F-CORE-030`.
-10. **Configuration: `toml::de::Error::set_input(None)` (one line), validation of `tx::Config` and of the consensus timing relations, `?mode=rwc` in the samples** — `F2-XC-001`, `F-CORE-066`, `F-VAL-063`, `F2-XC-002`.
-11. **An absolute or base-fee-relative ceiling on the fee ratchet, and recognition of first-submission underpriced rejections** — `F-CORE-060`, `F-CORE-061`.
+Summary: 4 threads are closed by fixes (`F-VAL-005`, `F-VAL-032`, `F-SEN-003`, and the scope thread `F-ENG-030`), 3 by A17 (`F-VAL-033`), and 6 stay open (`F-SEN-002`, `F-SEN-015` and `F-SEN-005` partly fixed, `F-VAL-004` rollover, `F-CORE-067`, `F-CORE-033`). Of the earlier Highs nobody had commented on: `F-VAL-001` (Critical), `F-VAL-030`, `F-VAL-039`, `F2-SEN-010` and `F2-XC-001` are resolved; `F-CORE-001` is Low, `F-CORE-002`, `F-CORE-031`, `F-SEN-001`, `F-VAL-060` and `F-VAL-061` are Medium; `F-CORE-060` is still High.
 
 ## 7. Unsettled items
 
-Items the audit could not execute; each is carried at the certainty the parts assigned, with the position of both runs where they differ.
+| Item | What is missing | Positions | What would settle it |
+| --- | --- | --- | --- |
+| [`F-CORE-060`](../findings/F-CORE-060.md) band (High) | a practicality call on the underpriced arm | run 1 executed the per-block ratchet against a real Anvil fee market with an emulated node (High); run 2 rated its accepted arm Medium; run 3's counterpart rates the accepted arm Low; PC3 did not weigh the underpriced arm | PC3 on the underpriced arm: does any Gnosis client or gateway keep answering `replacement transaction underpriced` or `could not replace existing tx` for a reason other than the fee |
+| [`F-XC-050`](../findings/F-XC-050.md) band (Medium, Plausible 48) | the band was not re-weighed after PC3 settled its precondition | the precondition (`F-VAL-060`, an allow-listed oracle emitting coordinator events) is false on Aegis, executed; PC3 moved `F-VAL-060` one band for that reason; no agent re-rated this row | the head or PC3: one band down to Low is the consistent move |
+| [`F2-CORE-003`](../findings/F2-CORE-003.md) band (Informational) | a practicality look PC3 asked for | Nethermind 1.39+ answers `eth_getLogs` for a processed but not yet canonical hash with an empty success (PR #11906; PublicNode ran 1.39.3 on 2026-09-27), and the default path has no check at all, so its exposure is now larger than `F-CORE-002`'s (Medium) | PC3 on the default fetch behind load-balanced 1.39+ backends |
+| [`F3-SEN-060`](../findings/F3-SEN-060.md) contract half | settled 2026-10-09 | LT3's fork test contacted the public Gnosis RPC (`state/run3/STATE.md`, 2026-10-09); the sentinel half was executed offline | OFF3 reproduced the contract half with no network under `poc/F3-SEN-060/offline/` (same numbers and gas); the head's note on the finding records the breach; the fork test was taken out of the folder |
+| Trigger frequencies | live measurements no agent could make offline | Gnosis reorg depth (`F3-VAL-030`, `F3-VAL-100`, `F3-VAL-031`, `F-CORE-001`), provider limits and empty-answer windows (`F-CORE-034`, `F-CORE-002`, `F-CORE-003`), the length of the Nethermind 1.39+ window | measurements on the operators' real endpoints; these decide bands, not existence |
+| GIP-153 | a re-check of every timing call | Gnosis plans 2 s blocks around 2027-01 (genesis targeted December 2026 to January 2027); windows of 6 blocks, `oracle_timeout` 24 and the 5 s reorg record all change | re-run the timing-based practicality calls when GIP-153 is scheduled |
+| [`F-CORE-012`](../findings/F-CORE-012.md) practicality | a provider that returns a partial non-empty log set | run 3's R1 described the loss and C3-COV kept it as an observation, because the documented provider failure is an empty array; the re-validation executed it at Medium 85 | a provider trace showing a partial answer |
+| [`F-CORE-011`](../findings/F-CORE-011.md) scope | agreement on A4 | run 3's L-rust treats a live but silent peer as outside A4 (the RPC is trusted for liveness); runs 1 and 2 and the re-validation keep it in scope at Low | the team's reading of A4 |
+| [`F-VAL-003`](../findings/F-VAL-003.md) disclosure leg | an execution that shows what a coalition gains | L-crypto: a complaint response publishes only values the complaining party already holds; the re-validation executed a plaintext response to a plaintiff that never received a share; Medium 82 kept | a coalition-below-threshold PoC |
+| Configuration rows | consistency across bands | rows with a run-3 counterpart moved to PC3's gate-3 reading (`F-CORE-066` Informational, `F-VAL-063` Low); configuration rows without one keep their re-validation bands (`F-CORE-005`, `F-CORE-009` Low) | the head, if one reading for operator configuration is wanted |
+| Carried from the earlier ledger | the decisive trigger step | `F-CORE-061`, `F-CORE-062`, `F-CORE-063` (node wording `I`); `F-VAL-004` rollover and `F2-VAL-007` (trigger unforced); `F-CORE-010` (no trigger in three runs); `F-SEN-004` branch i (engine-dependent, A3) | live node behaviour or a forced trigger |
+| Model choice revisit trigger | remedcu's reading | The team's choice of model says to revisit if the reconciliation finds run 3 missing many still-valid findings; the blind track filed 20 of 80 (section 1.3), and 8 were never reached | remedcu |
 
-| Item | What is missing | Both runs' position |
-| --- | --- | --- |
-| `F-VAL-039` (High, Plausible 58) | an executed cost model of the top-up griefing against a live group | run 1's Critic filed it; both runs' R5 declined the drain framing as cost-of-attack; run 2 names the endpoint in `F2-VAL-032` |
-| `F-VAL-038` (Low 55) | the duration of the 1025-statement transaction under load | unmeasured in both runs; the pruning series added an inline writer |
-| `F2-VAL-035` / `F-VAL-066` (Medium 78) | the live occurrence rate of the precondition (a schedule written by the old branch that the replayed branch still needs) | executed only at the driver seam (19/20 when the precondition holds); the Anvil restart with a real group drop during the outage needs a multi-validator devnet |
-| `F-CORE-061`, `F-CORE-062`, `F-CORE-063` (Plausible 65/60/55) | the decisive trigger step: node-side rejection wording (`I` in both runs) and a live wedge | in-crate mechanisms executed by run 2; both runs agree on mechanism |
-| `F-SEN-004` branch (i) (engine saturation) | engine-dependent; out of scope | branch (ii) executed (queue starvation); branch (i) `I` in both runs |
-| `F-SEN-015` variant 1 (a different verdict on replay) | engine determinism — out of scope | variant 2 (`Unknown` while the engine boots) is E1 and carries the finding |
-| `F-VAL-004` rollover instance (Plausible 69) | a lost effect in a numbered epoch, live | structural gap executed (`poc/F2-VAL-063`); trigger traced |
-| `F2-VAL-004`, `F2-VAL-007` (Plausible 50/65) | QA not attempted | run 2 only |
-| `F-CORE-010` (Plausible 45) | any trigger | both runs independently found none |
-| `F-XC-050` (Plausible 48) | the window (a complaint outstanding while confirmations arrive) | run 2 strengthened the precondition (`F2-VAL-061`) but did not file the consequence |
-| `F-XC-051` residual | a short non-empty `c` under the `F-VAL-060` precondition | settled Informational from pinned sources; run-1 PoC left unrun |
-| `F-SEN-008` (Plausible 52) | behaviour against a proxied or hooked fee token | run 2 missed it; the contract now documents the precondition |
-| `F-CORE-060` accepted arm as a standalone trigger | an independent blocking condition | run 2 executed the arithmetic (×311.9); run 1's underpriced arm carries the High |
-| `F-SEN-016` D2–D4, `F-CORE-068`, `F-CORE-069` | the merges of #915 and #904 | forward-looking; re-validate on merge ([`IN-FLIGHT.md`](IN-FLIGHT.md)) |
+Notes that are not findings:
 
-Engine-dependent `I` items (engine out of scope under Section 11): `F-SEN-004` (i), `F-SEN-015` variant 1, the engine-side half of `F-SEN-007`'s pre-flight, and `F-XC-008` item 1. None of them decides a severity: each finding's carried band rests on its executed or code-traced leg.
+- `docs/validator-handbook.md:37` limits the empty-answer bug to Nethermind before 1.36; PC3's consult shows 1.39+ returns an empty success again for a processed but not yet canonical hash.
+- `settled.md` section 1 still lists the group-mismatch `Sign` drop as an accepted risk; #1036 and #1038 fixed it (`F-VAL-032`, CA3-FIX 93).
+- The stale warp comment at `crates/sentinel/src/service.rs:481-483` (section 1.6).
+- Several Prettier failures in finding files predate this ledger (for example the QA second-reproduction sections written as unbroken lines); they need the formatting pass.
 
-## 8. Reading guide for `REPORT.md`
-
-- **IDs.** Use the canonical IDs of Section 2.1; a run-2 ID appears in the report only when it is canonical (18 of them) or as the counterpart named in a row's trail. The fold index (Section 2.2) answers "where did `F2-…` go".
-- **Numbers.** Live findings 95: Critical 1, High 14, Medium 24, Low 38, Informational 18; by status Confirmed 76, Plausible 18, Observation 1; E1 49. Non-live rows: Fixed 1, Out of scope 1, Superseded 1, Refuted 1, Forward-looking 3 files, union 1, folded run-2 files 51. Files: 85 run-1, 69 run-2, 154 total.
-- **Where each number's reasoning lives.** The severity and certainty settlements are written out per row in the per-crate parts ([core](../state/run2/reconciliation/core.md) §1.1–1.2 and §5, [validator](../state/run2/reconciliation/validator.md) §1 and §5, [sentinel](../state/run2/reconciliation/sentinel.md) §1 and §5, [cross-cutting](../state/run2/reconciliation/cross-cutting.md) §1 and §5); the `## Reconciliation (run 2)` section appended to every finding file states that file's final combined status and is authoritative where this ledger and a file differ.
-- **Dissents.** Where the two runs disagreed on the band, the report should print the carried band and name the other run's band in the trail, as Section 2.1 does.
-- **Sections to carry over.** Misses in both directions (Section 3), the A16/A17 changes (Section 4), the team dispositions and the draft replies (Section 5), the merge and `F2-SEN-010` (Section 6), the remediation convergence (Section 6.1), and the unsettled items (Section 7).
+Process note: contract changes after the audited commit `0be96367` are unaudited. Several resolutions here rest on them: `F-VAL-001` (the onchain proof of possession, #1022 and #1027), `F-VAL-067` (#1019), and the Batched-mode workaround for `F-SEN-008`, which depends on the post-audit 7702 executor. This is a process note, not a defect.

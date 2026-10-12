@@ -281,3 +281,15 @@ The second `start` returns `Ok()` without doing anything, because `btree_map::En
 ## Reconciliation (run 2)
 
 **Final combined status: Low, 42 %, Plausible — run-2 miss, still valid at `fe9e84c`.** `secrets/nonces.rs:101,117` still stores `_worker: thread::JoinHandle<()>` unjoined and `start` (`:30-32`) still returns early for an existing entry. No run-2 counterpart. See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Moot |
+| Changed by | `392d7c8` "[Direct Nonce 10]: Remove the dead preprocessing code" (#1040) deleted `crates/validator/src/secrets/nonces.rs` (the `NonceGenerator`, its detached worker thread and `_worker` handle); `5e694c4` (#1039) had already taken the generator out of group reconciliation |
+| Severity, certainty | resolved (code removed) |
+| Evidence | E2: `git log --diff-filter=D -- crates/validator/src/secrets/nonces.rs` gives `392d7c8`; `grep -rn 'thread::spawn\|std::thread\|rayon\|NonceGenerator' crates/validator crates/core/src` is empty |
+
+The replacement does not carry the defect: nonces are generated inline in the effect task, one pair per ceremony (`crates/validator/src/service/effect.rs:123-141`, `SigningNonces::generate` at `:128-131`), with no long-lived worker to die silently and no stream map whose stale entry blocks a restart. A failure there is an ordinary effect error, which resumes as `Resume::Noop` and costs one ceremony (F-VAL-061, Changed).

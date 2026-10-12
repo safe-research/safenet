@@ -254,3 +254,19 @@ The merge's only Merkle-adjacent change is documentation: `9e41b49` adds `@dev` 
 ## Reconciliation (run 2)
 
 **Final combined status: Informational, 60 % — run-2 miss, still valid at `fe9e84c`.** `merkle.rs:21-22,55` still pad with `B256::ZERO`; still unexploitable for the `msg.sender` reason given above. See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed `merkle.rs` (`git log fe9e84c..361aaf3 -- crates/validator/src/merkle.rs` is empty); the nonce-set tree, one of the three consumers, was removed with the chunks (#1040) |
+| Severity, certainty | unchanged, Informational 60 |
+| Evidence | E1: `poc/F-VAL-037/run3/` (1 passed) |
+
+Re-based anchors: unchanged. `crates/validator/src/merkle.rs:21-22` pads a missing sibling with `B256::ZERO` in `build`, `:55` in `proof`, and `hash_pair` (`:87-93`) has no leaf/internal tag. Remaining consumers: the participants tree with unhashed left-padded address leaves (`crates/validator/src/consensus/group.rs:244-246`, `p.into_word()`) and the signer-selection tree with keccak leaves (`crates/validator/src/frost/sign.rs:149-153`). The coordinator still authenticates the address as `msg.sender` (`contracts/src/libraries/FROSTParticipantMap.sol:146-150`).
+
+What was run: `poc/F-VAL-037/run3/zero_leaf.rs` wired into `merkle.rs` (reverted), `cargo test -p validator --bins poc_f_val_037_run3`. For a three-member participants tree, `tree.proof(3)` (the padding slot) verifies `Address::ZERO.into_word()` against the root (`true`); for a two-member tree it does not. Output `poc/F-VAL-037/run3/RESULT.txt`.
+
+Notes: the Aegis genesis set has five members, an odd count, so its participants root also admits a proof for `address(0)`. Still unexploitable while every consumer takes the address from `msg.sender`, which is the circumstantial margin the finding describes.

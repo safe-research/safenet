@@ -63,3 +63,27 @@ Finding verdict: **Confirmed**. Certainty **85%**. Severity **Informational / In
 ## Reconciliation (run 2)
 
 **Final: NEW in run 2 — Informational, 85 (E2), canonical.** Run 1's `F-CORE-035` notes "no transaction-queue metric of any kind" in passing but is about the unbounded swallow of RPC errors (a mechanism run 2 did not rediscover); this file is the standalone observability gap. Cross-link the two in the report (`state/run2/reconciliation/core.md` §1, §2).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | #1003 (`8b36902`) added `safenet_core_transaction_batch_size` and `safenet_core_transaction_batch_gas`, two histograms recorded when a batch is allocated in `Batched` mode. The rest of the gap is unchanged: no submission, resubmission or rejection counters, no in-flight or queued gauge, no fee gauge, and the transaction hash is still logged at `debug` and never stored (the 7702 stack replaced the schema with `allocated_nonces` plus `transactions`, neither with a hash column) |
+| Severity, certainty | Informational, 85 proposed (unchanged band; the scope narrowed by the two batch histograms) |
+| Evidence | E2 trace below (no PoC exists for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `metrics.rs:28, 63, 73` to `:28`, `:63`, `:73`, `:81`, `:90`: `pub fn rpc_requests_total(method: &str, result: RpcRequestResult) -> Counter {`, `pub fn block_number(status: ProcessingStatus) -> Gauge {`, `pub fn uncled_blocks_total() -> Counter {`, `pub fn transaction_batch_size() -> Histogram {`, `pub fn transaction_batch_gas() -> Histogram {`
+- recording site (new) `tx/bundle.rs:168-169`: `metrics::transaction_batch_size().record(calls.len() as f64);` / `metrics::transaction_batch_gas().record(gas as f64);`
+- `tx/mod.rs:232` and `:259-264` to `:299` and `:326-331`: `tracing::debug!(nonce = transaction.nonce, "resubmitting stale transaction");` and `tracing::debug!(` / `nonce = submission.nonce,` / `block,` / `hash = %signed.hash(),` / `"submitting transaction"`
+- `tx/mod.rs:272-276` and `:288-292` to `:339-343` and `:355-359`: `"transaction underpriced, will bump fees and retry next block"` and `"submission failed, will retry without bumping fees"`
+- `tx/storage.rs:70-77` to `:86-99`: `CREATE TABLE IF NOT EXISTS allocated_nonces (` / `nonce        INTEGER PRIMARY KEY,` / `request      TEXT    DEFAULT NULL,` / `delegate     TEXT    DEFAULT NULL,` / `submitted_at INTEGER DEFAULT NULL,` / `executed_at  INTEGER DEFAULT NULL,` ... `CREATE TABLE IF NOT EXISTS transactions (` / `id         INTEGER PRIMARY KEY,` / `request    TEXT    NOT NULL,` / `expires_at INTEGER DEFAULT NULL,` / `nonce      INTEGER DEFAULT NULL REFERENCES allocated_nonces (nonce)`
+- `observability/mod.rs:32`: unchanged, `log_filter: EnvFilter::new("info"),`
+- service metrics: `crates/validator/src/metrics.rs` (`transitions_total`, `effects_total`, `secrets_total`, `housekeeping_total`) and `crates/sentinel/src/metrics.rs` (engine verdicts, requests, bond, slashing and fee histograms); none about submissions, nonces or in-flight rows
+
+What was run: code trace and `grep -n "pub fn " crates/core/src/metrics.rs crates/validator/src/metrics.rs crates/sentinel/src/metrics.rs` at `361aaf3`.
+
+Notes: the batch histograms show batch shape, not health: a queue that stops submitting (`F-CORE-035`) or keeps bumping fees (`F-CORE-060`, rv-core-b) produces no metric change in `Direct` mode and only an absence of samples in `Batched` mode. Counterpart observability leg of `F-CORE-035` (Changed) agrees.

@@ -50,3 +50,15 @@ The pruning stack partially fixes `F-VAL-005` by ordering reconciliations by a s
 ## Reconciliation (run 2)
 
 **Final combined status: Superseded — the branch it was filed against is now `main` (`fe9e84c`); split.** D1 → `F2-VAL-031` (Medium 80 %, QA'd); D2 → the design-conceded residual of `F-VAL-005` (`store.rs:38-41`), `known`; D3 → `F2-VAL-035` (depth 0–1 instance of the same ordering, Medium 78 %); D4 (marker with no hash that never decreases, `store.rs:323-328`) → not filed by run 2 in this form; `F2-XC-006` is the nearest canonical. See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Superseded |
+| Changed by | the branch merged before run 2 (#906 to #913); since then `392d7c8` (#1040) and `5e694c4` (#1039) removed the nonce generator that D1 was about |
+| Severity, certainty | n/a (non-live row, split in run 2) |
+| Evidence | E2: per-part mapping below |
+
+Non-live row, superseded in run 2. Where each part stands at `361aaf3`: D1 (no nonce generator after a restart) is Moot with `F2-VAL-031` (the generator is gone, `392d7c8`); D2 (deletion delayed, not prevented) is the store's documented concession (`crates/validator/src/secrets/store.rs:38-41`), executed as deterministic for a short outage under F-VAL-066's run-3 section; D3 (the reconcile-vs-prune race at small depths) is F-VAL-066 (Changed, Low); D4 (a reconciliation marker with no block hash that never decreases, `store.rs:330-343`) is unchanged and its nearest canonical is `F2-XC-006` (rv-xc).

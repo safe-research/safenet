@@ -23,7 +23,7 @@ What is verifiable in this checkout is the crate's own choice, and it is inconsi
 | # | Claim | Class (E1, E2, I) | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
 | 1 | `Effect` derives `Debug` and two of its variants carry `Arc<KeyShare>` | E2 | `crates/validator/src/service/effect.rs:24-38` | `#[derive(Debug, Clone)]`<br>`pub enum Effect {`<br>`    /// Set up key generation: sample the participant's secrets, persist them`<br>`    /// to the secret store.`<br>`    KeyGenSetup {`<br>`        group_id: B256,`<br>`        count: u16,`<br>`        threshold: u16,`<br>`    },`<br>`    /// Start eagerly generating nonce chunks for a group. Idempotent within a`<br>`    /// process.`<br>`    StartNonceGeneration {`<br>`        group_id: B256,`<br>`        key_share: Arc<KeyShare>,`<br>`    },` |
-| 2 | including the one issued on every block | E2 | `crates/validator/src/service/effect.rs:55-62` | `    /// Reconcile the process-local and persisted secrets with the groups`<br>`    /// retained by the state machine, dropping all secret material belonging to`<br>`   /// other groups. A key share starts or retains a nonce generator;`None``<br>`    /// retains the group's DKG secrets without running one.`<br>`    ReconcileGroupSecrets {`<br>`        groups: BTreeMap<B256, Option<Arc<KeyShare>>>,`<br>`    },`<br>`}` |
+| 2 | including the one issued on every block | E2 | `crates/validator/src/service/effect.rs:55-62` | `    /// Reconcile the process-local and persisted secrets with the groups`<br>`    /// retained by the state machine, dropping all secret material belonging to`<br>`   /// other groups. A key share starts or retains a nonce generator;`None``<br>` /// retains the group's DKG secrets without running one.`<br>` ReconcileGroupSecrets {`<br>` groups: BTreeMap<B256, Option<Arc<KeyShare>>>,`<br>` },`<br>`}` |
 | 3 | and the whole effect is printed at `warn` on any failure | E2 | `crates/validator/src/service/effect.rs:244-255` | `    async fn perform_effect(&self, effect: Effect) -> Resume {`<br>`        let kind = effect.metric_kind;`<br>`        let (resume, result) = match self.try_perform_effect(effect.clone).await {`<br>`            Ok(resume) => (resume, EffectResult::Success),`<br>`            Err(err) => {`<br>`                tracing::warn!(?effect, %err, "failed to perform effect");`<br>`                (Resume::Noop, EffectResult::Failure)`<br>`            }`<br>`        };`<br>`        metrics::effects_total(kind, result).increment(1);`<br>`        resume`<br>`    }` |
 | 4 | `KeyShare` is a newtype over the upstream FROST `KeyPackage` with a derived `Debug` | E2 | `crates/validator/src/frost/keygen.rs:433-435` | `#[derive(Clone, Debug, Deserialize, Serialize)]`<br>`#[serde(transparent)]`<br>`pub struct KeyShare(keys::KeyPackage);` |
 | 5 | `Resume` likewise derives `Debug` and carries the DKG `Secrets` and the burned `Nonces` | E2 | `crates/validator/src/service/effect.rs:79-102` | `    /// [`Effect::NonceTree`].`<br>`    NonceTree { group_id: B256, commitment: B256 },`<br>`    /// Resume with the nonce commitment revealed by a`<br>`    /// [`Effect::RevealNonceCommitments`].`<br>`    NonceCommitments {`<br>`        signature_id: B256,`<br>`        message: B256,`<br>`        nonces: bindings::SignNonces,`<br>`        proof: Vec<B256>,`<br>`    },`<br>`    /// Resume with the nonce burned by [`Effect::UseNonce`].`<br>`    Nonce { message: B256, nonces: Box<Nonces> },`<br>`}` |
@@ -235,3 +235,24 @@ Remediation option 3 (a guard test) is now the _primary_ recommendation rather t
 ## Reconciliation (run 2)
 
 **Final combined status: Informational, 88 % (hygiene confirmed, leak refuted) — run-2 miss, still valid at `fe9e84c`.** `service/effect.rs:24` derives `Debug`, `:270` logs `?effect` at `warn`; `frost/keygen.rs:27-28,433-435` unchanged. Run 2's nearest items (`F2-XC-005`, `F2-XC-007`) are different surfaces; run-1 twin `F-XC-002`. See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | the Direct Nonce effects (`3154a05` #1035, `5e694c4` #1039, `392d7c8` #1040) moved which variants carry a key share. `55d811e` (#1046) only touched config logging. |
+| Severity, certainty | unchanged band, Informational; certainty 90 (E1 for what `?effect` and `?resume` print) |
+| Evidence | E1: `poc/F-VAL-061/run3/effect_failure.rs`, test `debug_output_of_secret_bearing_effects_and_resumes` |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- `Effect` still derives `Debug` (`crates/validator/src/service/effect.rs:23`). The variant that carries a key share is now `GenerateNonces { group_id, signature_id, key_share: Arc<KeyShare> }` (`:35-39`). `ReconcileGroupSecrets`, emitted every block, now carries only `groups: BTreeMap<B256, RetainedSecrets>` (`:47-50`), no key shares, and `StartNonceGeneration` is gone.
+- The failure log is unchanged: `tracing::warn!(?effect, %err, "failed to perform effect")` at `service/effect.rs:177`.
+- `Resume` still derives `Debug` (`service/effect.rs:66`) and carries `Box<Secrets>` (`:72-75`) and `Box<SigningNonces>` (`:83-86`); core prints both at `trace` (`crates/core/src/effects.rs:62`, `:66`).
+- `KeyShare` and `Secrets` still `#[derive(Debug)]` (`crates/validator/src/frost/keygen.rs:432`, `:27`).
+
+What was run (`cargo test -p validator --bins poc_f_val_061_run3`, real 2-of-3 key share): `format!("{effect:?}")` for `GenerateNonces` is 670 bytes, contains `KeyShare` and `SigningShare("<redacted>")`, and does not contain the 64-hex signing share; `Resume::Setup` prints `EncryptionKey("redacted")` and redacted coefficients; `Resume::Nonces` prints `SigningNonces("<redacted>")`. Output `poc/F-VAL-061/run3/RESULT.txt`.
+
+Why Changed: the claim that a single SQLite error on the per-block reconciliation prints every live key share no longer holds; the key share now reaches a `warn` line only when a `GenerateNonces` for that ceremony fails, and it is still redacted by frost-core 3.0.0 (`keys.rs:126-131`). The hygiene point itself stands: two secret-bearing types derive `Debug` and rely on the dependency's redaction, unlike the crate's own `SigningNonces` and `EncryptionKey`. Counterpart `F-XC-002` (rv-xc).

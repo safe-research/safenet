@@ -26,7 +26,7 @@ The 1.1× per **block** rate (rather than per `blocks_before_resubmit` blocks) i
 | 4 | The bump is applied last, over the already-capped estimate, using the fees persisted from the previous attempt. | E2 | `crates/core/src/tx/types.rs:61-71` | <pre>impl AllocatedTransaction {<br> /// Builds a concrete EIP-1559 transaction for signing, bumping `estimate`<br> /// above any fees from a previous submission so that it replaces it.<br> pub fn build(self, chain_id: u64, estimate: Eip1559Estimation) -> TxEip1559 {<br> let fees = fees::bump(estimate, self.fees);<br> TxEip1559 {<br> chain_id,<br> nonce: self.nonce,<br> gas_limit: self.transaction.gas,<br> max_fee_per_gas: fees.max_fee_per_gas,<br> max_priority_fee_per_gas: fees.max_priority_fee_per_gas,</pre> |
 | 5 | An underpriced rejection records the _rejected_ fees as the new floor and deliberately clears the submission block. | E2 | `crates/core/src/tx/mod.rs:271-283` | <pre>Err(err) if is_transaction_underpriced(&err) => {<br> tracing::warn!(<br> nonce = submission.nonce,<br> ?err,<br> "transaction underpriced, will bump fees and retry next block"<br> );<br> self.storage<br> .record_submission(Submission {<br> block: None,<br> ..submission<br> })<br> .await?;<br>}</pre> |
 | 6 | `record_submission` binds a `None` block as SQL `NULL` and writes the rejected fees back into the row. | E2 | `crates/core/src/tx/storage.rs:176-186` | <pre>let updated = sqlx::query(<br> "UPDATE transactions<br> SET submitted_at = ?,<br> request = json_set(<br> request,<br> '$.maxFeePerGas', ?,<br>             '$.maxPriorityFeePerGas', ?<br> )<br> WHERE nonce = ?",<br>)<br>.bind(block.map(i64::try_from).transpose?)</pre> |
-| 7 | A row with `submitted_at IS NULL` is stale on **every** call, regardless of `blocks_before_resubmit`, so the bump runs once per advancing block. | E2 | `crates/core/src/tx/storage.rs:293-298` | <pre>sqlx::query_scalar::&lt;_, String&gt;(<br> "SELECT json_set(request, '$.nonce', nonce)<br> FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL<br> AND (submitted_at IS NULL OR submitted_at <= ?)<br> ORDER BY nonce ASC",<br>)</pre> |
+| 7 | A row with `submitted_at IS NULL` is stale on **every** call, regardless of `blocks_before_resubmit`, so the bump runs once per advancing block. | E2 | `crates/core/src/tx/storage.rs:293-298` | <pre>sqlx::query*scalar::&lt;*, String&gt;(<br> "SELECT json_set(request, '$.nonce', nonce)<br> FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL<br> AND (submitted_at IS NULL OR submitted_at <= ?)<br> ORDER BY nonce ASC",<br>)</pre> |
 | 8 | `resubmit_stale` runs once per advancing block and rebuilds every stale row. | E2 | `crates/core/src/tx/mod.rs:224-234` | <pre>async fn resubmit_stale(&mut self, block: u64) -> Result&lt;, Error&gt; {<br> let submitted_before = block.checked_sub(self.config.blocks_before_resubmit);<br> let stale = self.storage.stale_submissions(submitted_before).await?;<br> if stale.is_empty {<br> return Ok();<br> }<br><br> for transaction in stale {<br> tracing::debug!(nonce = transaction.nonce, "resubmitting stale transaction");<br> self.submit_transaction(transaction, block).await?;<br> }</pre> |
 | 9 | The crate's own test demonstrates the per-block rate: after an underpriced rejection at block 12 leaves the floor at 231/11, block 13 (the very next block) submits 255/13. | E2 | `crates/core/src/tx/mod.rs:703-717` | <pre>queue.update_block_status(block_status(12)).await.unwrap;<br>assert!(asserter.read_q.is_empty);<br>let transaction = in_flight(&queue).await;<br>assert_eq!(transaction.max_fee_per_gas, Some(231));<br>assert_eq!(transaction.max_priority_fee_per_gas, Some(11));<br><br>// The next retry bumps above the rejected fee floor.<br>asserter.push_success(&U64::from(0));<br>asserter.push_success(&fee_history);<br>asserter.push_success(&B256::ZERO);<br>queue.update_block_status(block_status(13)).await.unwrap;<br>assert!(asserter.read_q.is_empty);<br>let transaction = in_flight(&queue).await;<br>assert_eq!(transaction.max_fee_per_gas, Some(255));<br>assert_eq!(transaction.max_priority_fee_per_gas, Some(13));</pre> |
 | 10 | One matched rejection string is provider-specific and is not a fee comparison at all, so a provider that emits it for an unrelated reason drives the ratchet indefinitely. | E2 for the match, I for provider behaviour | `crates/core/src/tx/mod.rs:362-368` | <pre>fn is_transaction_underpriced(err: &TransportError) -> bool {<br> err.as_error_resp.is_some_and(\|payload\| {<br> (iregex!("replacement transaction").is_match(&payload.message)<br> && iregex!("underpriced").is_match(&payload.message))<br> \|\| iregex!("INTERNAL_ERROR: could not replace existing tx").is_match(&payload.message)<br> })<br>}</pre> |
@@ -256,3 +256,140 @@ So the ratchet does **not** self-start on a healthy node: the sentinel's own bum
 ## Reconciliation (run 2)
 
 **Final: Confirmed, High, 98 (E1), canonical — with the cap sentence corrected.** Rediscovered and extended by run 2 as `F2-CORE-060` (EXTENDS): run 2 adds the **accepted-resubmission arm** (bump every `blocks_before_resubmit` = 2 blocks, ×311.9 after 60 bumps, `poc/F2-CORE-060`), the lockstep of every in-flight row behind a blocked one, and the never-lowered floor; this file's **underpriced-rejection arm** (bump every block, because `tx/mod.rs:277-282` records `block: None` and `submitted_at IS NULL` is stale on every block) stands as measured live. **Cap sub-claim settled both ways** (`state/run2/reconciliation/core.md` §1.2): `cap_priority_fee` (`fees.rs:12-31`) is applied once to the fresh estimate (`tx/mod.rs:326-340`) and the ratio tip / `maxFeePerGas` **is** preserved through bumps (run 2 is right; 201,207 / 4.24e12 = 4.7e-8), but the tip is never re-bounded against the chain's base fee — at 772 wei and 1 % the cap admits 7 wei and the tip reached 201,207, i.e. 28,744× (this file's measurement, re-derived); wording for the report: "a ratio of the transaction's own `maxFeePerGas`, preserved through bumps, bounding nothing in absolute terms". Executed anchor at `fe9e84c`: `tx::fees` + `failed_replacements_do_not_advance_the_fee_floor`, 4 passed (`state/run2/logs/rec-core-fees-test.txt`). Run 2 rated Medium (its arm needs an independent blocking condition); High is carried because the underpriced arm needs only one underpriced rejection and is then unbounded except by balance (§8 "unbounded fund drain through gas"). A17: the "database restored from backup" starter is out of scope; the foreign-transaction and stricter-node starters remain. Counterpart: `F2-CORE-060`; feeders `F-CORE-061`/`F2-CORE-062`, `F-CORE-062`/`F2-CORE-061`, `F-CORE-064`/`F2-CORE-064`.
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | Nothing changed the mechanism. `crates/core/src/tx/fees.rs` is untouched since `fe9e84c` (`git log fe9e84c..361aaf3 -- crates/core/src/tx/fees.rs` is empty). The 7702 executor stack moved the surrounding code: `9ed4b80` #991 and `e9101e2` #992 (config into `tx/config.rs`, `SubmissionMode`), `622cf89` #993 and `ce01715` #995 (submission state in `allocated_nonces`), `f09ff3e` #997 (`build` returns `UnsignedTransaction`), `d791e67` #999 (account from `eth_getProof`). |
+| Severity, certainty | Unchanged: High, 98 |
+| Evidence | E1 `poc/F-CORE-060/run3/` (run-1 parts 1 to 3 re-run, plus a batched variant) and `poc/F2-CORE-060/run3/` (run-2 accepted arm) |
+
+Re-based anchors (old location at `fe9e84c`, new location at `361aaf3`, verbatim quote).
+
+- `tx/fees.rs:52-56` to `crates/core/src/tx/fees.rs:52-56` (unchanged):
+
+```rust
+/// Returns `fresh`, raised to at least 10% above `previous`.
+fn bump_fee(fresh: u128, previous: u128) -> u128 {
+    let bumped = previous.saturating_add(previous.div_ceil(10));
+    fresh.max(bumped)
+}
+```
+
+- `tx/fees.rs:38-39` to `crates/core/src/tx/fees.rs:38-39` (unchanged):
+
+```rust
+/// Note that fee bumps can cause priority fee caps to not be observed.
+pub fn bump(fresh: Eip1559Estimation, previous: Option<Eip1559Estimation>) -> Eip1559Estimation {
+```
+
+- `tx/mod.rs:326-341` (cap applied once, to the fresh estimate) to `crates/core/src/tx/mod.rs:391-410`:
+
+```rust
+    async fn fees(&mut self) -> Result<Eip1559Estimation, Error> {
+        match self.fee_cache {
+            Some(fees) => Ok(fees),
+            None => {
+                let fees = self.provider.estimate_eip1559_fees().await?;
+                let fees = match self.config.priority_fee_cap_percentage {
+                    Some(cap) => {
+                        let capped = cap_priority_fee(fees, cap);
+```
+
+- `tx/types.rs:61-71` (bump applied last, in `build`) to `crates/core/src/tx/types.rs:117-120`:
+
+```rust
+    /// Builds an unsigned transaction for signing, bumping `estimate` above any
+    /// fees from a previous submission so that it replaces it.
+    pub fn build(self, chain_id: u64, estimate: Eip1559Estimation) -> UnsignedTransaction {
+        let fees = fees::bump(estimate, self.fees());
+```
+
+- `tx/mod.rs:271-283` (underpriced arm records `block: None`) to `crates/core/src/tx/mod.rs:338-350`:
+
+```rust
+            Err(err) if is_transaction_underpriced(&err) => {
+                tracing::warn!(
+                    nonce = submission.nonce,
+                    ?err,
+                    "transaction underpriced, will bump fees and retry next block"
+                );
+                self.storage
+                    .record_submission(Submission {
+                        block: None,
+                        ..submission
+                    })
+                    .await?;
+            }
+```
+
+- `tx/storage.rs:176-186` (`NULL` block and the rejected fees written back) to `crates/core/src/tx/storage.rs:232-242`, now on `allocated_nonces`:
+
+```rust
+        let updated = sqlx::query(
+            "UPDATE allocated_nonces
+             SET submitted_at = ?,
+                 request = json_set(
+                     request,
+                     '$.maxFeePerGas', ?,
+                     '$.maxPriorityFeePerGas', ?
+                 )
+             WHERE nonce = ? AND request IS NOT NULL",
+        )
+        .bind(block.map(i64::try_from).transpose()?)
+```
+
+- `tx/storage.rs:293-298` (a `NULL` `submitted_at` is stale on every call) to `crates/core/src/tx/storage.rs:398-402`:
+
+```sql
+             FROM allocated_nonces n
+             LEFT JOIN allocated_nonces a ON a.nonce = n.nonce + 1 AND a.delegate IS NOT NULL
+             WHERE n.request IS NOT NULL AND n.executed_at IS NULL
+               AND (n.submitted_at IS NULL OR n.submitted_at <= ?)
+             ORDER BY n.nonce ASC",
+```
+
+- `tx/mod.rs:224-234` (`resubmit_stale` once per advancing block) to `crates/core/src/tx/mod.rs:291-301`:
+
+```rust
+    async fn resubmit_stale(&mut self, block: u64) -> Result<(), Error> {
+        let submitted_before = block.checked_sub(self.config.blocks_before_resubmit);
+        let stale = self.storage.stale_submissions(submitted_before).await?;
+        if stale.is_empty() {
+            return Ok(());
+        }
+
+        for transaction in stale {
+            tracing::debug!(nonce = transaction.nonce, "resubmitting stale transaction");
+            self.submit_transaction(transaction, block).await?;
+        }
+```
+
+- `tx/mod.rs:362-368` (`is_transaction_underpriced`, including the vendor string) to `crates/core/src/tx/mod.rs:431-437` (unchanged text).
+- `tx/mod.rs:703-717` (crate test, one block apart) to `crates/core/src/tx/mod.rs:899-932`, test `underpriced_replacements_advance_the_fee_floor`: `Some(231)` at block 12 (`:921`), `Some(255)` at block 13 (`:931`).
+- `validator.sample.toml:72-77` to `crates/validator/validator.sample.toml:100-104` (same text: "Lower values reduce what you can overpay on a bad fee estimate").
+- No balance read and no fee metric: `crates/core/src/metrics.rs:28-96` defines `rpc_requests_total`, `block_number`, `uncled_blocks_total` and, new with #1003, the `transaction_batch_size` and `transaction_batch_gas` histograms; nothing for fees, in-flight count or the oldest nonce.
+
+What was run (worktree at `361aaf3`, tests appended to the crates' `mod tests`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`.
+- Run-1 part 1 (`rv3_f_core_060_underpriced_ratchet_is_unbounded_and_per_block`): FAILED as in run 1, `max_fee=59550 max_priority=4037` after 60 blocks from an unchanged 210/10 estimate, one resubmission per block (response queue drained exactly).
+- Run-1 part 2 (`rv3_f_core_060_priority_fee_cap_does_not_survive_the_bump`): FAILED, `104 / 3,277` (3.17% against a 1% cap), identical to run 1.
+- Run-1 part 3 (`rv3_f_core_060_underpriced_rejection_ignores_blocks_before_resubmit`, storage level): FAILED, an underpriced rejection at block 10 makes the row eligible at block 11 with `blocks_before_resubmit = 2`.
+- Variant, batched mode (`rv3_f_core_060_batched_variant_ratchets_the_whole_batch_per_block`): FAILED, a three-call batch carrying the EIP-7702 authorization (type-4, gas limit 141,842) ratchets once per block to the same 4,037 / 59,550, so the worst-case fee for one inclusion is `gas × maxFeePerGas`.
+- Run-2 accepted arm (`poc/F2-CORE-060/run3/`): x311.9 / x444.1 after 60 accepted bumps in 120 blocks, and a row behind a generically rejected row reaches 553/33 after ten bumps while the blocked row keeps no floor. Identical to run 2.
+
+Notes:
+
+- The cap sentence settled in run 2 stands: `cap_priority_fee` bounds tip over the transaction's own `maxFeePerGas` and bounds nothing in absolute terms.
+- Batched mode keeps one transaction in flight (`crates/core/src/tx/config.rs:62-75`), so the lockstep of many in-flight rows from `F2-CORE-060` shrinks to one row there, but that row is a whole batch with a larger gas limit (up to `max_batch_gas` plus 25,000 for an authorization), which raises the spend at inclusion.
+- The "In-flight impact (FWD)" trigger (a permanent delegation gap whose manual repair releases a ratcheted backlog) does not exist in the merged design: an unused authorization nonce becomes a cancellation in the same block (see `F-CORE-069`, run-3 section).
+- Run 2's A17 note stands (the restored-backup starter is out of scope). Counterpart `F2-CORE-060`; feeders `F-CORE-061`, `F-CORE-062`, `F-CORE-064` are all still valid at `361aaf3`.
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-CORE-060`](F3-CORE-060.md) (CONFIRMS, accepted-resubmission arm only; run 3 rates that arm Low). This ID stays canonical.
+- Ledger values: High, certainty 98; the band is unsettled in ledger section 7 because PC3 did not weigh the underpriced per-block arm.

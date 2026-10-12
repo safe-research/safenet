@@ -1,0 +1,9 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-base/debug/deps/validator-dd9411993fa56ac3)
+
+running 2 tests
+test frost::tests::accepts_cancelled_public_key_shares ... ok
+test frost::tests::persists_cancelled_group_commitment_coefficients ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 39 filtered out; finished in 0.02s
+

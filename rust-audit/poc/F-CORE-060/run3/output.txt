@@ -1,0 +1,34 @@
+Run 3 re-validation output (rv-core-b, 2026-10-08), audit commit 361aaf3.
+Worktree: detached at 361aaf3, PoC tests appended to the crate's `mod tests`, reverted afterwards.
+Toolchain: cargo 1.96.0 / rustc 1.96.0 (aarch64).
+Command: cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1
+Long batch calldata is shortened as 0x<20 bytes>...(<n> bytes). Polarity: run-1 PoCs and
+run-3 F-CORE-060/067 variants assert the healthy behaviour (FAILED = defect reproduced);
+run-2 PoCs and the F-CORE-065/068 tests assert the defect (ok = defect reproduced);
+the F-CORE-069 tests assert the absence of a gap (ok = no gap).
+
+test tx::storage::tests::rv3_f_core_060_underpriced_rejection_ignores_blocks_before_resubmit ... 
+thread 'tx::storage::tests::rv3_f_core_060_underpriced_rejection_ignores_blocks_before_resubmit' (133958) panicked at crates/core/src/tx/storage.rs:1032:9:
+an underpriced rejection at block 10 made the row eligible again at block 11, one block later, despite blocks_before_resubmit = 2: the NULL submitted_at conflates 'never submitted' with 'rejected as underpriced': [AllocatedTransaction { nonce: 0, transaction: Transaction { to: 0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789, value: 0, data: 0x01, gas: 21000 }, authorization: None, max_fee_per_gas: Some(210), max_priority_fee_per_gas: Some(10) }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+test tx::tests::rv3_f_core_060_batched_variant_ratchets_the_whole_batch_per_block ... F-CORE-060 batched variant: batch of 3 calls, gas limit 141842, authorization Some(Authorization { address: 0x7702770277027702770277027702770277027702 }): max_fee=59550 max_priority=4037; worst-case fee for one inclusion = gas * max_fee = 8446691100
+
+thread 'tx::tests::rv3_f_core_060_batched_variant_ratchets_the_whole_batch_per_block' (134028) panicked at crates/core/src/tx/mod.rs:1510:9:
+batched: the priority fee ratcheted to 4037 (max_fee 59550) from an unchanged estimate of 10
+FAILED
+
+test tx::tests::rv3_f_core_060_priority_fee_cap_does_not_survive_the_bump ... F-CORE-060 part 2: cap 1% -> max_fee=3277 max_priority=104
+
+thread 'tx::tests::rv3_f_core_060_priority_fee_cap_does_not_survive_the_bump' (134032) panicked at crates/core/src/tx/mod.rs:1460:9:
+priority_fee_cap_percentage = 1.0 was configured, but after 29 bumped resubmissions max_priority_fee_per_gas = 104 against max_fee_per_gas = 3277. Expected value on this checkout: 104 / 3_277, i.e. 3.17% against a 1% cap.
+FAILED
+
+test tx::tests::rv3_f_core_060_underpriced_ratchet_is_unbounded_and_per_block ... F-CORE-060 part 1: after 60 blocks max_fee=59550 max_priority=4037
+
+thread 'tx::tests::rv3_f_core_060_underpriced_ratchet_is_unbounded_and_per_block' (134036) panicked at crates/core/src/tx/mod.rs:1418:9:
+after 60 blocks of underpriced rejections the priority fee ratcheted to 4037 wei/gas (max_fee 59550) from an unchanged honest estimate of 10, compounding once per BLOCK, with no ceiling of any kind. Expected value on this checkout: 4_037 / 59_550.
+FAILED
+
+Summary of the whole run (all rv3_ tests of this crate): test result: FAILED. 18 passed; 9 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.67s

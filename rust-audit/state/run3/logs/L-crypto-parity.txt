@@ -1,0 +1,47 @@
+# L-crypto: cross-language round trip and parity, executed 2026-10-08
+# Validator sources compiled by path from $RUN/wt/base at 361aaf3b25e12d2e04f296184c326830968f3727 (read-only); contracts from the same worktree.
+# Scratch sources: $RUN/scratch/L-crypto/identity-share/src/ceremony.rs, $RUN/scratch/L-crypto/forge-identity/test/{Ceremony,Parity}.t.sol
+
+$ cd $RUN/scratch/L-crypto/identity-share && CARGO_TARGET_DIR=$PWD/target cargo test --offline ceremony -- --nocapture
+     Running unittests src/lib.rs (target/debug/deps/lcrypto_identity_share-a7556106eb703425)
+test frost::tests::ceremony ... ok
+wrote 5-party DKG and 3- and 5-signer ceremony vectors for gid 0x9f7994b33c37201c23721b7b9083b3353614b1d048d5392e0000000000000000
+test ceremony::aegis_size_ceremony_vectors ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.30s
+
+$ cd $RUN/scratch/L-crypto/forge-identity && forge test -vv --match-contract "CeremonyTest|ParityTest"
+No files changed, compilation skipped
+
+Ran 4 tests for test/Parity.t.sol:ParityTest
+[PASS] test_GroupVectors() (gas: 574)
+[PASS] test_IdentifierMatchesFrostDerive() (gas: 1600)
+[PASS] test_SentinelVectors() (gas: 2580)
+[PASS] test_ValidatorHashingVectors() (gas: 2546)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 326.13µs (272.88µs CPU time)
+
+Ran 1 test for test/Ceremony.t.sol:CeremonyTest
+[PASS] test_AegisSizeCeremony() (gas: 4267405)
+Logs:
+  5-party DKG finalized onchain; group key equals the validator's group_key()
+  ceremony completed and verified onchain, signers: 3
+  ceremony completed and verified onchain, signers: 5
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.62ms (3.41ms CPU time)
+
+Ran 2 test suites in 4.04ms (3.95ms CPU time): 5 tests passed, 0 failed, 0 skipped (5 total tests)
+
+$ source $RUN/env/base.sh && cargo test -p validator --bins -- frost:: merkle:: consensus::   (shared worktree, existing tests)
+  25 passed; 0 failed (see session transcript); safenet-core kdf:: tx::signer:: 9 passed; sentinel hashing:: 5 passed
+
+# Non-trivial EIP-712 vectors (all SafeTx fields distinct, DELEGATECALL, non-empty data and oracle data, chain 100 domain)
+$ cd $RUN/scratch/L-crypto/identity-share && CARGO_TARGET_DIR=$PWD/target cargo test --offline hashing_vectors -- --nocapture
+{"packet":"0x7857e2fbcc7cde232bac9f53fc48ca41b5651a2ecd867ba56d8db23443cbc79f","rollover":"0x6be4b845332368bebe731d9673f3cb4d26d56c2dd0130b40bece26fdb91b1de7","safeTxHash":"0xc3fdd8bbac6b600d120d752b95e378c544bf196526d5b43117dff1594905c9f9","safeTxStructHash":"0x70ba5113fb8ab3d97276b9ab42bf3ef1e3ca2e9dadfa094f406b3d1bfa497c1a"}
+test hashing_vectors::non_trivial_hashing_vectors ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.00s
+$ cd $RUN/scratch/L-crypto/forge-identity && forge test -vv --match-contract ParityTest
+[PASS] test_GroupVectors() (gas: 596)
+[PASS] test_IdentifierMatchesFrostDerive() (gas: 1627)
+[PASS] test_NonTrivialHashingVectors() (gas: 8905)
+[PASS] test_SentinelVectors() (gas: 2648)
+[PASS] test_ValidatorHashingVectors() (gas: 2636)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 645.58µs (611.38µs CPU time)

@@ -27,10 +27,10 @@ If they ever differ, the `?` propagates the error to the driver **after** the bl
 
 | # | Claim | Class | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
-| 1 | The rewind is committed inside `revalidate_last_block`, before any cross-check. | E2 | `crates/core/src/index/blocks.rs:521-534` | <pre>let timestamp = last.timestamp;<br>self.recent.truncate(last_index);<br>self.pending = PendingBlock {<br> number: invalidated.number,<br> timestamp_ms: timestamp * 1000,<br>};<br><br>// Clear the queue and insert the uncle update.<br>self.queue.clear;<br>self.queue.push_back(BlockUpdate::Uncle {<br> number: invalidated.number,<br>});<br><br>Ok(Some(invalidated))</pre> |
+| 1 | The rewind is committed inside `revalidate_last_block`, before any cross-check. | E2 | `crates/core/src/index/blocks.rs:521-534` | <pre>let timestamp = last.timestamp;<br>self.recent.truncate(last_index);<br>self.pending = PendingBlock {<br> number: invalidated.number,<br> timestamp_ms: timestamp \* 1000,<br>};<br><br>// Clear the queue and insert the uncle update.<br>self.queue.clear;<br>self.queue.push_back(BlockUpdate::Uncle {<br> number: invalidated.number,<br>});<br><br>Ok(Some(invalidated))</pre> |
 | 2 | The cross-check happens afterwards and its failure propagates rather than resynchronising. | E2 | `crates/core/src/index/mod.rs:113-123` | <pre>match self.blocks.revalidate_last_block.await? {<br> // It was uncled; tell the event watcher to move on.<br> Some(invalidated) => {<br> tracing::debug!(<br> number = invalidated.number,<br> hash = %invalidated.hash,<br> "logs unavailable for uncled block, skipping"<br> );<br> self.events.on_block_invalidated(invalidated.hash)?;<br> Ok(None)<br> }</pre> |
-| 3 | The mismatch arm leaves the event watcher's step untouched, so the next attempt repeats identically. | E2 | `crates/core/src/index/events.rs:262-273` | <pre>pub fn on_block_invalidated(&mut self, block_hash: B256) -> Result<, Error> {<br> match self.step {<br> Step::Block {<br> block_hash: current,<br> ..<br> } if current == block_hash => {<br> self.step = Step::Idle;<br> Ok()<br> }<br> _ => Err(Error::UnexpectedBlockInvalidation),<br> }<br>}</pre> |
-| 4 | After the first pass, the queue front is an `Uncle`, which makes every later revalidation a no-op. | E2 | `crates/core/src/index/blocks.rs:486-490` | <pre>let next_number = match self.queue.front {<br> Some(BlockUpdate::New { number, .. }) => Some(*number),<br> Some(_) => return Ok(None),<br> None => None,<br>};</pre> |
+| 3 | The mismatch arm leaves the event watcher's step untouched, so the next attempt repeats identically. | E2 | `crates/core/src/index/events.rs:262-273` | <pre>pub fn on*block_invalidated(&mut self, block_hash: B256) -> Result<, Error> {<br> match self.step {<br> Step::Block {<br> block_hash: current,<br> ..<br> } if current == block_hash => {<br> self.step = Step::Idle;<br> Ok()<br> }<br> * => Err(Error::UnexpectedBlockInvalidation),<br> }<br>}</pre> |
+| 4 | After the first pass, the queue front is an `Uncle`, which makes every later revalidation a no-op. | E2 | `crates/core/src/index/blocks.rs:486-490` | <pre>let next*number = match self.queue.front {<br> Some(BlockUpdate::New { number, .. }) => Some(\*number),<br> Some(*) => return Ok(None),<br> None => None,<br>};</pre> |
 | 5 | `Ok(None)` re-raises the original error, and the driver retries it forever. | E2 | `crates/core/src/index/mod.rs:124-125` and `crates/core/src/driver.rs:211-223` | <pre>// It is still canonical; the logs just are not available yet.<br>None => Err(err.into),</pre> |
 | 6 | The queued `Uncle` can only be delivered through a path this loop never reaches. | E2 | `crates/core/src/index/mod.rs:85-96` | <pre>if let Some(events) = self.next_logs.await? {<br> …<br>} else {<br> let update = self.blocks.next.await?;<br> self.events.on_block_update(update.clone)?;</pre> |
 | 7 | Nothing asserts, tests or documents the hash agreement. | E2 (absence) | `crates/core/src/index/blocks.rs:483-535`, `crates/core/src/index/mod.rs:106-130` | Neither function contains a `debug_assert!`, and `grep -n "UnexpectedBlockInvalidation" crates/` matches only the variant's declaration (`events.rs:130`) and its single construction site (`events.rs:271`) — no test constructs or asserts it. |
@@ -90,3 +90,24 @@ No option touches the state machine or effects; the `core::state` contract is un
 ## Reconciliation (run 2)
 
 **Final: Plausible, Low, 45 (E2, no trigger), canonical — not rediscovered; independently corroborated.** Run 2's R1 rejected hypothesis 2 (`UnexpectedBlockInvalidation` unreachable: `rposition` selects the block the event watcher is fetching) reaches the same "no trigger" conclusion this file's Critic recorded. Still valid as a shape-of-code note at `fe9e84c` (`index/mod.rs:106-130`, `blocks.rs:483-535` unchanged). The report may list it under observations (`state/run2/reconciliation/core.md` §2).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed this code (`revalidate_last_block`, `Watcher::next_logs` and `EventWatcher::on_block_invalidated` are unchanged in content) |
+| Severity, certainty | unchanged (Low, 45; mechanism verified, no trigger) |
+| Evidence | E2 trace below (no PoC exists for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/blocks.rs:521-534` to `:578-591`: `let timestamp = last.timestamp;` / `self.recent.truncate(last_index);` / `self.pending = PendingBlock {` ... `self.queue.clear();` / `self.queue.push_back(BlockUpdate::Uncle {` ... `Ok(Some(invalidated))`
+- `index/mod.rs:113-123`: unchanged, `match self.blocks.revalidate_last_block().await? {` ... `self.events.on_block_invalidated(invalidated.hash)?;` / `Ok(None)`
+- `index/events.rs:262-273` to `:299-310`: `pub fn on_block_invalidated(&mut self, block_hash: B256) -> Result<(), Error> {` ... `_ => Err(Error::UnexpectedBlockInvalidation),`
+- `index/blocks.rs:486-490` to `:543-547`: `let next_number = match self.queue.front() {` / `Some(BlockUpdate::New { number, .. }) => Some(*number),` / `Some(_) => return Ok(None),` / `None => None,`
+
+What was run: code trace only. I re-checked the one place new code could feed a mismatch: the warp path added by #1049 and #1050 fetches headers with `get_block`, so a `-32001` there also reaches `revalidate_last_block`. During a warp the block watcher's queue front is the first queued `New { safe + 1 }`, and every header in `recent` has a number of at least `safe + 1`, so `rposition` finds nothing and the function returns `Ok(None)` before touching any state. The commit-then-validate order is unchanged and still unreachable by every queue shape I enumerated.
+
+Notes: still a shape-of-code item with no trigger; the reconciliation may keep it under observations as run 2 suggested.

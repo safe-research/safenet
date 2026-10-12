@@ -28,10 +28,10 @@ This finding is the shared root cause of **F-VAL-001** and is stated separately 
 
 | # | Claim | Class (E1, E2, I) | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
-| 1 | The pad is the raw affine x-coordinate, XOR-ed byte-wise, with no KDF and no direction or identity binding; the doc comment states the same function serves both directions | E2 | `crates/validator/src/frost/ecdh.rs:106-121` | <pre>/// Encrypts or decrypts `msg` via ECDH: `msg XOR (receiver_pubkey * sender_privkey).x`.<br>///<br>/// XOR is its own inverse, so this serves both directions. `receiver_pubkey`<br>/// must be a valid non-identity point and `sender_privkey` must be non-zero.<br>fn ecdh(<br> sender_privkey: &NonZeroScalar,<br> receiver_pubkey: &EncryptionPublicKey,<br> msg: [u8; 32],<br>) -> [u8; 32] {<br> let shared_secret = (receiver_pubkey.0 * **sender_privkey).to_affine.x;<br> let mut result = msg;<br> for (byte, secret) in result.iter_mut.zip(shared_secret) {<br> *byte ^= secret;<br> }<br> result<br>}</pre> |
+| 1 | The pad is the raw affine x-coordinate, XOR-ed byte-wise, with no KDF and no direction or identity binding; the doc comment states the same function serves both directions | E2 | `crates/validator/src/frost/ecdh.rs:106-121` | <pre>/// Encrypts or decrypts `msg` via ECDH: `msg XOR (receiver_pubkey * sender_privkey).x`.<br>///<br>/// XOR is its own inverse, so this serves both directions. `receiver_pubkey`<br>/// must be a valid non-identity point and `sender_privkey` must be non-zero.<br>fn ecdh(<br> sender_privkey: &NonZeroScalar,<br> receiver_pubkey: &EncryptionPublicKey,<br> msg: [u8; 32],<br>) -> [u8; 32] {<br> let shared_secret = (receiver_pubkey.0 * \*\*sender_privkey).to_affine.x;<br> let mut result = msg;<br> for (byte, secret) in result.iter_mut.zip(shared_secret) {<br> *byte ^= secret;<br> }<br> result<br>}</pre> |
 | 2 | The crate itself asserts the pad is symmetric, which is exactly the two-directions-one-pad property | E2 | `crates/validator/src/frost/ecdh.rs:154-163` | <pre> #[test]<br> fn ecdh_is_commutative {<br> let alice = key(2);<br> let bob = key(3);<br> let msg = [0x00; 32];<br> assert_eq!(<br> alice.ecdh(&bob.public_key, msg),<br> bob.ecdh(&alice.public_key, msg),<br> );<br> }</pre> |
 | 3 | Every participant encrypts one share per peer under that peer's `q`, publishing all of them; combined with claim 2 this makes both directions of every pair share a pad | E2 | `crates/validator/src/frost/keygen.rs:205-213` | <pre> .map(\|(peer, encryption_public_key)\| {<br> let package = round2_packages<br> .get(&peer)<br> .ok_or(frost_secp256k1::Error::UnknownIdentifier)?;<br> let signing_share = package.signing_share.to_scalar.to_bytes.into;<br> Ok(secrets<br> .encryption_key<br> .ecdh(encryption_public_key, signing_share))<br> })</pre> |
-| 4 | The receiving side decrypts with the identical call, confirming there is no directional tweak | E2 | `crates/validator/src/frost/keygen.rs:375-381` | <pre> let encrypted_share = encrypted_shares<br> .shares<br> .get(index)<br> .ok_or(frost_core::Error::IncorrectNumberOfShares)?;<br> let secret_share = sharing_state<br> .encryption_key<br> .ecdh(encryption_public_key, *encrypted_share);</pre> |
+| 4 | The receiving side decrypts with the identical call, confirming there is no directional tweak | E2 | `crates/validator/src/frost/keygen.rs:375-381` | <pre> let encrypted_share = encrypted_shares<br> .shares<br> .get(index)<br> .ok_or(frost_core::Error::IncorrectNumberOfShares)?;<br> let secret_share = sharing_state<br> .encryption_key<br> .ecdh(encryption_public_key, \*encrypted_share);</pre> |
 | 5 | A complaint response publishes the plaintext share the accused sent the plaintiff | E2 | `crates/validator/src/frost/keygen.rs:420-428` | <pre>pub fn reveal_secret_share(sharing_state: &SharingState, peer: Address) -> Result<U256, Error> {<br> let identifier = participants::identifier(peer);<br> sharing_state<br> .peer_packages<br> .get(&identifier)<br> .map(\|package\| marshal::solidity_scalar(&package.signing_share.to_scalar))<br> .ok_or(frost_secp256k1::Error::UnknownIdentifier)<br> .err_unexpected<br>}</pre> |
 | 6 | That reveal is queued unconditionally whenever this validator is the accused | E2 | `crates/validator/src/state/keygen.rs:734-745` | <pre> if let KeyGenParticipation::Participating(sharing_state) = participation<br> && event.accused == self.account<br> {<br> match frost::keygen::reveal_secret_share(sharing_state, event.plaintiff) {<br> Ok(secret_share) => {<br> commands.push(Command::Action(Action::KeyGenComplaintResponse {<br> group_id: group.id,<br> plaintiff: event.plaintiff,<br> secret_share,<br> expires_at: response_expires_at,<br> }));<br> }</pre> |
 | 7 | The key _derivation_ is hashed while the shared secret is not, showing the missing step is an oversight rather than a deliberate design constraint | E2 | `crates/validator/src/frost/ecdh.rs:29-36` | <pre> pub fn generate<R>(mut rng: R) -> Self<br> where<br> R: CryptoRng + RngCore,<br> {<br> let mut entropy = [0; 32];<br> rng.fill_bytes(&mut entropy);<br> Self(hash_to_scalar(b"enc", &entropy))<br> }</pre> |
@@ -189,3 +189,52 @@ If anything the merge sharpens F-VAL-001's remediation option 1 (HKDF over the s
 ## Reconciliation (run 2)
 
 **Final combined status: Medium, 93 %, Confirmed — canonical.** Counterpart `F2-VAL-002` (CONFIRMS, E1 90 %, rated Low as a standalone break). Medium is kept because point 2 — every complaint response also opens the plaintiff's share — is executed and is a leak beyond `F-VAL-001`; the remediation (KDF-bound pad) is shared. See `state/run2/reconciliation/validator.md` (Section 1).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | the pad is untouched; its impact changed through `14750ea` (#1027, proof of possession for `q`), which closes the F-VAL-001 composition. The KDF fix (#1026) was closed in favour of #1027. |
+| Severity, certainty | proposed Low, tagged `known` (settled.md section 2), certainty 90 (E1 re-run; rubric band 90 to 100) |
+| Evidence | E1: `poc/F-VAL-002/run3/` (ceremony-level re-run), `poc/F2-VAL-002/run3/` (counterpart unit PoC re-run) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- `crates/validator/src/frost/ecdh.rs:106-121` is now `crates/validator/src/frost/ecdh.rs:214-229`, unchanged apart from position:
+
+  ```rust
+  /// Encrypts or decrypts `msg` via ECDH: `msg XOR (receiver_pubkey * sender_privkey).x`.
+  ///
+  /// XOR is its own inverse, so this serves both directions. `receiver_pubkey`
+  /// must be a valid non-identity point and `sender_privkey` must be non-zero.
+  fn ecdh(
+      sender_privkey: &NonZeroScalar,
+      receiver_pubkey: &EncryptionPublicKey,
+      msg: [u8; 32],
+  ) -> [u8; 32] {
+      let shared_secret = (receiver_pubkey.0 * **sender_privkey).to_affine().x();
+  ```
+
+- `ecdh_is_commutative`: `ecdh.rs:154-163` is now `ecdh.rs:266-275`, still pinning the symmetry as intended behaviour.
+- Encrypt site `frost/keygen.rs:205-213` is now `frost/keygen.rs:213-221`; decrypt site `frost/keygen.rs:375-381` is now `frost/keygen.rs:374-380`; `reveal_secret_share` `frost/keygen.rs:420-428` is now `frost/keygen.rs:419-427`.
+- The response is queued at `state/keygen.rs:747-758` (was `734-745`) for every timely complaint against this validator (`&& requires_response` at `:749` drops only late ones).
+- `docs/overview.md:48` is now `docs/overview.md:50` and still states the property the code does not have ("each ECDH shared secret is used to encrypt exactly one value") and still describes `C[0]` as the ECDH key.
+
+What was run (worktree `wt/rv-val`, hunks reverted afterwards):
+
+1. `poc/F-VAL-002/run3/poc_run3.rs`, an honest 3-of-5 ceremony through the real `keygen` API in which every `q` carries a valid PoP: `cargo test -p validator --bins poc_f_val_002_run3 -- --test-threads=1 --nocapture`. `two_time_pad_on_every_pair_after_pop`: `c_{X->Y} XOR c_{Y->X} == f_X(Y) XOR f_Y(X)` holds on 10 of 10 pairs. `complaint_response_opens_plaintiffs_own_share`: the four plaintext responses to complaints from one plaintiff let an observer decrypt 4 of 4 of the plaintiff's own shares `f_P(X)` from public ciphertexts. `2 passed`.
+2. Counterpart `poc/F2-VAL-002/run3/poc_test_adapted.rs` (body unchanged, wired as a child of `frost::ecdh`): `poc_f2_val_002_pad_reused_in_both_directions ... ok`.
+
+Output: `poc/F-VAL-002/run3/RESULT.txt` (the same run is copied to `poc/F2-VAL-002/run3/RESULT.txt`).
+
+Why Changed and not Still valid: the mechanism and trigger are identical, but the impact the Medium rating rested on has narrowed.
+
+- The "Critical in combination with F-VAL-001" leg is gone: `M` can no longer register a `q` it does not own (F-VAL-001 run-3 section).
+- With every key owned, a pad `x(sk_X · sk_Y · G)` is revealed only by a complaint between `X` and `Y`, and the plaintiff is always the transaction sender (`contracts/src/FROSTCoordinator.sol:477`, `group.participants.complain(msg.sender, accused)`). An honest pair never complains against each other, so the second share a response exposes is either the malicious plaintiff's own (`f_M(X)`) or an honest plaintiff's share to a malicious accused (`f_P(X)`), which that accused already holds. The point the run-1 text made, that the leak "halves the number of complaints an attacker needs to accumulate evaluations of an honest polynomial", no longer holds: a coalition gains no evaluation it did not already have.
+- What remains is a construction that contradicts its documented security argument (`docs/overview.md:50`), publishes the pairwise relation `f_X(Y) XOR f_Y(X)` for every pair, has about one bit of bias per pad, and has no margin: any later change that reveals one direction of a pair reveals the other.
+
+That is a hardening and documentation defect with limited impact, Low under Section 8. The team has recorded it as known: it chose the proof of possession (#1027) and closed the KDF change (#1026) (settled.md section 2).
+
+Notes: counterpart `F2-VAL-002` (run 2 rated it Low standalone) agrees with the proposal. The remediation (KDF bound to `gid`, sender and recipient) is unchanged and would also let `ecdh_is_commutative` be inverted. F-VAL-003 and F-VAL-067 cover the complaint path that delivers the plaintext.

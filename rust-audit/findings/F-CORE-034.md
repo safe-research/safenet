@@ -27,7 +27,7 @@ The validator handbook tells operators the opposite ("the validator implements e
 | # | Claim | Class | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
 | 1 | The retry delay is a single fixed constant. | E2 | `crates/core/src/driver.rs:24-26` | <pre>/// How long to wait after a failed step before retrying, to avoid spinning on a<br>/// persistent failure (such as an unreachable RPC node).<br>const STEP_RETRY_DELAY: Duration = Duration::from_millis(100);</pre> |
-| 2 | Every error except `ExceededMaxReorgDepth` is warned and retried in an unbounded loop; no attempt counter exists. | E2 | `crates/core/src/driver.rs:207-225` | <pre>let update = async {<br> loop {<br> match self.watcher.next.await {<br> Ok(update) => return Ok(update),<br> Err(<br> err @ index::Error::Blocks(index::blocks::Error::ExceededMaxReorgDepth(_)),<br> ) => {<br> return Err(err);<br> }<br> Err(err) => {<br> tracing::warn!(<br> ?err,<br> "failed to get next blockchain update; retrying after delay"<br> );<br> tokio::time::sleep(STEP_RETRY_DELAY).await;<br> }<br> }<br> }<br>};</pre> |
+| 2 | Every error except `ExceededMaxReorgDepth` is warned and retried in an unbounded loop; no attempt counter exists. | E2 | `crates/core/src/driver.rs:207-225` | <pre>let update = async {<br> loop {<br> match self.watcher.next.await {<br> Ok(update) => return Ok(update),<br> Err(<br> err @ index::Error::Blocks(index::blocks::Error::ExceededMaxReorgDepth(\_)),<br> ) => {<br> return Err(err);<br> }<br> Err(err) => {<br> tracing::warn!(<br> ?err,<br> "failed to get next blockchain update; retrying after delay"<br> );<br> tokio::time::sleep(STEP_RETRY_DELAY).await;<br> }<br> }<br> }<br>};</pre> |
 | 3 | The doc comment frames the policy as "retry everything else", with no mention of a bound. | E2 | `crates/core/src/driver.rs:200-205` | <pre>/// Reads the next state machine input to process.<br>///<br>/// Watcher failures are retried after a short delay while completed<br>/// effects remain eligible for selection, except a reorg deeper than the<br>/// configured `max_reorg_depth`: the watcher cannot recover from that on<br>/// its own, so it is returned instead of retried.</pre> |
 | 4 | The block poller's own retry ladder is a fixed cycling list, not a backoff. | E2 | `crates/core/src/index/blocks.rs:404-408` | <pre>let index = retry_count % (self.config.block_retry_delays.len + 1);<br><br>if let Some(delay) = self.config.block_retry_delays.get(index).copied {</pre> |
 | 5 | The only progress signal is a gauge that silently stops moving; there is no retry or error counter. | E2 | `crates/core/src/metrics.rs:62-70` | <pre>/// The block-number component of the chain-processing cursor, by `status`.<br>pub fn block_number(status: ProcessingStatus) -> Gauge {<br> let status = status.label;<br> metrics::gauge!(<br> description: "Block number by chain-processing status.",<br> "safenet_core_block_number",<br> "status" => status,<br> )<br>}</pre> |
@@ -112,3 +112,32 @@ Option 3 (`watcher_errors_total{kind}`, and log at `warn` only on the first fail
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Medium, 80 (E2), canonical for the driver retry policy.** Rediscovered in two parts by run 2: `F2-CORE-010` (EXTENDS: quantifies the storm — 17 concurrent `eth_getLogs` per 100 ms for the validator, 11 for the sentinel, `try_join_all` discards partial progress, no batching layer in `alloy-rpc-client` 2.0.5) and `F2-CORE-005` (executes the "deterministic errors never escalate" horn). This file alone carries the log-flood horn and the handbook contradiction (`docs/validator-handbook.md:110`). Still valid at `fe9e84c` (`driver.rs:28`, `210-226` unchanged in content). Counterparts: `F2-CORE-010`, `F2-CORE-005`; shares remediation with `F-CORE-004` option 1.
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | #1062 (`fcc7028`) removed the handbook sentence "While the validator implements exponential backoff for some RPC requests" (`docs/validator-handbook.md:126` at `fe9e84c`), so the handbook-contradiction horn is gone. The retry policy in `driver.rs` is byte-identical; #1010 made the block poller's ladder per-network (Gnosis `[500, 500, 500, 1000, 250, 250]`), still a fixed cycle |
+| Severity, certainty | Medium, 80 proposed (unchanged band): the retry storm, the log flood and the missing escalation still hold and carried the Medium on their own; only the misinformation reason is gone |
+| Evidence | E2 trace below; the "never escalates" horn is executed in `poc/F2-CORE-005/run3/` and `poc/F-CORE-004/run3/` |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `driver.rs:24-26` to `:26-28`: `/// How long to wait after a failed step before retrying, to avoid spinning on a` / `/// persistent failure (such as an unreachable RPC node).` / `const STEP_RETRY_DELAY: Duration = Duration::from_millis(100);`
+- `driver.rs:207-225` to `:209-227`: `let update = async {` / `loop {` / `match self.watcher.next().await {` ... `tracing::warn!(` / `?err,` / `"failed to get next blockchain update; retrying after delay"` / `);` / `tokio::time::sleep(STEP_RETRY_DELAY).await;`
+- `driver.rs:200-205` to `:202-207`: `/// Watcher failures are retried after a short delay while completed` ... `/// its own, so it is returned instead of retried.`
+- `index/blocks.rs:404-408` to `:459-461`: `let index = retry_count % (self.timings.block_retry_delays.len() + 1);` / `retry_count += 1;` / `if let Some(delay) = self.timings.block_retry_delays.get(index).copied() {`
+- `metrics.rs:62-70` to `:63-71`: `pub fn block_number(status: ProcessingStatus) -> Gauge {`; still no retry or error counter
+- `observability/logging.rs:14-20`: unchanged, `if std::io::stdout().is_terminal() {` / `registry.with(fmt::layer()).try_init()` / `} else {` / `registry.with(fmt::layer().json()).try_init()`
+- `docs/validator-handbook.md:110` (run 1) and `:126` (`fe9e84c`): removed by #1062; `grep -n "backoff\|exponential" docs/*.md` finds nothing at `361aaf3`
+
+What was run: code trace and the grep above. The per-topic fallback now issues 16 concurrent `eth_getLogs` per attempt for the validator (5 `Consensus` + 10 `FROSTCoordinator` + 1 oracle event, after #1040 removed `Preprocess`) and 11 for the sentinel, at the same fixed 100 ms cadence.
+
+Notes: the new warp header requests (#1049) add up to one `eth_getBlockByNumber` per block with timestamp-less logs to each retried page, but #1050 keeps the page and its resolved headers across failures, so only missing headers are re-requested. Counterparts `F2-CORE-010` (storm quantified; now 16 rather than 17 validator topics) and `F2-CORE-005` (escalation horn) hold.
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-CORE-001`](F3-CORE-001.md) (EXTENDS: under a rate limit the per-event fallback never completes, a permanent stall with `/health` OK). This ID stays canonical.
+- Ledger values: Medium, certainty 85 (`F3-CORE-001`'s execution of the stall).

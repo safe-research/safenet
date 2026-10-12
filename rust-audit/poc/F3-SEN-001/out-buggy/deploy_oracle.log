@@ -1,0 +1,32 @@
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+sentinelOracle: address 0x1d78F455B77785Fa8E093d125550232F20Af5949
+
+== Logs ==
+  SentinelOracle deployed at: 0x1d78F455B77785Fa8E093d125550232F20Af5949
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 100
+
+Estimated gas price: 0.800316095 gwei
+
+Estimated total gas used for script: 5538512
+
+Estimated amount required: 0.00443256029595064 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/build/broadcast/DeploySentinelOracle.s.sol/100/run-latest.json
+
+Sensitive values saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/build/cache/DeploySentinelOracle.s.sol/100/run-latest.json
+

@@ -30,12 +30,12 @@ The blast radius per event is the replay window, `latest - MIN(snapshots)`, i.e.
 | --- | --- | --- | --- | --- |
 | 1 | The runtime's replay contract is scoped to effects; the `Action` variant carries no contract of any kind. | E2 | `crates/core/src/state/mod.rs:54-73` | <pre>/// Effects may be performed more than once for the same chain message, for<br>/// example after a crash or reorg replay. Transitions that emit effects must be<br>/// prepared for the replayed effect to resume with a different result.<br>#[derive(Clone, Debug, PartialEq, Eq)]<br>pub enum Command&lt;Action, Effect&gt; {<br> /// An onchain action.<br> Action(Action),<br> /// An effect to perform.<br> ///<br> /// Effects are external observations or operations. They are not part of<br> /// the pure transition function and may be replayed even when a previous<br> /// execution already changed external state.<br> Effect(Effect),<br>}</pre> |
 | 2 | Handlers are told how to make effects idempotent; there is no equivalent guidance or mechanism for actions. | E2 | `crates/core/src/effects.rs:20-25` | <pre>/// The same effect may be performed more than once for the same chain<br>/// message. For consumptive resources such as pre-committed nonces, handlers<br>/// should encode outcomes like "already used" in `Resume`; state transitions<br>/// remain pure because they consume only the resume value.<br>fn perform_effect(&self, effect: Effect) -> impl Future&lt;Output = Resume&gt; + Send;</pre> |
-| 3 | `enqueue` is an unconditional `INSERT` per item: no idempotency key, no content hash, no `ON CONFLICT`. | E2 | `crates/core/src/tx/storage.rs:93-101` | <pre>let mut tx = self.pool.begin.await?;<br>for (transaction, expires_at) in transactions {<br> let request = serde_json::to_string(&transaction)?;<br> sqlx::query("INSERT INTO transactions (request, expires_at) VALUES (?, ?)")<br> .bind(request)<br> .bind(expires_at.map(i64::try_from).transpose?)<br> .execute(&mut *tx)<br> .await?;<br>}<br>tx.commit.await?;</pre> |
+| 3 | `enqueue` is an unconditional `INSERT` per item: no idempotency key, no content hash, no `ON CONFLICT`. | E2 | `crates/core/src/tx/storage.rs:93-101` | <pre>let mut tx = self.pool.begin.await?;<br>for (transaction, expires_at) in transactions {<br> let request = serde_json::to_string(&transaction)?;<br> sqlx::query("INSERT INTO transactions (request, expires_at) VALUES (?, ?)")<br> .bind(request)<br> .bind(expires_at.map(i64::try_from).transpose?)<br> .execute(&mut \*tx)<br> .await?;<br>}<br>tx.commit.await?;</pre> |
 | 4 | The table has no unique constraint that could reject a duplicate at the database level; its only key is the row id. | E2 | `crates/core/src/tx/storage.rs:69-80` | <pre>sqlx::query(<br> "CREATE TABLE IF NOT EXISTS transactions (<br> id INTEGER PRIMARY KEY,<br> request TEXT NOT NULL,<br> expires_at INTEGER DEFAULT NULL,<br> nonce INTEGER DEFAULT NULL,<br> submitted_at INTEGER DEFAULT NULL,<br> executed_at INTEGER DEFAULT NULL<br> )",<br>)</pre> |
 | 5 | The driver encodes and queues every returned action unconditionally, with no consultation of what is already in the queue. | E2 | `crates/core/src/driver.rs:266-284` | <pre>let mut transactions = Vec::with_capacity(commands.len);<br>for command in commands {<br> match command {<br> state::Command::Action(action) =&gt; {<br> transactions.push(self.actions.encode_action(action));<br> }<br> state::Command::Effect(effect) =&gt; self.effects.spawn(effect),<br> }<br>}<br><br>if !transactions.is_empty {<br> let result = self.transactions.queue(transactions).await;</pre> |
 | 6 | Every restart with more than one retained snapshot performs a rollback and replays every block above the anchor. | E2 | `crates/core/src/index/blocks.rs:261-266` | <pre>let uncle = indexed.safe.checked_add(1);<br>if let Some(uncle) = uncle<br> && uncle &lt;= indexed.latest<br>{<br> self.queue.push_back(BlockUpdate::Uncle { number: uncle });<br>}</pre> |
-| 7 | The rollback restores the snapshot at `uncle - 1` and replays from `uncle`, so the transitions above the anchor run a second time and re-emit their commands. | E2 | `crates/core/src/state/mod.rs:182-189` | <pre>Update::Block(BlockUpdate::Uncle { number })<br> if matches!(status, Status::BlockPending { pending } if number &lt; pending)<br> &#124;&#124; matches!(status, Status::BlockEvents { latest } if number &lt;= latest) =&gt;<br>{<br> let (_, state) = self.snapshots.reorg(number).await?;<br> let status = Status::BlockPending { pending: number };<br> (state, status, vec![])<br>}</pre> |
-| 8 | The rollback touches only the `snapshots` table, so the transaction queue keeps its pre-rollback rows while the replay inserts duplicates beside them. | E2 | `crates/core/src/state/storage.rs:129-133` | <pre>let mut tx = self.pool.begin.await?;<br>sqlx::query("DELETE FROM snapshots WHERE block_number &gt;= ?")<br> .bind(i64::try_from(uncle)?)<br> .execute(&mut *tx)<br> .await?;</pre> |
+| 7 | The rollback restores the snapshot at `uncle - 1` and replays from `uncle`, so the transitions above the anchor run a second time and re-emit their commands. | E2 | `crates/core/src/state/mod.rs:182-189` | <pre>Update::Block(BlockUpdate::Uncle { number })<br> if matches!(status, Status::BlockPending { pending } if number &lt; pending)<br> &#124;&#124; matches!(status, Status::BlockEvents { latest } if number &lt;= latest) =&gt;<br>{<br> let (\_, state) = self.snapshots.reorg(number).await?;<br> let status = Status::BlockPending { pending: number };<br> (state, status, vec![])<br>}</pre> |
+| 8 | The rollback touches only the `snapshots` table, so the transaction queue keeps its pre-rollback rows while the replay inserts duplicates beside them. | E2 | `crates/core/src/state/storage.rs:129-133` | <pre>let mut tx = self.pool.begin.await?;<br>sqlx::query("DELETE FROM snapshots WHERE block_number &gt;= ?")<br> .bind(i64::try_from(uncle)?)<br> .execute(&mut \*tx)<br> .await?;</pre> |
 | 9 | A duplicate row is allocated a _distinct_ nonce, so it is an additional onchain transaction rather than a replacement of the original. | E2 | `crates/core/src/tx/storage.rs:145-149` | <pre>"UPDATE transactions<br> SET nonce = MAX(?, COALESCE(<br> (SELECT MAX(nonce) + 1 FROM transactions),<br> 0<br> ))</pre> |
 | 10 | The only durable state the state machine keeps is the block number and the service state; nothing records which actions were already queued. | E2 | `crates/core/src/state/storage.rs:50-54` | <pre>"CREATE TABLE IF NOT EXISTS snapshots (<br> block_number INTEGER PRIMARY KEY,<br> state TEXT NOT NULL<br> )",</pre> |
 | 11 | Actions queued with no expiry are never pruned, so their duplicates accumulate rather than ageing out. | E2 | `crates/core/src/tx/storage.rs:259-262` | <pre>sqlx::query(<br> "DELETE FROM transactions<br> WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at &lt;= ?",<br>)</pre> |
@@ -269,3 +269,76 @@ Because those handlers key off _logs_ rather than off a locally computed tally, 
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Medium, 98 (E1), canonical** (over run 2's `F2-CORE-063` and `F2-CORE-032`, and over `F-VAL-065` / `F-SEN-006` / `F2-SEN-007` for the service symptoms). Rediscovered by run 2 as `F2-CORE-063` (CONFIRMS, executed at queue level: a replayed identical action inserted, allocated nonce 1 and broadcast while the original is retained) and `F2-CORE-032` (driver side: the queue is never rolled back on `Uncle`). Run 2 rated Low (every traced duplicate reverts); Medium is carried because `F-VAL-065`'s replayed `Sign` is not a revert and run 2's own `F2-CORE-030` extension puts the replayed duplicate `Commit` on the bond-loss path (`state/run2/reconciliation/core.md` §1.1). **Team question (@rmeissner, "different nonces and one of them will revert, right?") answered in `state/run2/reconciliation/core.md` §4.2: yes — at `fe9e84c` the duplicate check is `require(self.commitments[requestId][sentinel].vote == SentinelOracleCommitment.Vote.NONE, AlreadyCommitted())` (`contracts/src/libraries/SentinelOracleCommitments.sol:94`; first commit writes `PENDING` at `:96`), the form this file cited is superseded with an identical outcome, and Phase 8 observed nonces 2 and 3 with the duplicate `commit` reverting `0xbfec5558`; qualifications: the paired `approve` succeeds, the revert is invisible to the queue (`F-CORE-063`), the duplicate `Commit` is on the `F-SEN-001`/`F2-CORE-030` slash path, the replayable `Claim` surface grew with the merge, and the dedup key must be `(block hash, log index, kind)`, not `request` (`ApproveToken` carries no request id).** Counterparts: `F2-CORE-063`, `F2-CORE-032`.
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | Nothing added an idempotency key or a queue rollback. `622cf89` #993 moved allocation to `allocated_nonces` (`enqueue` is unchanged); `ce01715` #995 and `acacac1` #1001 let a duplicate ride in a batch. `73967cf` #1015 adds a replay source: the pending block's transition is applied right after the snapshot commit, so its actions are re-emitted on every restart. The `Command::Action` doc, the driver's queueing path and `SnapshotStore::reorg` are unchanged. |
+| Severity, certainty | Unchanged: Medium, 98 |
+| Evidence | E1 `poc/F-CORE-067/run3/` (run-1 parts 1 and 2 re-run, plus three variants) and `poc/F2-CORE-063/run3/` (run-2 queue-level PoC, plus a batched variant) |
+
+Re-based anchors (old location at `fe9e84c`, new location at `361aaf3`, verbatim quote).
+
+- `state/mod.rs:54-73` (replay contract scoped to effects; `Action` has none) to `crates/core/src/state/mod.rs:64-77` (unchanged text, `/// An onchain action.` at `:69`).
+- `effects.rs:20-25` to `crates/core/src/effects.rs:22-26` (now "signing nonces" instead of "pre-committed nonces"; still effects only).
+- `tx/storage.rs:93-101` (unconditional `INSERT`) to `crates/core/src/tx/storage.rs:112-127`:
+
+```rust
+    pub async fn enqueue(
+        &self,
+        transactions: impl IntoIterator<Item = (Transaction, Option<u64>)>,
+    ) -> Result<(), Error> {
+        let mut tx = self.pool.begin().await?;
+        for (transaction, expires_at) in transactions {
+            let request = serde_json::to_string(&transaction)?;
+            sqlx::query("INSERT INTO transactions (request, expires_at) VALUES (?, ?)")
+                .bind(request)
+                .bind(expires_at.map(i64::try_from).transpose()?)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+```
+
+- `tx/storage.rs:69-80` (no unique key but the row id) to `crates/core/src/tx/storage.rs:95-100`: `transactions (id INTEGER PRIMARY KEY, request TEXT NOT NULL, expires_at INTEGER DEFAULT NULL, nonce INTEGER DEFAULT NULL REFERENCES allocated_nonces (nonce))`.
+- `driver.rs:266-284` (every action encoded and queued) to `crates/core/src/driver.rs:272-289` (unchanged logic).
+- `index/blocks.rs:261-266` (synthetic `Uncle` on every restart with more than one snapshot) to `crates/core/src/index/blocks.rs:315-320`.
+- `state/mod.rs:182-189` (rollback restores `uncle - 1`) to `crates/core/src/state/mod.rs:185-193`, now also accepted from the new `BlockApplied` status.
+- `state/storage.rs:129-133` (rollback touches only `snapshots`) to `crates/core/src/state/storage.rs:124-143` (unchanged).
+- `tx/storage.rs:145-149` (duplicate gets its own, higher nonce) to `crates/core/src/tx/storage.rs:190-195`.
+- `tx/storage.rs:259-262` (no-expiry rows never pruned while queued) to `crates/core/src/tx/storage.rs:350-353`.
+- New replay source, `crates/core/src/state/mod.rs:259-268`:
+
+```rust
+                // Optimistically apply the pending block's transition right
+                // away instead of waiting for the block to be observed, so
+                // that its actions can be included in the pending block. This
+                // happens after the snapshot is committed, so it gets replayed
+                // when the block is observed after a restart.
+                if let Status::BlockPending { pending } = status {
+                    (state, commands) =
+                        self.accumulate_transition(state, commands, Message::NewBlock(pending));
+                    status = Status::BlockApplied { pending };
+                }
+```
+
+What was run (worktree at `361aaf3`, snippets appended to the `mod tests` of `crates/core/src/tx/storage.rs` and `crates/core/src/tx/mod.rs`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`.
+- Run-1 part 1 (`rv3_f_core_067_enqueue_is_not_idempotent`): FAILED as in run 1, `first=7 second=Some(AllocatedTransaction { nonce: 8, .. data: 0xdeadbeef .. })`.
+- Run-1 part 2 (`rv3_f_core_067_restart_replay_enqueues_a_duplicate_action`): FAILED as in run 1, 2 rows for one decision after `Uncle{2}` and the replay of block 2.
+- Variant, real restart (`rv3_f_core_067_restart_with_a_fresh_state_machine_duplicates_the_action`): FAILED; a new `StateMachine` built from the same pool reports `{latest: 2, safe: 1}`, the watcher's `Uncle { 2 }` replays block 2, 2 rows.
+- Variant, #1015 (`rv3_f_core_067_optimistic_new_block_action_replays_without_an_uncle`): FAILED; with a single snapshot retained (`{latest: 1, safe: 1}`, so no synthetic uncle) the restart still re-applies `NewBlock(2)` and queues its action a second time, 2 rows.
+- Variant, batched storage (`rv3_f_core_067_batched_variant_duplicate_becomes_a_second_call`): FAILED; the two identical copies become two calls of one batch at nonce 7.
+- Run-2 PoC (`poc/F2-CORE-063/run3/`, `rv3_f2_core_063_replayed_action_is_enqueued_and_broadcast_again_with_a_new_nonce`): ok, identical to run 2 (duplicate broadcast at nonce 1 while the original, executed at 11, is retained). Batched variant ok: after the batch and its authorization execute (nonce 2), the replayed action is sent again as the next batch at nonce 2.
+
+Notes:
+
+- The replay window grew by one block: the actions of the optimistically applied pending block are re-emitted on every restart, including the single-snapshot case in which run 1 saw no replay. In the sentinel this transition emits `Reveal` and finalization actions (`crates/sentinel/src/service.rs:400-470`, `handle_block_advance`).
+- In batched mode a duplicate that reverts is swallowed into a `CallFailed` inside a successful batch (`contracts/src/Safenet7702Executor.sol:106-109`, reference only), so the duplicate stops being visible as a failed transaction at all (see `F-CORE-068`, run-3 section).
+- Run 2's answer to the team question stands; the dedup key must be identity-based (block hash, log index, kind) and its lifecycle depends on `F-CORE-063` (still valid). Counterparts `F2-CORE-063`, `F2-CORE-032`; service symptoms `F-VAL-065`, `F-SEN-006`.

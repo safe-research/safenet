@@ -1,0 +1,6 @@
+$ cargo test -p validator --bins -- poc_f_val_032_run3 poc_f_val_034_run3 poc_f_val_040_run3 poc_f_val_030_run3 poc_f_val_061_run3 --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3; modules wired into state/sign.rs and service/effect.rs, reverted afterwards)
+test state::sign::poc_f_val_030_run3::a_lost_generate_nonces_costs_one_ceremony ... ceremony 1: GenerateNonces lost -> ME never commits, session dropped at the deadline
+ceremony 2: CommitNonces queued = true
+ok
+
+(full run) test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 0.53s

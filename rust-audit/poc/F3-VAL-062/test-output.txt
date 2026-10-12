@@ -1,0 +1,13 @@
+
+
+running 1 test
+test state::keygen::poc_f3_val_062::warp_order_drops_peer_share_and_delays_deadline ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.17s
+
+
+Bite: mutating the late-setup deadline (drop the "+ key_gen_timeout") makes
+warp_deadline Some(120), failing `assert_eq!(warp_deadline, Some(240))`:
+  left: Some(120)  right: Some(240)
+The share-drop claim is proven by the in-test differential: the SAME peer share,
+SAME code, is counted in live order (shared=1) and dropped in warp order (shared=0).

@@ -95,3 +95,36 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 ## Reconciliation (run 2)
 
 **Final combined status: Low, 88 %, Confirmed — canonical.** Counterpart `F2-VAL-033` (CONFIRMS, E1 88 %): same `state/sign.rs:284` overwrite, same contract non-deduplication. See `state/run2/reconciliation/validator.md` (Section 1).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | `57b164b` "Continue signing with revealed signers on nonce commitment timeout" (#1008, fixes #777) removed the nonce-round restart that read `last_signer`; `82d5419` (#1036) keeps only a signer's first nonce commitment. The `last_signer` of the signature-share round, which existed at run 2 but was not this row's subject, is now the only one left. |
+| Severity, certainty | proposed Low (unchanged band), certainty 70: the re-reveal variant is gone; the withhold variant moved to the share round with the same bounded cost |
+| Evidence | E1: `poc/F-VAL-040/run3/` (2 passed) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- The reveal-round overwrite `state/sign.rs:278-285` and the restart call with `*last_signer` at `:645-655` no longer exist. Nonce commitments now keep the first per signer: `crates/validator/src/state/sign.rs:253-268` (`Entry::Occupied(_)` logs "ignoring repeated nonce commitment from participant"), and the commitment timeout continues with the signers that committed, with no responsible party (`:566-608`).
+- The surviving `last_signer`: `handle_sign_shared` sets it on every `SignShared` for a selection root (`crates/validator/src/state/sign.rs:403-411`):
+
+  ```rust
+  let selection = selections.entry(selection_root).or_default();
+  // ...
+  selection.shares_from.insert(event.participant);
+  selection.last_signer = Some(event.participant);
+  ```
+
+  and the share-round timeout makes it the only party that queues the restarting `Action::Sign` and the new session's `responsible` (`:623-631`, `:648-662`).
+
+- The contract rejects a second share from the same participant on the same root (`contracts/src/libraries/FROSTSignatureShares.sol:88`, `AlreadyIncluded`), so the re-reveal form has no equivalent in the share round.
+
+What was run: `poc/F-VAL-040/run3/last_signer.rs` wired into `state/sign.rs` (reverted), `cargo test -p validator --bins poc_f_val_040_run3`, `2 passed`, output `poc/F-VAL-040/run3/RESULT.txt`.
+
+- `repeated_commitment_is_ignored` (the run-2 route): M commits, A commits, M commits again; two commitments are recorded and nothing records commitment order.
+- `last_share_makes_the_sharer_responsible_for_the_restart` (residual, Aegis 3 of 5 with a real key share): B never shares; ME, A and C share and M shares last on the canonical root. At the deadline (block 100) the restart has `responsible = M` and ME queues no `Sign`; one `signing_timeout` later (block 106) M is dropped and ME queues the `Sign`.
+
+Notes: the residual needs a second non-sharer in the selection (an attacker's second position or an honest straggler) and costs one extra `signing_timeout` (about 30 s on Gnosis) per targeted ceremony, the same bound as before. In a tighter selection (threshold-many sharers including the defaulter), dropping the defaulter leaves fewer than a threshold and the session is dropped instead; that is the ordinary liveness bound of any withholding signer, not specific to this row. Counterpart `F2-VAL-033` (the re-reveal reproduction) is resolved by the commits above. Remediation option 2 (derive the restarting party from data an attacker does not control, for example `signers` rotated by `signature_id`) still applies to the share round.

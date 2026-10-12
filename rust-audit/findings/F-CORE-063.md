@@ -23,8 +23,8 @@ The invalidation side is asymmetric in a way that makes this stick. Execution is
 | # | Claim | Class | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
 | 1 | Execution is decided by a nonce comparison alone. No receipt, block hash or inclusion proof is consulted. | E2 | `crates/core/src/tx/storage.rs:222-235` | <pre>/// Marks every in-flight transaction the account has moved past (nonce below<br>/// `execution.nonce`) as executed at `execution.block`.<br>pub async fn mark_executed(&self, status: Status) -> Result&lt;, Error&gt; {<br> sqlx::query(<br> "UPDATE transactions<br> SET executed_at = ?<br> WHERE nonce IS NOT NULL AND nonce < ? AND executed_at IS NULL",<br> )<br> .bind(i64::try_from(status.block)?)<br> .bind(i64::try_from(status.nonce)?)<br> .execute(&self.pool)<br> .await?;<br> Ok()<br>}</pre> |
-| 2 | A marked row is deleted permanently once the marking block is at or below `safe`. | E2 | `crates/core/src/tx/storage.rs:249-253` | <pre>// Prune transactions executed at or below the reorg-safe block.<br>sqlx::query("DELETE FROM transactions WHERE executed_at IS NOT NULL AND executed_at <= ?")<br> .bind(safe)<br> .execute(&mut *tx)<br> .await?;</pre> |
-| 3 | The only un-marking trigger is a regression of the block height, not of the nonce. | E2 | `crates/core/src/tx/mod.rs:166-179` | <pre>// Invalidate execution markers for transactions as necessary.<br>if let Some(block) = match previous {<br> // On startup, conservatively invalidate all transactions executed<br> // past the `safe` block, as there may have been reorgs.<br> None => status.safe.checked_add(1),<br> // In case of a reorg (where the status has a latest block before<br> // the last status we've seen) indicates a reorg to `latest`, so<br> // invalidate markers accordingly.<br> Some(previous) if previous.latest > status.latest => status.latest.checked_add(1),<br> // In all other cases, there are no markers to invalidate.<br> _ => None,<br>} {<br> self.storage.unmark_executed(block).await?;<br>}</pre> |
+| 2 | A marked row is deleted permanently once the marking block is at or below `safe`. | E2 | `crates/core/src/tx/storage.rs:249-253` | <pre>// Prune transactions executed at or below the reorg-safe block.<br>sqlx::query("DELETE FROM transactions WHERE executed_at IS NOT NULL AND executed_at <= ?")<br> .bind(safe)<br> .execute(&mut \*tx)<br> .await?;</pre> |
+| 3 | The only un-marking trigger is a regression of the block height, not of the nonce. | E2 | `crates/core/src/tx/mod.rs:166-179` | <pre>// Invalidate execution markers for transactions as necessary.<br>if let Some(block) = match previous {<br> // On startup, conservatively invalidate all transactions executed<br> // past the `safe` block, as there may have been reorgs.<br> None => status.safe.checked*add(1),<br> // In case of a reorg (where the status has a latest block before<br> // the last status we've seen) indicates a reorg to `latest`, so<br> // invalidate markers accordingly.<br> Some(previous) if previous.latest > status.latest => status.latest.checked_add(1),<br> // In all other cases, there are no markers to invalidate.<br> * => None,<br>} {<br> self.storage.unmark_executed(block).await?;<br>}</pre> |
 | 4 | Un-marking is also keyed on the block number, so a marker written at a block that was never uncled is untouchable. | E2 | `crates/core/src/tx/storage.rs:271-279` | <pre>/// Clears the executed marker from transactions executed at or after `block`,<br>/// used when `block` is uncled by a reorg.<br>pub async fn unmark_executed(&self, block: u64) -> Result&lt;, Error&gt; {<br> sqlx::query("UPDATE transactions SET executed_at = NULL WHERE executed_at >= ?")<br> .bind(i64::try_from(block)?)<br> .execute(&self.pool)<br> .await?;<br> Ok()<br>}</pre> |
 | 5 | Marking uses the nonce fetched from the RPC for the current block, with no validation. | E2 | `crates/core/src/tx/mod.rs:185-197` | <pre>if previous.is_none_or(\|previous\| previous.latest < status.latest)<br> && self.storage.count_outstanding(status.latest).await? > 0<br>{<br> let nonce = self.nonce.await?;<br> self.storage<br> .mark_executed(Status {<br> block: status.latest,<br> nonce,<br> })<br> .await?;<br> self.resubmit_stale(status.latest).await?;<br> self.submit_pending(status.latest).await?;<br>}</pre> |
 | 6 | Consuming a nonce outside the queue is a documented, supported mode of operation — so "another sender moved the count" is by design, not misuse. | E2 | `crates/core/src/tx/storage.rs:126-130` | <pre>/// The nonce is the first free nonce at or above `status.nonce` (the<br>/// account's current onchain transaction count, passed in so nonces<br>/// consumed by transactions submitted outside the queue are respected),<br>/// accounting for the nonces of other in-flight transactions. Selecting the<br>/// nonce and reserving it for the transaction happen atomically.</pre> |
@@ -118,3 +118,64 @@ Option 5 (detect a shared key) is a free by-product of option 1 and is worth cal
 ## Reconciliation (run 2)
 
 **Final: Plausible, Medium, 55 (E1 for the irrevocable mark), canonical.** Rediscovered by run 2 as `F2-CORE-061` (EXTENDS): the irrevocability of the mark and the resulting gap are executed (a single reading of 1 at block 11 marks the row; readings of 0 afterwards never un-mark it; no RPC is even issued while nothing is outstanding), and the trigger is **narrowed** — a permanent stall needs an action queued within `max_reorg_depth` blocks of the false mark, otherwise the gap closes when the row is pruned. Run 2's Critic also notes that option 2 (re-check rows executed above `safe`) cannot fire as written because `count_outstanding` excludes executed rows. This file alone carries the shared-key instance and the block-number-only invalidation asymmetry. Still valid at `fe9e84c`. Counterpart: `F2-CORE-061`; the key-lifecycle dependency with `F-CORE-067` option 1 stands.
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | The mechanism is unchanged; the 7702 stack moved it to `allocated_nonces` (`622cf89` #993) and the nonce read to `eth_getProof` (`d791e67` #999). `4847664` #996 adds `recover_authorization_gap` right after `mark_executed`, which does not touch the inference. No receipt, status or log is read anywhere in `crates/core/src/tx/`. |
+| Severity, certainty | Unchanged: Medium, 55 (Plausible; the irrevocable mark E1) |
+| Evidence | E1 `poc/F2-CORE-061/run3/` (run-2 PoC re-run, plus a batched variant) and `poc/F-CORE-068/run3/` (a batch row is marked executed from the nonce alone) |
+
+Re-based anchors (old location at `fe9e84c`, new location at `361aaf3`, verbatim quote).
+
+- `tx/storage.rs:222-235` (execution decided by a nonce comparison alone) to `crates/core/src/tx/storage.rs:279-292`:
+
+```rust
+    /// Marks every in-flight transaction the account has moved past (nonce below
+    /// `execution.nonce`) as executed at `execution.block`.
+    pub async fn mark_executed(&self, status: Status) -> Result<(), Error> {
+        sqlx::query(
+            "UPDATE allocated_nonces
+             SET executed_at = ?
+             WHERE nonce < ? AND executed_at IS NULL",
+        )
+        .bind(i64::try_from(status.block)?)
+        .bind(i64::try_from(status.nonce)?)
+```
+
+- `tx/storage.rs:249-253` (marked rows deleted once at or below `safe`) to `crates/core/src/tx/storage.rs:326-344`, now deleting the queued `transactions` rows of an executed nonce first, then the nonce row:
+
+```rust
+        sqlx::query(
+            "DELETE FROM transactions
+             WHERE nonce IN (
+                 SELECT nonce FROM allocated_nonces
+                 WHERE executed_at IS NOT NULL AND executed_at <= ?
+             )",
+        )
+```
+
+- `tx/mod.rs:166-179` (un-marking only on a block-number regression or at startup) to `crates/core/src/tx/mod.rs:187-200` (unchanged text).
+- `tx/storage.rs:271-279` (un-marking keyed on the block number) to `crates/core/src/tx/storage.rs:362-370`: `UPDATE allocated_nonces SET executed_at = NULL WHERE executed_at >= ?`.
+- `tx/mod.rs:185-197` (one reading per block, no validation) to `crates/core/src/tx/mod.rs:207-225`, now `let nonce = self.account().await?.nonce;` followed by `mark_executed`, `recover_authorization_gap`, `resubmit_stale` and `submit_pending`.
+- `tx/storage.rs:126-130` (external nonce use supported) to `crates/core/src/tx/storage.rs:151-155` (same wording).
+- `tx/mod.rs:160-164` (unconditional, unlogged prune) to `crates/core/src/tx/mod.rs:182-185` (unchanged text).
+- The hash the queue computes and drops: `crates/core/src/tx/signer.rs:135-139` (`SignedTransaction::hash`) and `crates/core/src/tx/mod.rs:326-331` (logged at `debug`, never stored).
+
+What was run (worktree at `361aaf3`, `poc/F2-CORE-061/run3/tx_mod_tests_run3.rs` appended to `crates/core/src/tx/mod.rs`'s `mod tests`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`.
+- `rv3_f2_core_061_false_execution_mark_is_irrevocable_and_opens_a_nonce_gap`: ok, identical to run 2. A single reading of nonce 1 at block 11 marks the row `executed_at = 11`; blocks 12 to 15 issue no RPC at all (nothing is outstanding), so readings of 0 never revoke the mark; the row is pruned once `safe` passes 11.
+- `rv3_f2_core_061_gap_closes_when_nothing_is_queued_inside_the_retention_window`: ok; run 2's narrowing still holds.
+- Variant, batched mode (`rv3_f2_core_061_batched_variant_false_mark_drops_the_whole_batch`): ok. One false reading drops a three-call batch: the batch row and its three queued transactions are pruned at safe 12 though the canonical nonce never moved.
+- `poc/F-CORE-068/run3/` `rv3_f_core_068_direct_reverted_transaction_is_treated_the_same`: ok. A mined but reverted standalone transaction is marked executed and pruned with only `eth_getProof` requested, which is the "related consequence" `F2-CORE-061` records.
+
+Notes:
+
+- The "In-flight impact (FWD)" prediction materialised in the merged design: under batching one wrong mark drops a whole batch, not one action.
+- New since `fe9e84c`: when the dropped transaction carried an EIP-7702 authorization, the same false reading also converts the authorization row into a cancellation (`crates/core/src/tx/storage.rs:301-312`). If the canonical chain never reaches the first nonce, that cancellation sits behind the gap and, in batched mode, holds the only in-flight slot (shown in the batched variant). This is this row's wedge, not a new defect.
+- Batched rows widen the remediation: a receipt-status check (option 1) would not see a call that failed inside a successful batch, because `Safenet7702Executor.execute` swallows it into `CallFailed` (`contracts/src/Safenet7702Executor.sol:106-109`, reference only). A receipt-based fix must also read `CallFailed` logs for batched rows. That residual is recorded in `F-CORE-068`'s run-3 section and is the same loss as a reverted standalone transaction here.
+- The dependency with `F-CORE-067` option 1 stands (an idempotency key freed by a wrong mark re-opens the duplicate). Counterpart `F2-CORE-061`.

@@ -1,0 +1,8 @@
+# command: cargo build --workspace --all-targets --locked
+# cwd: $RUN/wt/base
+# head: 361aaf3b25e12d2e04f296184c326830968f3727
+# start: 2026-10-08T14:16:07Z
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 15s
+# end: 2026-10-08T14:17:22Z
+# duration_s: 75
+# exit: 0

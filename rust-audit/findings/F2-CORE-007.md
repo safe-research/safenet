@@ -61,3 +61,32 @@ Verdict: **Confirmed**. Certainty **75** (E2, deterministic). Severity **Low / L
 ## Reconciliation (run 2)
 
 **Final: NEW in run 2 — Low, 75 (E2), canonical.** Run 1 has no lagging-node-at-restart route (`BadUpdate` appears there only as an error class in `F-CORE-030`); grep of every `F-CORE-*` file confirms (`state/run2/reconciliation/core.md` §1).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed this path. #1015 added `Status::BlockApplied`, whose `New` guard is the same `pending == number` check, so a lagging node's first block is still rejected |
+| Severity, certainty | severity unchanged (Low); certainty 75 to 85 proposed: the restart route is now executed with the real watcher and state machine (E1) |
+| Evidence | E1 `poc/F2-CORE-007/run3/` (first executed PoC for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/blocks.rs:245-246` to `:299-300`: `let latest = self.require_block(BlockId::latest()).await?;` / `let safe = latest.number.saturating_sub(self.config.max_reorg_depth);`
+- `index/blocks.rs:261-266` to `:315-320`: `let uncle = indexed.safe.checked_add(1);` ... `self.queue.push_back(BlockUpdate::Uncle { number: uncle });`
+- `index/blocks.rs:271-273` to `:325-327`: `if let Some(uncle) = uncle` / `&& uncle <= safe` / `{`
+- `index/blocks.rs:352-357` to `:406-411`: `|indexed| {` / `indexed` / `.safe` / `.checked_add(1)` / `.is_some_and(|from| block.number >= from)`
+- `index/blocks.rs:253` and `:538-543` to `:307` and `:595-600`: `self.update_next_pending_block(latest.number, latest.timestamp);` and `number: number + 1,`
+- `state/mod.rs:190-192` and `:240` to `:196-199` and `:272`: `Update::Block(BlockUpdate::New { number, .. })` / `if matches!(status, Status::Initialized)` / `|| matches!(status, Status::BlockPending { pending } if pending == number)` / `|| matches!(status, Status::BlockApplied { pending } if pending == number) =>` and `_ => return Err(Error::BadUpdate),`
+- `driver.rs:195-198`: unchanged, `tracing::error!(?err, "unrecoverable driver error; exiting");` / `break;`
+
+What was run: `rv3_f2_core_007_restart_against_a_lagging_node_exits_with_bad_update` (it reuses the shared run-2 harness from `poc/F2-CORE-001/run3/`), batch `cargo test -p safenet-core --lib -- --nocapture --test-threads=1 ... rv3_ ...`. The first run leaves the store at `{ latest: 1000, safe: 995 }` (`max_reorg_depth = 5`). On restart the node reports latest 994: `restart updates: [Uncle { number: 996 }]` (no warp, no new block), the rollback to 995 succeeds, and the first live block gives `New{995} -> Err(BadUpdate)`, the error the driver exits on.
+
+Notes: the trigger numbers are the row's own (`indexed = { safe: 995, latest: 1000 }`, node latest 994). Related `F-CORE-001` and `F2-CORE-011` share `initialize` but not the trigger.
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-CORE-030`](F3-CORE-030.md) (CONFIRMS; `F3-CORE-003` is a run-3 duplicate). This ID stays canonical.
+- Ledger values: Low, certainty 95 (`F3-CORE-030`'s real-binary reproduction).

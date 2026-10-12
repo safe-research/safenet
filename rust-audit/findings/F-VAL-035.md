@@ -352,3 +352,21 @@ Certainty **45% → 35%**, Status **Verified (reduced)**, severity **Low** uncha
 ## Reconciliation (run 2)
 
 **Final combined status: observation, 35 % — run-2 miss.** Legs (a) and (b) still true at `fe9e84c` (`store.rs:197,202,235,266,291` JSON strings; `schedule_absent_groups` at `store.rs:381-411` is keyed by group id, so a retained group's abandoned chunk is never scheduled); leg (c) refuted in run 1. `F2-XC-005` (logical deletion) is adjacent, not the same. See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | `06e3e6e` "[Direct Nonce 3]: Store per-ceremony signing nonces in the secret store" (#1033) and `392d7c8` (#1040): chunks, `nonces_chunks` and the `ON DELETE CASCADE` are gone; nonces are one row per signature id |
+| Severity, certainty | proposed Informational, certainty 70 (E2 trace of leg (a); legs (b) and (c) re-scoped below); was an observation at 35 |
+| Evidence | E2: the trace below |
+
+Per leg:
+
+- (a) Unzeroised JSON, still present on the new path. `store_signing_nonces` serialises the pair to a `String` (`crates/validator/src/secrets/store.rs:236`, `.bind(serde_json::to_string(&nonces)?)`), reads it back as `Option<String>` (`:241-246`) and parses it (`:250-253`); `take_signing_nonces` reads the secret as a `String` (`:274-277`) and parses it (`:291`). None of these strings is zeroised, while frost-core's `SigningNonces` itself is `ZeroizeOnDrop` (`frost-core-3.0.0/src/round1.rs:212`) and the crate's wrapper redacts `Debug` (`crates/validator/src/frost/sign.rs:49-53`).
+- (b) Abandoned material, narrowed from a 1024-pair chunk to one pair per unfinished ceremony. A pair whose ceremony continued or ended without this validator (commitment round timed out without it, or the group's ceremony was dropped) keeps its secret in `signing_nonces` until the owning group is retired by reconciliation and collected at the safe block (`store.rs:312-383`). Nothing counts these rows separately.
+- (c) Moot: there is no cascade and no foreign key left; one `DELETE FROM signing_nonces WHERE delete_at_block <= ?` removes the rows (`store.rs:370`).
+
+Why Changed: the defect class survives on the new code path, the abandoned-material leg is three orders of magnitude smaller, and the untested-pragma leg is gone. Under A1 (plaintext secrets at rest by design) what remains is hygiene, Informational.

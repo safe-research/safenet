@@ -25,7 +25,7 @@ This is the second-order cost of F-CORE-033: that finding is about the peak numb
 | # | Claim | Class | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
 | 1 | The `update` future is constructed inside `next_input` and raced unbiased against the resume branch, so it is dropped whenever the resume branch wins. | E2 | `crates/core/src/driver.rs:206-231` | <pre>async fn next_input(&mut self) -> Result&lt;Input&lt;S::Event, S::Resume&gt;, index::Error&gt; {<br> let update = async {<br> loop {<br> match self.watcher.next.await {<br> Ok(update) =&gt; return Ok(update),</pre><br><pre> Ok(tokio::select! {<br> update = update =&gt; Input::Update(update?),<br> resume = self.effects.next =&gt; Input::Resume(resume)<br> })<br>}</pre> |
-| 2 | `next_input` is called once per run-loop iteration, so each iteration builds a new future rather than resuming the previous one. | E2 | `crates/core/src/driver.rs:174-182` | <pre>loop {<br> let input = tokio::select! {<br> biased;<br> _ = shutdown.as_mut =&gt; {<br> tracing::info!("received shutdown signal; stopping service");<br> break;<br> },<br> input = self.next_input =&gt; input,<br> };</pre> |
+| 2 | `next_input` is called once per run-loop iteration, so each iteration builds a new future rather than resuming the previous one. | E2 | `crates/core/src/driver.rs:174-182` | <pre>loop {<br> let input = tokio::select! {<br> biased;<br> \_ = shutdown.as_mut =&gt; {<br> tracing::info!("received shutdown signal; stopping service");<br> break;<br> },<br> input = self.next_input =&gt; input,<br> };</pre> |
 | 3 | The cancelled future is suspended inside a real RPC call: `warp` awaits `fetch_logs` before touching any state. | E2 | `crates/core/src/index/events.rs:324-330` | <pre>let result = self.fetch_logs(fetch).await;<br>self.step = if result.is_ok {<br> if query_to_block == to_block {<br> Step::Idle<br> } else {</pre> |
 | 4 | `fetch_logs` issues the provider request directly, so cancelling it abandons an in-flight `eth_getLogs`. | E2 | `crates/core/src/index/events.rs:402-410` | <pre>async fn fetch_logs(&self, fetch: Fetch) -&gt; Result&lt;Vec&lt;EventLog&lt;E&gt;&gt;, Error&gt; {<br> let logs = match fetch {<br> Fetch::SingleQuery(blocks) =&gt; {<br> let filter = blocks<br> .into_filter<br> .address(self.addresses.clone)<br> .event_signature(self.topics.clone);<br> let logs = self.provider.get_logs(&filter).await?;</pre> |
 | 5 | The resume branch is cheap to make ready — a finished task is reaped without any I/O — so it wins the race whenever completed resumes are queued. | E2 | `crates/core/src/effects.rs:74-81` | <pre>pub async fn next(&mut self) -&gt; Resume {<br> loop {<br> match self.tasks.join_next.await {<br> Some(Ok(resume)) =&gt; {<br> tracing::trace!(?resume, "effect resume collected");<br> return resume;<br> }</pre> |
@@ -92,3 +92,25 @@ No option affects `apply_transition` or effect semantics; the `core::state` cont
 ## Reconciliation (run 2)
 
 **Final: Plausible, Low, 65 (E2), canonical — cost missed by run 2.** Run 2's R1 rejected 7 and R2 rejected 9 re-established the cancel-safety (no data loss) that this file also grants, and stopped there; the wasted-work cost of the `select!` was not filed. Still valid at `fe9e84c` (`driver.rs:229-232` unchanged in content). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed the `select!` (`driver.rs` byte-identical to `fe9e84c`). The warp future now holds more work when it is dropped: since #1049 a page whose logs lack `blockTimestamp` also awaits header requests before it returns |
+| Severity, certainty | unchanged (Low, 65) |
+| Evidence | E2 trace below (no PoC exists for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `driver.rs:206-231` (run 1) and `:229-232` (run 2) to `:208-233`: `async fn next_input(&mut self) -> Result<Input<S::Event, S::Resume>, index::Error> {` / `let update = async {` ... `Ok(tokio::select! {` / `update = update => Input::Update(update?),` / `resume = self.effects.next() => Input::Resume(resume)`
+- `index/events.rs:324-330` (warp mutates `self.step` only after the fetch) to `:384-395` and `:397-431`: `match self.fetch_logs(fetch).await {` ... then `if let Err(err) = self` / `.fetch_missing_block_timestamps(&page.logs, &mut page.block_timestamps)` / `.await` ... `self.step = if result.is_ok() {`
+- `index/events.rs:402-410` to `:494-501`: `async fn fetch_logs(&self, fetch: Fetch) -> Result<Vec<Log>, Error> {` ... `let logs = self.provider.get_logs(&filter).await?;`
+- `effects.rs:69-73` to `:81-85`: `/// # Cancel Safety` / `///` / ``/// This method is cancel safe. If `next` is used as the event in a``
+- `provider/mod.rs:129-137` to `:145-153`: `let client = ClientBuilder::default()` / `.layer(ObservabilityLayer)`
+
+What was run: code trace only. A dropped warp future still leaves `self.step` unchanged (no data loss), and the next call re-issues the logs query. A future dropped during the header requests also loses the headers it already received, because the page is cached in `Step::Warping { fetched: Some(page) }` only on an error (`:404-410`), not on cancellation.
+
+Notes: `settled.md` section 2 lists the cancel safety of the futures raced in `Driver::next_input`, and of the header fetch on warp pages, as known (#1050 has no cancellation test). This row is about the cost of the same cancellation, not its safety, so it is not that item. On Gnosis nodes that include `blockTimestamp` in logs the header requests do not occur and the cost is as at run 2.

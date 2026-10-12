@@ -330,3 +330,36 @@ The line is byte-identical: `FROST.verifyShare(key, selection.r, group.participa
 ## Reconciliation (run 2)
 
 **Final combined status: Low, 55 %, Plausible (outcome executed benign) — run-2 miss, still valid at `fe9e84c`.** `state/sign.rs:359-377` still looks the session up by message only; the `*sid == signature_id` guard exists only in `handle_nonce_commitments` (`:151`). See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | the effect and resume were renamed and rewritten by the Direct Nonce work (`3154a05` #1035, `82d5419` #1036, `ce0d235` #1041); the missing signature-id check survived the rewrite |
+| Severity, certainty | unchanged, Low 55 (outcome benign) |
+| Evidence | E1: `poc/F-VAL-034/run3/` (1 passed) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- `Effect::UseNonce { message, root, offset }` is now `Effect::UseNonces { message, signature_id }`, but `Resume::Nonces` still carries only `{ message, nonces }` (`crates/validator/src/service/effect.rs:82-86`; the handler takes by signature id and drops it on the way back, `:142-153`).
+- `handle_nonces` (`state/sign.rs:359-404`) is now `crates/validator/src/state/sign.rs:339-384` and still looks the session up by message alone:
+
+  ```rust
+  let Some(SigningState::CollectSigningShares {
+      key_share,
+      signature_id,
+      committed,
+      packet,
+      deadline,
+      ..
+  }) = state.signing.get(&message)
+  ```
+
+- The sibling `handle_nonce_commitments` does check the id: `state/sign.rs:128-132` (`if *sid == signature_id`).
+- The guard the outcome relies on is unchanged: frost-core 3.0.0 `round2.rs:134-143` (`return Err(Error::IncorrectCommitment)`).
+
+What was run: `poc/F-VAL-034/run3/stale_nonce_resume.rs` wired into `state/sign.rs` (reverted), `cargo test -p validator --bins poc_f_val_034_run3`, `1 passed`. A real 2-of-3 DKG; the session for message `m` is in `CollectSigningShares` for `sid_new` with this validator's fresh commitment. `Resume::Nonces { message: m, nonces: <pair from an earlier ceremony> }` goes through `apply_transition`, reaches `frost::sign::signature_share` and is refused (0 `SignShare` actions); the control with the matching pair yields one `SignShare` for `sid_new`. Output `poc/F-VAL-034/run3/RESULT.txt`.
+
+Notes: the reachability changed shape but not the conclusion. A stale resume can only land on a restarted ceremony for the same message once that ceremony is itself in `CollectSigningShares`, and per-ceremony nonces mean the stale pair is from another signature id; frost-core still refuses it, so the outcome stays a warning and no share. The three-line remediation (carry `signature_id` in `Resume::Nonces` and compare it, as `handle_nonce_commitments` does) is unchanged.

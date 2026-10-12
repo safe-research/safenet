@@ -33,7 +33,7 @@ Two triggers. With `start_block` set to the head (or anywhere inside the window)
 | 9 | `start_block` inside the window is a supported mode | E1 | crates/core/src/index/blocks.rs:760-809 (tests run this session, pass) | `async fn does_not_warp_when_start_block_is_within_reorg_window()` ... `async fn only_emits_blocks_at_or_after_start_block_inside_reorg_window()` |
 | 10 | The watcher itself tolerates a reorg unwinding the whole window | E1 | crates/core/src/index/blocks.rs:975-1031 (test run this session, passes) | `async fn supports_deep_reorgs_during_indexing()` ... `BlockUpdate::Uncle { number: 998 }` / `);` / `assert_eq!(blocks.next().await.unwrap(), new_block_update(&reorg_998));` |
 | 11 | The only state-machine restart/reorg test starts from a store that already holds the parent snapshot | E2 | crates/core/src/state/mod.rs:514-516 | `// Model a one-block reorg window through block 6. Processing block 6` / `// retains block 5 as the safe rollback snapshot.` / `for block in 1..=6 {` |
-| 12 | `start_block` is not described in the sample configs or handbooks | E2 | crates/validator/validator.sample.toml, crates/sentinel/sentinel.sample.toml, docs/*.md (grep `start_block`, no match) | (no occurrence) |
+| 12 | `start_block` is not described in the sample configs or handbooks | E2 | crates/validator/validator.sample.toml, crates/sentinel/sentinel.sample.toml, docs/\*.md (grep `start_block`, no match) | (no occurrence) |
 
 Test log: `state/run2/logs/C2-CORE-A-cargo-test-index.txt` (`cargo test -p safenet-core --lib index::`, 51 passed).
 
@@ -106,3 +106,27 @@ Remediation check: option 1 (commit `init()` at the anchor on a fresh start, fro
 ## Reconciliation (run 2)
 
 **Final: NEW in run 2 — Low, 92 (E1), canonical.** No run-1 finding mentions the fresh-start anchor (`MissingSnapshot` appears in run 1 only as an error class in `F-CORE-030`); the poisoned-restart consequence lands in `F-CORE-001`'s path, as this file's Critic already states (`state/run2/reconciliation/core.md` §1).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope added an anchor snapshot on a fresh start (`state/storage.rs` byte-identical; `StateMachine::with_init` still starts `Initialized` with nothing committed). #1015 adds `Status::BlockApplied`, whose `Uncle` guard (`number < pending`) admits the same uncle, so the rollback still reaches the missing row |
+| Severity, certainty | unchanged (Low, 92) |
+| Evidence | E1 `poc/F2-CORE-011/run3/` (run-2 PoC re-run, `EventLog.block` adapted to `EventBlock`) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/blocks.rs:279-289` to `:333-343`: `} else if let Some(start_block) = self.config.start_block` / `&& start_block <= safe` / `{` ... `self.queue.push_back(BlockUpdate::Warp {` / `from: start_block,` / `to: safe,`
+- `index/blocks.rs:342-365` to `:396-420`: `for block in self.recent.iter().filter(|block| {` / `indexed.map_or_else(` / `|| {` / `self.config` / `.start_block` / `.is_none_or(|start_block| block.number >= start_block)`
+- `index/blocks.rs:421-434` to `:476-489`: `.pop_back_if(|last| last.hash != block.parent_hash)` ... `return Ok(BlockUpdate::Uncle {` / `number: last.number,`
+- `state/mod.rs:182-198` to `:187-211`: `|| matches!(status, Status::BlockApplied { pending } if number < pending)` ... `let (_, state) = self.snapshots.reorg(number).await?;`
+- `state/mod.rs:236` to `:257`: `self.snapshots.commit(blocks.last, &state).await?;`
+- `state/storage.rs:124-143`: unchanged, `let parent = uncle.checked_sub(1).ok_or(Error::BlockNumberOverflow)?;` ... `.ok_or_else(|| Error::MissingSnapshot(parent))?;`
+- `driver.rs:195-198` and `:261-264` to `:195-198` and `:261-263`: `tracing::error!(?err, "unrecoverable driver error; exiting");` and `self.state.prune(block_status.safe).await?;`
+
+What was run: `cargo test -p safenet-core --lib -- --nocapture --test-threads=1 ... qa_f2_core_011 ...` (batch). Sequence A (`start_block = 1000`, `max_reorg_depth = 2`): `after first block: store Some(BlockStatus { latest: 1000, safe: 1000 })`, a one-block reorg gives `Uncle{1000} -> Err(Storage(MissingSnapshot(999)))`, and the restart against the reorged chain queues only `New { number: 1001, .. }` and ends with `events: [1000, 1001]` (the orphaned block's event survives). Sequence B (default fresh start): `Uncle{1000} -> Ok([])`, then `Uncle{999} -> Err(Storage(MissingSnapshot(998)))`. Same results as run 2.
+
+Notes: every Aegis node starts with an empty database (`settled.md` section 1), so the fresh-start window this row needs occurs once for every node at launch; the reorg reaching the first indexed block within that window is the remaining condition, which keeps the severity at Low. The poisoned restart lands in `F-CORE-001`'s path (Still valid).

@@ -183,3 +183,40 @@ if let Some((approve, slash_amount)) = entry.approve_and_slash_amount() {
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed, Medium, 95% (E1), canonical `F-SEN-005`.** Run-2 counterpart `F2-SEN-004` (Medium 90, E1: both waiting states retained through `NewBlock(u64::MAX − 1)`, re-run at `fe9e84c`) **confirms** every element: `crates/sentinel/src/service.rs:484-485` (`WaitingForOutcome { .. } => true`, `WaitingForDisputeResolution { .. } => true`), `DisputeTriggered.deadline` decoded at `bindings.rs:44` and discarded at `service.rs:760-768`, no `timeoutArbitration` in the `sol!` block (`bindings.rs:52-62`), no action kind. Contract semantics refined by the delta: `timeoutArbitration` returns the full bond only to a _revealed_ committer; a non-revealer recovered into `WaitingForDisputeResolution` gets `bondTarget − slashAmount` (`contracts/src/SentinelOracle.sol:337-348`, `contracts/src/libraries/SentinelOracleRequests.sol:288-296`) — a positive returnable balance either way, so the defect is unchanged; the sentinel's own stale doc/metric on that route is `F2-SEN-011`. Team disposition: **assigned @rmeissner ("easy fix")**. Both runs independently warn against the easy-looking variant: expiring the state by dropping the entry (option 3 here, `F2-SEN-004` option 3) recreates the bonded-entry abandonment, because every terminal handler ignores an untracked id (`521-527`, `576-582`, `692-698`, `798-804`). Keep the entry, store the deadline, add the binding and a `TimeoutArbitration { id }` action emitted once at `block > deadline`, and give `WaitingForOutcome` a deadline that re-emits `Finalize` (`F2-SEN-002` option 3 / `F2-SEN-004` option 2). See `state/run2/reconciliation/sentinel.md` §4.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | #974 (`fd0d2a7`, "Fix F_SEN_005") fixes the dispute half; #1014 (`fef8cfd`) moved its comparison to the inclusive form for #1015. The `WaitingForOutcome` half is untouched. |
+| Severity, certainty | Medium, 95 unchanged (carried by the remaining half) |
+| Evidence | E1: `poc/F2-SEN-004/run3/output.txt` |
+
+What changed: `WaitingForDisputeResolution` now stores `DisputeTriggered.deadline`, the binding and the `TimeoutArbitration` action exist, and the first block past the deadline queues `timeoutArbitration()` + `claim()` and drops the entry. `WaitingForOutcome` still has no deadline and no `Finalize` retry, so a premature or reverted `Finalize` with no later terminal event parks the entry and its bond for good. At `361aaf3` the reachable trigger is `F-SEN-002`'s mirror case with an uncounted committer that never reveals (an active sentinel that commits before honest engines answer). Since #964 the park ends whenever anyone finalizes after the reveal deadline, so the attacker holds honest bonds for as long as it is willing to leave its own bond unclaimed.
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- Dispute half, fixed: `service.rs:485` (`WaitingForDisputeResolution { .. } => true,`) to `:477-507`. The arm compares against the stored deadline (quoted below), then queues `SentinelActionKind::TimeoutArbitration { id: *id }` and `SentinelActionKind::Claim { id: *id }` (`:494-505`) and returns `false`, dropping the entry. Binding: `crates/sentinel/src/bindings.rs:63` (`function timeoutArbitration(bytes32 requestId) external;`); deadline stored at `service.rs:791` (`arbitration_deadline: event.deadline,`); state `crates/sentinel/src/state.rs:91-95`.
+
+```rust
+                if block <= *arbitration_deadline {
+                    return true;
+                }
+```
+
+- Remaining half: `service.rs:484` to `:476`, unchanged (`RequestState::WaitingForOutcome { .. } => true,`); its doc still states the design at `state.rs:71-74` ("No deadline: unlike every other state, advancement out of here is tied to our own `finalize()` call landing").
+
+What was run (`wt/rv-sen`, pasted into `mod tests`, reverted):
+
+- `qa2_sen::f2_sen_004_waiting_states_never_expire` (run 2 test, adapted) now passes, because `NewBlock(1_201)` times out the dispute: `id1=None`, while `id2=Some(WaitingForOutcome { .. })`.
+- `qa2_sen::f2_sen_004_run3_waiting_for_outcome_never_expires` asserts each half on its own: the dispute gets `[TimeoutArbitration, Claim]` at `NewBlock(1201)` and nothing at 1200; the `WaitingForOutcome` entry gets no action through `NewBlock(u64::MAX - 1)`. FAILED on the second half: the defect remains.
+- `rv_sen_run3::f_sen_005_run3_dispute_times_out_live_and_in_a_warp` passed: through the real state machine the actions are emitted at `arbitration_deadline + 1` both live (from the optimistic `NewBlock`) and when a restart warp covers the deadline.
+- `qa2_sen::f2_sen_002b` (the `WaitingForOutcome` stall, see `F-SEN-002`) FAILED as before.
+
+Notes:
+
+- New seam with the fix, reported as a lead in the rv-sen report and not filed: the entry is dropped when the two calls are queued. If `timeoutArbitration()` reverts while the request stays `FROZEN` (the 2026-10-07 Aegis env review executed one such case on a Gnosis fork: USDC.e blacklisting the sponsor makes `timeoutArbitration`, `resolveDispute` and `markOutOfScope` revert), the queued `claim()` reverts too, and the later `ArbitrationTimedOut` or `DisputeResolved` is ignored as untracked. #974's description assumes the claim "still succeeds" because the request is no longer frozen by then.
+- The comment at `service.rs:481-483` about warps skipping `NewBlock` is stale since #1017.
+- Counterparts: `F2-SEN-004` (re-run here), `F2-SEN-011` (doc and metric of the arbitration timeout), `F-SEN-002`, `F-SEN-014`.

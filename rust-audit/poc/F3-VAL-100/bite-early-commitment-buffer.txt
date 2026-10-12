@@ -1,0 +1,20 @@
+
+running 1 test
+test state::keygen::lt3_l2::lt3_l2_reorg_reorders_epoch1_commitment_before_final_genesis_confirmation ... [LT3 L2 control, live order] after block 6: CollectingShares(group=0x7b89febd2f4a123f00e760a857618e372b6b58a8f8fee7810000000000000000)
+[LT3 L2 reorg] original chain after block 6: CollectingCommitments(group=0x7b89febd2f4a123f00e760a857618e372b6b58a8f8fee7810000000000000000, members_include_ME=true, committed=["0xf39F"], observing=false, deadline=Some(125))
+[LT3 L2 reorg] replayed block 5 (own commitment first): CollectingCommitments(group=0x7b89febd2f4a123f00e760a857618e372b6b58a8f8fee7810000000000000000, members_include_ME=true, committed=["0xf39F"], observing=false, deadline=Some(125))
+[LT3 L2 reorg] setup resumed; KeyGenAndCommit re-published = false
+
+thread 'state::keygen::lt3_l2::lt3_l2_reorg_reorders_epoch1_commitment_before_final_genesis_confirmation' (371032) panicked at /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/LT3/lt3_l2.rs:356:5:
+own commitment is missing, so it is published again (doomed onchain)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    state::keygen::lt3_l2::lt3_l2_reorg_reorders_epoch1_commitment_before_final_genesis_confirmation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.29s
+
+error: test failed, to rerun pass `-p validator --bin validator`

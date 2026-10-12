@@ -49,3 +49,46 @@ Filed by FWD from `origin/feat/batex_4` + the epic at `epics/2026_09_09_safenet_
 ## Reconciliation (run 2)
 
 **Final: Unmerged, forward-looking — unchanged.** The Batched Execution stack (PR #904) is not in the tree at `fe9e84c` (`crates/core/src/tx/` has no `executor.rs`; `types.rs` has no `authorization` field), so run 2 could not and did not assess it; this is not a miss. Re-validate when the stack merges (`report/IN-FLIGHT.md` round 1). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | The `feat/batex_4` code this row was written against never merged. The merged 7702 stack (#987, #900, #989 to #1006, #1023; queue side `ce01715` #995, `acacac1` #1001, executor `contracts/src/Safenet7702Executor.sol`) carries the mechanism: execution of a batch row is still inferred from the account nonce alone. Of the three outcomes, the whole-batch revert is settled as 7702 review low L4 (`settled.md` section 1: "a reverted batch loses all its actions, with no receipt check"), and the `OnlySelf` route is unreachable for the service's own batches. What remains is the swallowed mid-batch `CallFailed`. |
+| Severity, certainty | Proposed Low (was High / Medium, forward-looking), Confirmed, 90 (E1 for the queue side, Foundry for the executor side). Recommend folding it into `F-CORE-063` at reconciliation, as a remediation note for batched rows. |
+| Evidence | E1 `poc/F-CORE-068/run3/` (new queue tests; `output-forge-executor.txt` for the executor, reference only) |
+
+Re-based anchors (old `feat/batex_4` locations, merged locations at `361aaf3`, verbatim quote).
+
+- Executor swallow, `Safenet7702Executor.sol:118-120` on `feat/batex_4` to `contracts/src/Safenet7702Executor.sol:106-109` (reference only):
+
+```solidity
+            (bool success, bytes memory result) = call.to.call{gas: call.gasLimit, value: call.value}(call.data);
+            if (!success) {
+                emit CallFailed(i, result);
+            }
+```
+
+- Whole-batch guard, `:115` to `contracts/src/Safenet7702Executor.sol:104`: `require(gasleft() * 63 / 64 >= call.gasLimit, InsufficientGas(i));` (the L4 case).
+- `mark_executed`, `storage.rs:280-288` to `crates/core/src/tx/storage.rs:281-292`: `UPDATE allocated_nonces SET executed_at = ? WHERE nonce < ? AND executed_at IS NULL`, one row per batch.
+- `prune`, `storage.rs:301-330` to `crates/core/src/tx/storage.rs:326-344`: deletes the queued `transactions` rows of an executed nonce, then the nonce row, so a batch's calls go together.
+- The interface contract the services rely on (`git show a9f7eef^:epics/2026_09_23_safenet_7702_executor_tx_batching.md`, lines 171 and 175): "A failing call must not revert the batch." and "`CallFailed` exists only to help debugging, and no service depends on it."
+- `OnlySelf`: the merged design attaches the authorization to the batch that needs it, processed before the call (epic line 76; `crates/core/src/tx/mod.rs:248-258`), and refuses an executor without code at startup (`crates/core/src/tx/mod.rs:130-135`, #1005). A first-party self-call therefore always runs against delegated code, and `OnlySelf` (`contracts/src/Safenet7702Executor.sol:97`) only rejects other callers.
+
+What was run (worktree at `361aaf3`, `poc/F-CORE-068/run3/tx_mod_tests_run3.rs` appended to `crates/core/src/tx/mod.rs`'s `mod tests`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`.
+- `rv3_f_core_068_batch_marked_executed_by_nonce_and_pruned_with_its_calls`: ok. A three-call batch at nonce 0 carrying the authorization is marked executed at block 11 when `eth_getProof` reads nonce 2 and delegated code; the only RPC issued is `eth_getProof` (no receipt, status or log request); at safe 11 the batch row, its authorization row and all three queued transactions are deleted. The queue cannot distinguish success, a swallowed `CallFailed`, or an `InsufficientGas` revert: all three leave the same account state.
+- `rv3_f_core_068_direct_reverted_transaction_is_treated_the_same`: ok. In direct mode a mined but reverted standalone transaction is marked executed and pruned the same way.
+- `forge test --match-path test/Safenet7702Executor.t.sol -vv` (forge 1.5.1, existing tests): 10 passed, among them `test_Execute_ContinuesPastFailure_EmitsCallFailed` and `test_Execute_InsufficientGas_RollsBackEarlierCalls`.
+
+What changed, and why Changed rather than Settled:
+
+- Case 3 (whole-batch revert, every call lost, including earlier successful ones) is exactly L4, and the trigger "a batch gas limit below the guard" rests on the batch gas constants, which is L5 (no worst-case test). Both are settled review lows.
+- Case 2 (a call reverts inside a batch that succeeds) is not in L4's text, so the match is not exact. Its loss is one action per failing call, and the calls before and after still run; that is the same loss as a reverting standalone transaction in direct mode, which `F-CORE-063` (via `F2-CORE-061`'s "related consequence") already carries. The one batching-specific aspect is observability: the batch transaction reports status 1, so a receipt-status check, the remediation proposed for `F-CORE-063` and for L4, would still miss it; only the `CallFailed` log on the service's own address shows it.
+- The order-dependence example (a failing `ApproveToken` followed by a `Commit` that reverts for want of allowance) behaves the same in direct mode, where the two are consecutive transactions. No service action carries a native value (`value: U256::ZERO` throughout `crates/validator/src/service/action.rs` and `crates/sentinel/src/service.rs:865-930`), so the "unaffordable value is swallowed" path of the executor has no Safenet trigger.
+- An action whose own `gas` is under-estimated runs out of gas inside its call and is swallowed as a `CallFailed`; in direct mode the same action reverts the standalone transaction. Batched calls get the action's whole `gas` as their call budget (no intrinsic cost deducted), so batching does not make this more likely.
+
+Notes: the residual is Low (an error-handling and observability gap with the same per-action loss as direct mode). If the head reads L4 broadly ("no receipt check" covering everything a batch receipt would show), the remainder is fully `F-CORE-063`'s and this row can be marked Settled; the `F-CORE-063` run-3 section already records the batched-row remediation note, so nothing is lost either way. The `F-VAL-065` and `F-SEN-006` duplicates that revert become `CallFailed` entries in batched mode (see `F-CORE-067`, run-3 section).

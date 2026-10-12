@@ -1,0 +1,48 @@
+# L-rust: config ParseError::new slicing at toml span starts with multibyte input (run 3, 2026-10-08)
+# Each config = the 3 lines below + the shown 4th line; binary $CARGO_TARGET_DIR/debug/validator at 361aaf3 (wt/base clean); run under holdtarget
+rpc = "https://127.0.0.1:1/v2/LRUST-FAKE-API-KEY-0123456789"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+
+== mb1.toml: ü = 1
+Error: Parse(ParseError { position: Some((4, 1)), inner: Error { message: "invalid unquoted key, expected letters, numbers, `-`, `_`", input: None, keys: [], span: Some(168..170) } })
+exit=1
+== mb2.toml: x = "ü\q"
+Error: Parse(ParseError { position: Some((4, 8)), inner: Error { message: "missing escaped value, expected `b`, `e`, `f`, `n`, `r`, `\\`, `\"`, `x`, `u`, `U`", input: None, keys: [], span: Some(176..176) } })
+exit=1
+== mb3.toml: x = ü
+Error: Parse(ParseError { position: Some((4, 5)), inner: Error { message: "string values must be quoted, expected literal string", input: None, keys: [], span: Some(172..174) } })
+exit=1
+== mb4.toml: x = "ü
+Error: Parse(ParseError { position: Some((4, 7)), inner: Error { message: "invalid basic string, expected `\"`", input: None, keys: [], span: Some(175..175) } })
+exit=1
+== mb5.toml: x = 'ü
+Error: Parse(ParseError { position: Some((4, 7)), inner: Error { message: "invalid literal string, expected `'`", input: None, keys: [], span: Some(175..175) } })
+exit=1
+== mb6.toml: x = 1ü
+Error: Parse(ParseError { position: Some((4, 5)), inner: Error { message: "string values must be quoted, expected literal string", input: None, keys: [], span: Some(172..175) } })
+exit=1
+== mb7.toml: [validator]ü
+Error: Parse(ParseError { position: Some((4, 12)), inner: Error { message: "unexpected key or value, expected newline, `#`", input: None, keys: [], span: Some(179..179) } })
+exit=1
+== mb8.toml: x = """ü
+Error: Parse(ParseError { position: Some((5, 1)), inner: Error { message: "invalid multi-line basic string, expected `\"`", input: None, keys: [], span: Some(178..178) } })
+exit=1
+== mb9.toml: x = @
+Error: Parse(ParseError { position: Some((5, 5)), inner: Error { message: "string values must be quoted, expected literal string", input: None, keys: [], span: Some(177..178) } })
+exit=1
+== mb10.toml: x = { a = 1, ü }
+Error: Parse(ParseError { position: Some((4, 14)), inner: Error { message: "invalid unquoted key, expected letters, numbers, `-`, `_`", input: None, keys: [], span: Some(181..183) } })
+exit=1
+== mb11.toml: x = [1, ü]
+Error: Parse(ParseError { position: Some((4, 9)), inner: Error { message: "string values must be quoted, expected literal string", input: None, keys: [], span: Some(176..178) } })
+exit=1
+== mb12.toml: x = 1979-05-27Tü
+Error: Parse(ParseError { position: Some((4, 5)), inner: Error { message: "invalid time, expected hour", input: None, keys: [], span: Some(172..185) } })
+exit=1
+== mb13.toml: x = 0xü
+Error: Parse(ParseError { position: Some((4, 7)), inner: Error { message: "invalid hexadecimal number", input: None, keys: [], span: Some(174..174) } })
+exit=1
+== mb14.toml: x = "€€€" y
+Error: Parse(ParseError { position: Some((4, 11)), inner: Error { message: "unexpected key or value, expected newline, `#`", input: None, keys: [], span: Some(184..184) } })
+exit=1

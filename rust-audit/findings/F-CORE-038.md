@@ -104,3 +104,27 @@ Option 4 (replace the `assert!` with a `const`-checked or `Result`-returning API
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Informational, 85 (E2), canonical — examined by run 2, not filed.** Run 2's R2 rejected 13 (single fixed-length caller) and observation O9 add a second nuance to fold in: HMAC key normalisation makes salts equivalent under trailing zero bytes and hashes salts longer than 64 bytes, so the doc's "different domains can never collide" (`kdf.rs:10-12`) is also overstated. Still valid at `fe9e84c` (`kdf.rs` unchanged). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed this code (`kdf.rs` is byte-identical to `fe9e84c`; `Signer::derive_key` moved within `tx/signer.rs` with the 7702 and config changes) |
+| Severity, certainty | severity unchanged (Informational); certainty 85 to 90 proposed: the concatenation and the salt equivalences are now executed (E1), the absence of a second caller is by grep |
+| Evidence | E1 `poc/F-CORE-038/run3/` (the crate's own `kdf::tests` and an independent Python HKDF check) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `kdf.rs:7-27` and `:66-74`: unchanged, ``/// over the same `ikm` can never collide with one another. `message` is passed as HKDF's`` (`:12`), `hkdf.expand_multi_info(message, &mut okm)` (`:24`), and the test `derive_key_treats_multi_part_message_as_its_concatenation` (`:66-74`)
+- `tx/signer.rs:59-64` to `:127-132`: `pub fn derive_key(&self, domain: &[u8], message: &[u8]) -> B256 {` / `let mut key = self.0.to_bytes();` / `let derived = kdf::derive_key(key.as_slice(), domain, &[message]);`
+- `crates/sentinel/src/hashing.rs:51`: unchanged, `self.derive_key(REVEAL_SALT_DOMAIN, request_id.as_slice())`
+
+What was run:
+
+1. `kdf::tests` in the batch `cargo test -p safenet-core --lib -- --nocapture --test-threads=1 ... kdf::tests`: all four pass, including `derive_key_matches_reference_vector` and `derive_key_treats_multi_part_message_as_its_concatenation` (`["foo", "bar"]` and `["foobar"]` derive the same key).
+2. `python3 -I rv-core-a-hkdf_variants.py` (RFC 5869, domain as salt, parts as info) and the run-1 script `../hkdf_reference_vector.py`: the reference vector `de66ad87...aab0d` matches the literal in `kdf.rs`; `['ab','c']` and `['a','bc']` derive the same key; the domain `domain-a` and `domain-a\x00` derive the same key (HMAC zero-pads short keys); a 65-byte domain and its SHA-256 digest derive the same key (HMAC hashes long keys). The last two confirm the run-2 nuance that "can never collide" is overstated.
+3. `grep -rn "derive_key\|kdf::" crates/core/src crates/validator/src crates/sentinel/src`: still exactly one route (`Signer::derive_key`, one part) and one caller (the sentinel's reveal salt, a fixed 32-byte request id under a constant domain).
+
+Notes: unreachable today, as before; the doc comment at `kdf.rs:10-14` is unchanged. One the style check note for the output file: the libtest status line of the `should panic` test `derive_key_rejects_empty_domain` is verbatim tool output and contains a spaced hyphen.

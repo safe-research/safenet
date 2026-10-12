@@ -1,0 +1,13 @@
+[review-cargo] 2 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a; rebuilding them
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.11s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/safenet_core-1a555efd99e0fbb6)
+
+running 1 test
+attempt 1 (client filtered): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 2 (client filtered): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 3 (client filtered): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 4 (one query per event): Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+test index::events::tests::qa3_client_filtering_accepts_empty_logs_after_three_mismatches ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+

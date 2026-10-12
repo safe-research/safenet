@@ -370,3 +370,48 @@ Rust-only mechanism in unchanged code (`crates/validator` and `crates/core` are 
 ## Reconciliation (run 2)
 
 **Final combined status: High, 97 %, Confirmed — canonical.** Counterparts `F2-VAL-030` (EXTENDS: the `expected_chunk`-vs-contract cascade makes ~90 % of every later chunk unsignable; E1 90 %) and `F2-VAL-062` (folded into `F2-VAL-030`). Run 2's Critic rated Medium as "self-inflicted restart"; the reorg trigger reproduced live and unforced here meets Section 8's High, so High stands with the cascade folded in. See `state/run2/reconciliation/validator.md` (Section 1).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Moot |
+| Changed by | `a9023ac` "[Direct Nonce 8]: Remove preprocessing from the state machine" (#1038) removed `handle_nonce_topup`, `NonceState` and the chunk reservation; `392d7c8` "[Direct Nonce 10]: Remove the dead preprocessing code" (#1040) removed `Effect::NonceTree`, the generator and `nonces_chunks`. Replacement: per-ceremony nonces, `3154a05` (#1035) and `82d5419` (#1036). |
+| Severity, certainty | resolved (code removed); the replacement's single-ceremony residual is an instance of F-VAL-061 |
+| Evidence | E2 for the removal (`git log -S`); E1 for the replacement: `poc/F-VAL-030/run3/` (1 passed) |
+
+Removed anchors: `state/preprocess.rs:85-103` (top-up gated on `available`), `:196-203` (`None` reservation), `:234-247` (`available` counting a reservation as 1024) and `service/effect.rs:154-172` (`NonceTree`) no longer exist. `git log -S 'fn handle_nonce_topup'` and `-S 'NONCE_TOPUP_THRESHOLD'` over `fe9e84c..361aaf3` both end at `a9023ac`; `-S 'Effect::NonceTree'` ends at `392d7c8`. `grep -rn 'NonceTree\|NonceState\|nonces_chunks\|SEQUENCE_CHUNK' crates/validator crates/core/src` is empty.
+
+The replacement, checked for the same defect:
+
+- `handle_sign` emits `Effect::GenerateNonces { group_id, signature_id, key_share }` when it accepts a request (`crates/validator/src/state/sign.rs:72-76`; the oracle path at `:176-180`). There is no capacity, no reservation and nothing counted ahead of the effect.
+- The handler generates one pair and stores it once per signature id (`crates/validator/src/service/effect.rs:123-141`, `secrets/store.rs:220-256`, `ON CONFLICT (signature_id) DO NOTHING` at `:231`).
+- If the effect fails or its resume is lost, this validator never commits for that ceremony. At the commitment deadline the round continues with the signers that did commit, without this validator (`state/sign.rs:566-608`, the check at `:580-585`). The next `Sign` emits a fresh `GenerateNonces`.
+
+What was run: `poc/F-VAL-030/run3/lost_generate_nonces.rs` wired into `state/sign.rs` (reverted): `cargo test -p validator --bins poc_f_val_030_run3`. Ceremony 1: `GenerateNonces` emitted, then `Resume::Noop` (what the handler returns on any error); peers commit; at block 16 the session is dropped for this validator. Ceremony 2 on the same group: `GenerateNonces`, then `CommitNonces` queued. `1 passed`. Output `poc/F-VAL-030/run3/RESULT.txt`.
+
+Notes: the phantom-capacity mechanism and the `expected_chunk` cascade (`F2-VAL-030`, `F2-VAL-062`) are gone with the code. What survives is the generic policy that a failed or lost effect is not retried, now costing one ceremony per lost `GenerateNonces` instead of up to 1024; that is F-VAL-061's row (Changed). The `poc/F-VAL-030-032-061*` and `poc/F2-VAL-030`, `poc/F2-VAL-062` harnesses target removed types and no longer compile.
+
+## Fix verification (CA3-FIX, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Result | Moot confirmed |
+| Removed by | `a9023ac` (#1038) and `392d7c8` (#1040); replacement: per-ceremony nonces, `3154a05` (#1035) and `82d5419` (#1036) |
+| Re-validation re-run | Matches rv-val: `lost_generate_nonces.rs` 1 of 1 (a lost `GenerateNonces` costs one ceremony, the next one commits) |
+| New variants | 2, through the real effect `Handler` and `SecretStore` (a replay before the nonces are used, a replay after); both behave; the variant bites a store mutation |
+| Confidence | 92 |
+| Evidence | E1: `poc/F-VAL-030/ca3-fix/RESULT.txt` (source `ca3fix_effect.rs`) |
+
+What was run: `cargo test -p validator --bins --locked --offline`, test filters `poc_f_val_030_run3` and `ca3fix_f_val_030`, with `--nocapture` and `--test-threads=1` (modules wired into `crate::state::sign` and `crate::service::effect`, reverted).
+
+Variants the re-validation did not list (`ca3fix_effect.rs`; the store's own tests pin the SQL, this pins what the state machine is resumed with):
+
+1. A restart or reorg replays the `Sign` and so re-emits `GenerateNonces` for a ceremony already served: the handler samples a fresh pair, but the resume carries the first pair's commitments (`ON CONFLICT (signature_id) DO NOTHING`, `crates/validator/src/secrets/store.rs:229-231`), consistent with anything already committed onchain.
+2. A replay after the nonces were used (for example a reorg that re-delivers the same signature id, possibly for another message): `GenerateNonces` and a second `UseNonces` both resume `Noop`, because `take_signing_nonces` clears the secret and keeps the row (`store.rs:258-300`). No fresh pair and no reuse; the validator sits that ceremony out. The next ceremony gets its own pair.
+
+Mutation: with `ON CONFLICT (signature_id) DO UPDATE SET nonces = excluded.nonces`, the variant fails at the first replay.
+
+Notes: no reservation, capacity or counter survives in the replacement (`grep -rn 'NonceTree\|NonceState\|nonces_chunks\|SEQUENCE_CHUNK' crates/validator crates/core/src` is empty, as rv-val found). What remains is the generic rule that a failed or lost effect is not retried, now one ceremony per loss: `F-VAL-061`'s row.

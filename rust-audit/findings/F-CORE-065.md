@@ -109,3 +109,56 @@ Option 5 (document the operational rule — one database per chain/deployment/si
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Low, 70 (E2), `known` retained, canonical.** Rediscovered by run 2 as `F2-CORE-066` (CONFIRMS: signer rotation resumes with the old nonce bookkeeping, `tx/storage.rs:145-149`; no schema version). **A17 applied: trigger 1 (a database reused or copied across chains, or a restored backup) is out of scope**; triggers 2 (signer rotation in config) and 3 (`rpc` repointed) are in-band and stay, so the finding survives at Low (`state/run2/reconciliation/core.md` §3). Run 2's Critic notes the snapshot store shares the unversioned-JSON property — that is `F-CORE-037`. 55 → 70. Counterpart: `F2-CORE-066`.
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | The binding gap is unchanged. `622cf89` #993 replaced the table with `allocated_nonces` plus a slimmer `transactions`; neither carries a chain id, signer, deployment or version, and both are still created with `CREATE TABLE IF NOT EXISTS`. `ce01715` #995 adds a `delegate` column holding a bare executor address. `cd46431` #1023 makes the signer refuse chain id 0, which does not bind the store. |
+| Severity, certainty | Low unchanged, `known` retained. Certainty 70 to 90 proposed: trigger 2 (signer rotation in config, database kept) is now executed (E1, rubric band 90 to 100 with the run-2 Critic's Confirmed). |
+| Evidence | E1 `poc/F-CORE-065/run3/` (new: rotated signer inherits the old nonce high-water mark); E2 for trigger 3 |
+
+Re-based anchors (old location at `fe9e84c`, new location at `361aaf3`, verbatim quote).
+
+- `tx/storage.rs:61-82` (no identity columns, idempotent creation) to `crates/core/src/tx/storage.rs:85-101`:
+
+```rust
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS allocated_nonces (
+                 nonce        INTEGER PRIMARY KEY,
+                 request      TEXT    DEFAULT NULL,
+                 delegate     TEXT    DEFAULT NULL,
+                 submitted_at INTEGER DEFAULT NULL,
+                 executed_at  INTEGER DEFAULT NULL,
+                 CHECK (request IS NOT NULL OR delegate IS NOT NULL)
+             );
+
+             CREATE TABLE IF NOT EXISTS transactions (
+                 id         INTEGER PRIMARY KEY,
+                 request    TEXT    NOT NULL,
+                 expires_at INTEGER DEFAULT NULL,
+                 nonce      INTEGER DEFAULT NULL REFERENCES allocated_nonces (nonce)
+             );",
+```
+
+- `tx/mod.rs:106-116` (the doc promises a `chain_id` the signature does not take) to `crates/core/src/tx/mod.rs:98-110` (same first sentence, "Creates a transaction queue that signs `chain_id` transactions with `signer`"; still no chain id parameter).
+- `tx/mod.rs:245-248` (chain id taken from the provider at submission) to `crates/core/src/tx/mod.rs:313-315`: `let chain_id = self.provider.chain_id();` then `transaction.build(chain_id, fees)`.
+- `provider/mod.rs:129-137` (read once at connect) to `crates/core/src/provider/mod.rs:145-153` (unchanged body).
+- `provider/mod.rs:158-165` (`get_chain_id` served from the cache) to `crates/core/src/provider/mod.rs:179-181`: `ProviderCall::Ready(Some(Ok(self.chain_id)))`.
+- `tx/storage.rs:176-185` (fee floors persisted per row) to `crates/core/src/tx/storage.rs:230-242` (now `UPDATE allocated_nonces`).
+- `tx/mod.rs:308-312` (signer address used for the read, never compared) to `crates/core/src/tx/mod.rs:376-380`: `.get_proof(self.signer.address(), vec![])`.
+- New with #995: `crates/core/src/tx/storage.rs:205-211` stores `authorization.address.to_string()` in `delegate`, and `crates/core/src/tx/signer.rs:81-86` signs that delegation for `nonce + 1` with the cached chain id.
+- No migration machinery: `grep -rn "migrate!\|user_version" crates/core/src` returns nothing.
+
+What was run (worktree at `361aaf3`, `poc/F-CORE-065/run3/tx_mod_tests_run3.rs` appended to `crates/core/src/tx/mod.rs`'s `mod tests`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`.
+- `rv3_f_core_065_rotated_signer_inherits_the_old_nonce_high_water_mark` (new): ok. A queue signing with key A allocates nonces 50, 51 and 52 (account A at nonce 50) on one pool. A new queue on the same pool with a rotated key B, whose account is at nonce 0, allocates its first own transaction at nonce 53 (`allocated above the old account's nonces 50..=52`). The queue starts normally and logs the allocation and the send at `debug` only. That nonce can never be included by account B, which is this row's trigger 2 reaching `F-CORE-062`'s permanent wedge with no RPC anomaly.
+
+Notes:
+
+- A17 as applied in run 2 stands: trigger 1 (a database reused, copied or restored) is out of scope; triggers 2 and 3 are in-band configuration changes. The Aegis fresh-start rule (every Aegis node starts fresh) does not remove trigger 2: a key rotation on a running Aegis node keeps its database.
+- Under the merged design trigger 2 also re-signs the old rows' authorizations with the new key (the authorization is signed at submission time for whatever row is resubmitted), which only adds more unincludable transactions; it is not a separate defect.
+- Counterpart `F2-CORE-066`; related `F-XC-006` (store not bound to chain, deployment or signer) and `F-CORE-037` (snapshot versioning), which a single metadata table would close together.

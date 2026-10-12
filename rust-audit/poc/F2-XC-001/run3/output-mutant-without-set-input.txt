@@ -1,0 +1,150 @@
+# run.sh against a temporary mutant: crates/core/src/config.rs:37 'inner.set_input(None);' commented out (the #1046 fix line), binaries rebuilt; reverted with git checkout afterwards and the 361aaf3 run repeated with identical counts
+# F2-XC-001 run 3 re-validation; binaries: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-xc/debug
+# validator: 0.2.0  sentinel: 0.2.0
+# marker key 0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef (fake, valid scalar); grep needle 0123456789abcdef0123456789abcdef
+=================== v01-typo-table (validator)
+--- the lines that differ from the base config:
+    < [transactions]
+    > [transaction]
+--- exit=1   stderr bytes=693   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `transaction`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000002\"\n[observ
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v03-typo-key-validator (validator)
+--- the lines that differ from the base config:
+    > blocks_per_epoc = 1440
+--- exit=1   stderr bytes=895   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((6, 1)), inner: Error { message: "unknown field `blocks_per_epoc`, expected one of `consensus`, `staker`, `participants`, `oracles`, `genesis_salt`, `blocks_per_epoch`, `key_gen_timeout`, `signing_timeout`, `oracle_timeout`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\nblocks_per_epoc = 1440\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v04-signer-odd-digits (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+--- exit=1   stderr bytes=719   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid hex-encoded secp256k1 private key", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v05-signer-31-bytes (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "0x23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+--- exit=1   stderr bytes=718   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid hex-encoded secp256k1 private key", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x00000000000000000000000000000000000000
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v06a-signing-timeout-0 (validator)
+--- the lines that differ from the base config:
+    > signing_timeout = 0
+--- exit=1   stderr bytes=773   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((6, 19)), inner: Error { message: "invalid value: integer `0`, expected a nonzero u64", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\nsigning_timeout = 0\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x000000
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v06b-blocks-per-epoch-0 (validator)
+--- the lines that differ from the base config:
+    > blocks_per_epoch = 0
+--- exit=1   stderr bytes=775   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((6, 20)), inner: Error { message: "invalid value: integer `0`, expected a nonzero u64", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\nblocks_per_epoch = 0\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x00000
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v07a-unknown-top-level (validator)
+--- the lines that differ from the base config:
+    > not_a_real_field = "typo"
+--- exit=1   stderr bytes=728   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `not_a_real_field`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\nnot_a_real_field = \"typo\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x00000000000000000
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v07b-unknown-in-index (validator)
+--- the lines that differ from the base config:
+    > use_client_filterring = true
+--- exit=1   stderr bytes=734   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `use_client_filterring`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000002\
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v09-signer-unquoted-hex (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = 0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+--- exit=1   stderr bytes=700   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "integer number overflowed", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = 0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000002\"\n[observabili
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v10-signer-bare (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+--- exit=1   stderr bytes=705   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "unexpected leading zero, expected nothing", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000002\"
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v12-signer-array (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = ["0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
+--- exit=1   stderr bytes=722   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid type: sequence, expected a string", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = [\"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"]\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v13-signer-duplicate (validator)
+--- the lines that differ from the base config:
+    > signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+--- exit=1   stderr bytes=765   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((3, 1)), inner: Error { message: "duplicate key", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v15-signer-bad-hex-char (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg"
+--- exit=1   stderr bytes=720   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid hex-encoded secp256k1 private key", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x000000000000000000000000000000000000
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v02-typo-key-sentinel (sentinel)
+--- the lines that differ from the base config:
+    < engine = "http://localhost:5473"
+    > engin = "http://localhost:5473"
+--- exit=1   stderr bytes=669   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((9, 1)), inner: Error { message: "unknown field `engin`, expected one of `fee_token`, `voting_window`, `engine`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\noracle = \"0x0000000000000000000000000000000000000000\"\nconsensus = \"0x0000000000000000000000000000000000000000\"\n[sentinel]\nfee_token = \"0x0000000000000000000000000000000000000000\"\nvoting_window = 6\nengin = \"http://localhost:5473\"\n[observability]\nlog_filter = \"info\"\n[index
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v08-signer-unterminated (sentinel)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+--- exit=1   stderr bytes=617   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 77)), inner: Error { message: "invalid basic string, expected `\"`", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\ndatabase = \"sqlite::memory:\"\noracle = \"0x0000000000000000000000000000000000000000\"\nconsensus = \"0x0000000000000000000000000000000000000000\"\n[sentinel]\nfee_token = \"0x0000000000000000000000000000000000000000\"\nvoting_window = 6\nengine = \"http://localhost:5473\"\n[observability]\nlog_filter = \"info\"\n[index]\n[transactions]\n"), keys: [], span: Som
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v14-wrong-type-flattened (sentinel)
+--- the lines that differ from the base config:
+    > max_in_flight_transactions = "16"
+--- exit=1   stderr bytes=659   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "invalid type: string \"16\", expected usize", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\ndatabase = \"sqlite::memory:\"\noracle = \"0x0000000000000000000000000000000000000000\"\nconsensus = \"0x0000000000000000000000000000000000000000\"\n[sentinel]\nfee_token = \"0x0000000000000000000000000000000000000000\"\nvoting_window = 6\nengine = \"http://localhost:5473\"\n[observability]\nlog_filter = \"info\"\n[index]\n[transactions]\nmax_in_flight_
+--- grep counts on stderr: marker-hex=1 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v11a-env-signer-malformed (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "${RV_XC_SIGNER}"
+--- environment: RV_XC_SIGNER=<value, see variant name>
+--- exit=1   stderr bytes=668   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid hex-encoded secp256k1 private key", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"${RV_XC_SIGNER}\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000002\"\n[observability]\nlog_filter = \"info\"\n[in
+--- grep counts on stderr: marker-hex=0 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== v11b-env-signer-unset (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "${RV_XC_SIGNER_UNSET}"
+--- exit=1   stderr bytes=683   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "environment variable RV_XC_SIGNER_UNSET is not set", input: Some("rpc = \"http://127.0.0.1:9\"\nsigner = \"${RV_XC_SIGNER_UNSET}\"\ndatabase = \"sqlite::memory:\"\n[validator]\nconsensus = \"0x0000000000000000000000000000000000000000\"\ngenesis_salt = \"0x0000000000000000000000000000000000000000000000000000000000000000\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000001\"\n[[validator.participants]]\naddress = \"0x0000000000000000000000000000000000000002\"\n[observability]\nlog_filter 
+--- grep counts on stderr: marker-hex=0 rpc-host=1 doc-only-strings=1 input-Some=1
+=================== c01-control-parses (validator)
+--- the lines that differ from the base config:
+--- exit=1   stderr bytes=233   stdout bytes=201
+--- stderr (first 600 characters):
+    Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+
+--- grep counts on stderr: marker-hex=0 rpc-host=1 doc-only-strings=0 input-Some=0
+# done

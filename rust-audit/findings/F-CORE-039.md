@@ -22,9 +22,9 @@ The window is not the whole of `update`: the state-machine and snapshot work is 
 
 | # | Claim | Class | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
-| 1 | Shutdown only wins between inputs; processing an input is deliberately uncancellable. | E2 | `crates/core/src/driver.rs:174-192` | <pre>loop {<br> let input = tokio::select! {<br> biased;<br> _ = shutdown.as_mut => {<br> tracing::info!("received shutdown signal; stopping service");<br> break;<br> },<br> input = self.next_input => input,<br> };<br><br> // Once selected, an input is processed to completion before the run<br> // loop can stop; this prevents partial state applies.</pre> |
+| 1 | Shutdown only wins between inputs; processing an input is deliberately uncancellable. | E2 | `crates/core/src/driver.rs:174-192` | <pre>loop {<br> let input = tokio::select! {<br> biased;<br> \_ = shutdown.as_mut => {<br> tracing::info!("received shutdown signal; stopping service");<br> break;<br> },<br> input = self.next_input => input,<br> };<br><br> // Once selected, an input is processed to completion before the run<br> // loop can stop; this prevents partial state applies.</pre> |
 | 2 | `update` makes network calls on both sides of the state machine. | E2 | `crates/core/src/driver.rs:247` and `:276-278` | <pre>let result = self.transactions.update_block_status(block_status).await;</pre><br><pre>if !transactions.is_empty {<br> let result = self.transactions.queue(transactions).await;</pre> |
-| 3 | Those calls can be many: submission loops up to `max_in_flight_transactions` (default 16), each with its own broadcast. | E2 | `crates/core/src/tx/mod.rs:204-215` | <pre>async fn submit_pending(&mut self, block: u64) -> Result<, Error> {<br> let in_flight = self.storage.count_in_flight.await?;<br> for _ in in_flight..self.config.max_in_flight_transactions {<br> let nonce = self.nonce.await?;<br> let Some(transaction) = self<br> .storage<br> .next_transaction(Status { nonce, block })<br> .await?<br> else {<br> break;<br> };<br> self.submit_transaction(transaction, block).await?;</pre> |
+| 3 | Those calls can be many: submission loops up to `max_in_flight_transactions` (default 16), each with its own broadcast. | E2 | `crates/core/src/tx/mod.rs:204-215` | <pre>async fn submit*pending(&mut self, block: u64) -> Result<, Error> {<br> let in_flight = self.storage.count_in_flight.await?;<br> for * in in_flight..self.config.max_in_flight_transactions {<br> let nonce = self.nonce.await?;<br> let Some(transaction) = self<br> .storage<br> .next_transaction(Status { nonce, block })<br> .await?<br> else {<br> break;<br> };<br> self.submit_transaction(transaction, block).await?;</pre> |
 | 4 | No timeout, retry or rate-limit layer is configured on the provider; the observability layer is the only one. | E2 | `crates/core/src/provider/mod.rs:127-137` | <pre>impl Provider {<br> /// Connects to `url`.<br> pub async fn connect(url: &Url) -> Result<Self, TransportError> {<br> let client = ClientBuilder::default<br> .layer(ObservabilityLayer)<br> .connect(url.as_str)<br> .await?;<br> let root = RootProvider::new(client);<br> let chain_id = root.get_chain_id.await?;<br> Ok(Self { root, chain_id })<br> }</pre> |
 | 5 | Whether an un-timed request can hang indefinitely depends on the HTTP client's default, which is not on disk in this checkout. | I | `state/baseline.md` §1 ("Dependency sources are also absent") | — |
 | 6 | The signal handler itself is only installed when `run` starts, so nothing is graceful before that either. | E2 | `crates/core/src/driver.rs:171-172` and `crates/core/src/utils.rs:17-23` | <pre>let shutdown = utils::shutdown_signal;<br>tokio::pin!(shutdown);</pre><br><pre>pub async fn shutdown_signal {<br> let sigterm = async {<br> unix::signal(unix::SignalKind::terminate)<br> .unwrap<br> .recv<br> .await<br> };</pre> |
@@ -105,3 +105,26 @@ Option 3 (document the grace period in the handbooks) is necessary and currently
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Low, 72 (E2), canonical for the shutdown half.** Rediscovered by run 2 as `F2-CORE-034` (CONFIRMS), which closes this file's basis-5 caveat from the pinned `reqwest-0.13.4` source (no request/read timeout; `tcp_user_timeout` 30 s on Linux, so only a live-but-silent peer blocks indefinitely), adds the new inline `housekeeping` await (`driver.rs:292-294`, merged after `2893917`) as a second unbounded await in the same window, and notes that the "prevents partial state applies" rationale is not what protects consistency (snapshot commits are already atomic). 55 → 72. Counterparts: `F2-CORE-034`; indexing half `F-CORE-011` / `F2-CORE-033`.
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed the shutdown path (`driver.rs` and `utils.rs` byte-identical to `fe9e84c`; the provider still has no timeout layer, see `F-CORE-011`). The 7702 stack changed what `update` awaits inside the window: `eth_getProof`, the fee estimate and one broadcast per submitted transaction or batch |
+| Severity, certainty | unchanged (Low, 72) |
+| Evidence | E2 trace below (no PoC exists for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `driver.rs:174-192` (run 1) and `:176-199` (run 2) to `:176-199`: `let input = tokio::select! {` / `biased;` / `_ = shutdown.as_mut() => {` ... `// Once selected, an input is processed to completion before the run` / `// loop can stop; this prevents partial state applies.`
+- `driver.rs:247` and `:276-278` to `:249` and `:282-283`: `let result = self.transactions.update_block_status(block_status).await;` and `if !transactions.is_empty() {` / `let result = self.transactions.queue(transactions).await;`
+- `driver.rs:292-294`: unchanged, `if let Some(status) = housekeeping {` / `self.effects.housekeeping(status).await;`
+- `tx/mod.rs:204-215` to `:235-282`: `async fn submit_pending(&mut self, block: u64) -> Result<(), Error> {` / `let mut in_flight = self.storage.count_in_flight().await?;` / `while in_flight < self.config.mode.max_in_flight_transactions() {` / `let account = self.account().await?;` ... `self.submit_transaction(transaction, block).await?;`
+- `provider/mod.rs:127-137` to `:143-153`: `let client = ClientBuilder::default()` / `.layer(ObservabilityLayer)` / `.connect(url.as_str())`
+- `driver.rs:171-172` and `utils.rs:17-23`: unchanged, `let shutdown = utils::shutdown_signal();` and `unix::signal(unix::SignalKind::terminate())`
+
+What was run: code trace only. The `update` window still contains unbounded RPC awaits on both sides of the state machine plus the inline `housekeeping` await, and the shutdown branch is still only polled between inputs.
+
+Notes: in `Batched` mode the account is delegated, so at most one transaction is in flight (`tx/mod.rs:239-247`), which shortens the loop but not any single await. Counterpart `F2-CORE-034` holds.

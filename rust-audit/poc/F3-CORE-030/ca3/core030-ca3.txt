@@ -1,0 +1,11 @@
+[    6.3s] deployed fee_token=0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80 consensus=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 oracle=0x7148FDa1aBAF76AC28E4803D4791a2790CddFae1
+[    6.3s] sentinel A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8) started, run 1, pid 450464
+[  126.3s] before stop: anvil1 head=32, sentinel block metrics=['safenet_core_block_number{status="seen"} 32', 'safenet_core_block_number{status="processed"} 32']
+[  126.3s] sentinel A stopped (SIGTERM), exit 0
+[  126.3s] run 1 exit status: 0
+[  126.4s] anvil2 forked at 12, head now 12
+[  126.5s] sentinel A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8) started, run 1, pid 450555
+[  128.0s] restart against the behind node EXITED after 1.5s, status 0
+=== run 2 (restart against the behind node) log tail ===
+    22:22:34.240 DEBUG initializing block watcher {"latest": 12, "safe": 7, "resume": "Some(BlockStatus { latest: 32, safe: 27 })"}
+    22:22:35.274 ERROR unrecoverable driver error; exiting {"err": "State(BadUpdate)"}

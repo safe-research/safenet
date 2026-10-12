@@ -1,0 +1,53 @@
+CA3-FIX (2026-10-09), worktree wt/rv-xc at 361aaf3. Fragments pasted into mod tests of crates/sentinel/src/service.rs (rv-sen run3 fragments plus ../ca3-fix/ca3fix_sen.rs), reverted afterwards.
+Command: CA3FIX_DB_DIR=<scratch> cargo test -p sentinel --bins --locked --offline -- <filters> --nocapture --test-threads=1
+
+--- from r3-CA3FIX-sen.log (filters: qa2_sen_010, f2_sen_010_run3, F2-SEN-010 run3, ca3fix_sen_f2_sen_010, CA3-FIX F2-SEN-010)
+test service::tests::ca3fix_sen::ca3fix_sen_f2_sen_010_warp_ends_at_the_commit_deadline ... [CA3-FIX F2-SEN-010 split_at_deadline=false] reveal=Some("") finalize=false entry at 107=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[CA3-FIX F2-SEN-010 split] page 102..=106 → entry Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 106, reveal_deadline: 112, committed_count: 2, self_committed: true })
+[CA3-FIX F2-SEN-010 split_at_deadline=true] reveal=Some("") finalize=false entry at 109=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+test service::tests::qa2_sen_010::f2_sen_010a_own_reveal_first_emits_premature_finalize_then_parks ... [F2-SEN-010] state at NewBlock(20): Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 20, reveal_deadline: 40, committed_count: 1, self_committed: true })
+test service::tests::qa2_sen_010::f2_sen_010b_other_reveal_first_drops_bonded_entry ... [F2-SEN-010] state at NewBlock(20): Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 20, reveal_deadline: 40, committed_count: 1, self_committed: true })
+test service::tests::qa2_sen_010::f2_sen_010c_deadline_block_commit_is_tallied ... [F2-SEN-010] state at NewBlock(20): Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 20, reveal_deadline: 40, committed_count: 1, self_committed: true })
+test service::tests::rv_sen_run3::f2_sen_010_run3_a_live_deadline_block_commit_is_tallied ... [F2-SEN-010 run3 a] after Revealed(self)@107: commands=[] entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[F2-SEN-010 run3 a] Revealed(OTHER) + OracleResult@108 → [Action(SentinelAction { kind: Finalize { id: 0xda031202cb8d7b4a7b9488e2d0f8fe690a34fc045194fefc4c988f2c9012df05 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0xda031202cb8d7b4a7b9488e2d0f8fe690a34fc045194fefc4c988f2c9012df05 }, expires_at: None })]
+test service::tests::rv_sen_run3::f2_sen_010_run3_b_restart_warp_tallies_the_deadline_block ... [F2-SEN-010 run3 b] warp page 102..=107 → [Action(SentinelAction { kind: Reveal { id: 0x5ac3838b5eaa6605899f3e4940bac45a53070e92037319aad7a29f7830e64587, approve: true, salt: 0xb691a022ac5849f6d94710684b3a9a2af081c91a83327ef6791b904770e741d1, reason: "" }, expires_at: Some(112) })]; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[F2-SEN-010 run3 b] warp page 108..=110 → [Action(SentinelAction { kind: Finalize { id: 0x5ac3838b5eaa6605899f3e4940bac45a53070e92037319aad7a29f7830e64587 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0x5ac3838b5eaa6605899f3e4940bac45a53070e92037319aad7a29f7830e64587 }, expires_at: None })]
+test service::tests::rv_sen_run3::f2_sen_010_run3_c_restart_replays_the_deadline_block ... [F2-SEN-010 run3 c] replayed cd → [Action(SentinelAction { kind: Reveal { id: 0x7ccf0ff6c1f737530240a440ddb63e230956c50b0c4c59e09761347419fd576b, approve: true, salt: 0x782f4f7efaafb23a09983c156a796f7026f791e856c2c99d7ea2fb5a90ed0e9a, reason: "" }, expires_at: Some(112) })]; Revealed(self) → []; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+test service::tests::rv_sen_run3::f2_sen_010_run3_d_reorg_of_the_deadline_block ... [F2-SEN-010 run3 d] replacement cd → [Action(SentinelAction { kind: Reveal { id: 0xc93d35d0140c178d95a1a519ada5486a055ad9ba576dd3b4f92ddc02df3ab5a2, approve: true, salt: 0x119c44cd24c38b9843243317c94a1f00ae936a3ed017e6d8fa0a7abc67dc56d5, reason: "" }, expires_at: Some(112) })]; Revealed(self) → []; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+test service::tests::rv_sen_run3::f2_sen_010_run3_e_adversarial_deadline_committer_never_reveals ... [F2-SEN-010 run3 e] early Finalize=false; NewBlock(113) → [Action(SentinelAction { kind: Finalize { id: 0xb33e9ce408bb70a09dc665a3615c314e16a961edb85cb28048d8d9a024fc97b4 }, expires_at: None })]
+test result: FAILED. 22 passed; 7 failed; 0 ignored; 0 measured; 63 filtered out; finished in 4.10s
+
+
+--- mutation run M-SEN-1 (python3 mutate.py <wt> noverdict stopgap setinput; reverted with git checkout)
+applied noverdict to crates/sentinel/src/effect.rs
+applied noverdict to crates/sentinel/src/effect.rs
+applied stopgap to crates/sentinel/src/service.rs
+applied setinput to crates/core/src/config.rs
+test config::ca3fix_config_echo::ca3fix_f2_xc_001_config_errors_never_echo_the_key ... FAILED
+test service::tests::ca3fix_sen::ca3fix_sen_f2_sen_010_warp_ends_at_the_commit_deadline ... FAILED
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_003_own_reveal_mined_before_the_outage ... ok
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_live_reorg_control_without_the_store_mismatches ... ok
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_live_reorg_reveals_the_committed_reason ... FAILED
+test service::tests::qa2_sen_010::f2_sen_010a_own_reveal_first_emits_premature_finalize_then_parks ... FAILED
+test service::tests::qa2_sen_010::f2_sen_010b_other_reveal_first_drops_bonded_entry ... FAILED
+test service::tests::qa2_sen_010::f2_sen_010c_deadline_block_commit_is_tallied ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_a_live_deadline_block_commit_is_tallied ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_b_restart_warp_tallies_the_deadline_block ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_c_restart_replays_the_deadline_block ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_d_reorg_of_the_deadline_block ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_e_adversarial_deadline_committer_never_reveals ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_concurrent_checks_resume_with_one_verdict ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_engine_down_on_replay_still_reveals ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_replayed_check_reuses_the_committed_verdict ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_restart_replay_reuses_the_recorded_verdict ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_verdict_retained_until_the_snapshot_boundary ... ok
+[CA3-FIX F2-XC-001 sentinel] class mutation: 145252 documents, 22955 rejected, 22955 echo the key
+test result: FAILED. 3 passed; 15 failed; 0 ignored; 0 measured; 74 filtered out; finished in 110.41s
+
+--- mutation run M-SEN-2 (python3 mutate.py <wt> warpnb; reverted)
+applied warpnb to crates/core/src/state/mod.rs
+test service::tests::ca3fix_sen::ca3fix_sen_f2_sen_010_warp_ends_at_the_commit_deadline ... FAILED
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_003_own_reveal_mined_before_the_outage ... FAILED
+test service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_b_restart_warp_tallies_the_deadline_block ... FAILED
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 85 filtered out; finished in 0.04s

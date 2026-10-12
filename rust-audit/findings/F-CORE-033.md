@@ -27,7 +27,7 @@ For the sentinel this is a direct amplifier: every `TransactionProposed` becomes
 | 3 | One update's command list spans every log in the update's block range, so a warp page contributes all of its logs' effects at once. | E2 | `crates/core/src/state/mod.rs:213-223` | <pre>let (state, commands) = {<br> let mut state = state;<br> let mut commands = Vec::new;<br> for log in logs {<br> let (new_state, new_commands) =<br> self.transition.apply_transition(state, Message::Event(log));<br> state = new_state;<br> commands.extend(new_commands);<br> }<br> (state, commands)<br>};</pre> |
 | 4 | A warp page is 100 blocks by default. | E2 | `crates/core/src/index/events.rs:96-97` | <pre>Self {<br> block_page_size: NonZeroU64::new(100).expect("100 is nonzero"),</pre> |
 | 5 | Resumes are consumed one per driver loop iteration, so the set drains far slower than it fills. | E2 | `crates/core/src/driver.rs:227-230` | <pre>Ok(tokio::select! {<br> update = update => Input::Update(update?),<br> resume = self.effects.next => Input::Resume(resume)<br>})</pre> |
-| 6 | The comparable outbound path _is_ bounded, which shows the omission is not a deliberate symmetry. | E2 | `crates/core/src/tx/mod.rs:204-206` | <pre>async fn submit_pending(&mut self, block: u64) -> Result<, Error> {<br> let in_flight = self.storage.count_in_flight.await?;<br> for _ in in_flight..self.config.max_in_flight_transactions {</pre> |
+| 6 | The comparable outbound path _is_ bounded, which shows the omission is not a deliberate symmetry. | E2 | `crates/core/src/tx/mod.rs:204-206` | <pre>async fn submit*pending(&mut self, block: u64) -> Result<, Error> {<br> let in_flight = self.storage.count_in_flight.await?;<br> for * in in_flight..self.config.max_in_flight_transactions {</pre> |
 | 7 | Each sentinel effect carries a full proposed transaction and becomes an engine HTTP call. | E2 | `crates/sentinel/src/service.rs:139-143` | <pre>vec![Command::Effect(effect::Effect::EngineCheck {<br> request_id,<br> transaction: event.transaction,<br> block,<br>})],</pre> |
 
 ## Trigger
@@ -98,3 +98,27 @@ Option 3 (cap logs per `Update::Logs` via `max_logs_per_query`) is the weakest a
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Medium, 70 (E2; sentinel side E1 via `F2-SEN-005`), canonical.** Rediscovered and extended by run 2 as `F2-CORE-035` (EXTENDS): same unbounded `JoinSet` (`effects.rs:60-69` after drift, `driver.rs:272-279`, `state/mod.rs:213-223`), plus the fact that a warp delivers `Message::Event` only — no `NewBlock` — so deadline pruning never runs before a page's effects are spawned and expired proposals are checked too (`F2-CORE-035` row 7). Run 2 rated the core side Low; Medium is carried per this file (attacker-sized payloads under A2, asymmetry with the bounded transaction queue), with `F2-SEN-005` (Medium 78, executed queue-level starvation) as the sentinel counterpart. **Team question (@nlordell, "I would expect the transaction deadline to prevent this fan-out") answered in `state/run2/reconciliation/core.md` §4.1: it does not — `EngineCheck` is emitted unconditionally on `TransactionProposed` (`service.rs:137-144`) with no deadline comparison and no deadline in the effect (`effect.rs:21-25`); deadlines are consulted only on `NewBlock`, which warps never deliver; the only per-effect bound is `engine_timeout` (≈ 371 s at the sample config); the deadline acts on the follow-up `Commit` rows via `expires_at` at allocation (`tx/storage.rs:150-155`), i.e. after the engine work is done.** A17: "a restore from backup" drops from the trigger list; `start_block` back-fill and restart after an outage remain. Counterparts: `F2-CORE-035`, `F2-SEN-005` (= `F-SEN-004`), `F-CORE-040` (second-order cost).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope bounded the fan-out. #1017 (`24eaf8d`) now applies `Message::NewBlock` for every warped block inside the page update; that corrects one sub-claim of the run-2 counterpart (see Notes) but not the unbounded spawn |
+| Severity, certainty | unchanged (Medium, 70) |
+| Evidence | E2 trace below (no PoC exists for this row; the sentinel-side execution lives in `F-SEN-004`, rv-sen) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `effects.rs:53-62` (run 1) and `:60-69` (run 2) to `:60-69`: `pub fn spawn(&mut self, effect: Effect) {` / `tracing::trace!(?effect, "spawning effect task");` / `let handler = Arc::clone(&self.handler);` / `self.tasks.spawn(async move {`
+- `driver.rs:266-274` to `:272-280`: `for command in commands {` ... `state::Command::Effect(effect) => self.effects.spawn(effect),`
+- `state/mod.rs:213-223` to `:225-244`: `let warping = matches!(status, Status::WarpEvents { .. });` / `let mut logs = logs.into_iter().peekable();` / `for block in blocks {` ... `self.accumulate_transition(state, commands, Message::NewBlock(block));` ... `self.accumulate_transition(state, commands, Message::Event(log));`
+- `index/events.rs:96-97` to `:108`: `block_page_size: NonZeroU64::new(100).expect("100 is nonzero"),`
+- `driver.rs:227-230` to `:229-232`: `Ok(tokio::select! {` / `update = update => Input::Update(update?),` / `resume = self.effects.next() => Input::Resume(resume)`
+- `tx/mod.rs:204-206` to `:236-237` (the bounded counterpart): `let mut in_flight = self.storage.count_in_flight().await?;` / `while in_flight < self.config.mode.max_in_flight_transactions() {`
+- `crates/sentinel/src/service.rs:139-143` to `:146-154`: `vec![Command::Effect(effect::Effect::EngineCheck {` / `request_id,` / `transaction: event.transaction,` / `proposal_timestamp: block_timestamp,`
+
+What was run: code trace only. `spawn` still pushes into an unbounded `JoinSet` with no permit, and the driver spawns every effect of a page in one pass after `handle_update` returns.
+
+Notes: run 2's extension (`F2-CORE-035` row 7, "a warp delivers no `NewBlock`, so deadline pruning never runs before a page's effects are spawned") no longer holds as written: since #1017 each warped block's transition runs before its logs, so the sentinel's `handle_block_advance` does prune expired entries inside the page. The conclusion survives: commands are accumulated over the whole page and spawned afterwards, and the sentinel emits `EngineCheck` unconditionally on every `TransactionProposed` (`service.rs:106-155`), so a check for a proposal whose entry a later block of the same page drops is still spawned, and its resume finds no entry. The verdict store (#978, #979) shortens replayed checks; a fresh `start_block` back-fill still calls the engine once per proposal.

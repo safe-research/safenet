@@ -1,0 +1,30 @@
+{"t": 1791488742.0095341, "request_id": "0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b", "mode": "gated", "event": "arrived"}
+{"t": 1791488743.0664587, "request_id": "0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488754.0414076, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "gated", "event": "arrived"}
+{"t": 1791488755.067689, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488756.120562, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "flip", "event": "arrived"}
+{"t": 1791488756.1206117, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "flip", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-3.4\"}"}
+{"t": 1791488766.0359251, "request_id": "0x06ee96f22571ed9996998d94516e0fd760801ceb4c6ea018dd9d10173087381a", "mode": "gated", "event": "arrived"}
+{"t": 1791488767.090291, "request_id": "0x06ee96f22571ed9996998d94516e0fd760801ceb4c6ea018dd9d10173087381a", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488768.1479297, "request_id": "0x06ee96f22571ed9996998d94516e0fd760801ceb4c6ea018dd9d10173087381a", "mode": "flip", "event": "arrived"}
+{"t": 1791488768.147958, "request_id": "0x06ee96f22571ed9996998d94516e0fd760801ceb4c6ea018dd9d10173087381a", "mode": "flip", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-3.4\"}"}
+{"t": 1791488778.0073707, "request_id": "0x28ba7546129aadadfdc2109adbad4628881f9b4ed3daca0bac1f5d49615d5588", "mode": "gated", "event": "arrived"}
+{"t": 1791488779.0492032, "request_id": "0x28ba7546129aadadfdc2109adbad4628881f9b4ed3daca0bac1f5d49615d5588", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488780.1684868, "request_id": "0x28ba7546129aadadfdc2109adbad4628881f9b4ed3daca0bac1f5d49615d5588", "mode": "flip", "event": "arrived"}
+{"t": 1791488780.1685176, "request_id": "0x28ba7546129aadadfdc2109adbad4628881f9b4ed3daca0bac1f5d49615d5588", "mode": "flip", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-3.4\"}"}
+{"t": 1791488790.0391908, "request_id": "0x9033695e11afba3fec10dce1cf9d07f7adc88d1ede5bda7ca104ab045cbc7771", "mode": "gated", "event": "arrived"}
+{"t": 1791488791.0734427, "request_id": "0x9033695e11afba3fec10dce1cf9d07f7adc88d1ede5bda7ca104ab045cbc7771", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488792.1627715, "request_id": "0x9033695e11afba3fec10dce1cf9d07f7adc88d1ede5bda7ca104ab045cbc7771", "mode": "flip", "event": "arrived"}
+{"t": 1791488792.1628013, "request_id": "0x9033695e11afba3fec10dce1cf9d07f7adc88d1ede5bda7ca104ab045cbc7771", "mode": "flip", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-3.4\"}"}
+{"t": 1791488802.046091, "request_id": "0x1a4ec544b57b8e76efc0fa025a9bd24a32e7aae2b4feb9d6e4be34d8a777a1f8", "mode": "gated", "event": "arrived"}
+{"t": 1791488803.0418913, "request_id": "0x1a4ec544b57b8e76efc0fa025a9bd24a32e7aae2b4feb9d6e4be34d8a777a1f8", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488804.1645124, "request_id": "0x1a4ec544b57b8e76efc0fa025a9bd24a32e7aae2b4feb9d6e4be34d8a777a1f8", "mode": "flip", "event": "arrived"}
+{"t": 1791488804.1645525, "request_id": "0x1a4ec544b57b8e76efc0fa025a9bd24a32e7aae2b4feb9d6e4be34d8a777a1f8", "mode": "flip", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-3.4\"}"}
+{"t": 1791488814.0336688, "request_id": "0x906b0643fe8ae47ff802316d02c10cf8c6e063452e1f53bbc4f132f28b120738", "mode": "gated", "event": "arrived"}
+{"t": 1791488815.0905485, "request_id": "0x906b0643fe8ae47ff802316d02c10cf8c6e063452e1f53bbc4f132f28b120738", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488816.1402876, "request_id": "0x906b0643fe8ae47ff802316d02c10cf8c6e063452e1f53bbc4f132f28b120738", "mode": "flip", "event": "arrived"}
+{"t": 1791488816.1403193, "request_id": "0x906b0643fe8ae47ff802316d02c10cf8c6e063452e1f53bbc4f132f28b120738", "mode": "flip", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-3.4\"}"}
+{"t": 1791488826.0328686, "request_id": "0x0411de15edcd131a152d64301628718cb7c09403e35c2ea1146ee88396b86b11", "mode": "gated", "event": "arrived"}
+{"t": 1791488827.0930529, "request_id": "0x0411de15edcd131a152d64301628718cb7c09403e35c2ea1146ee88396b86b11", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488828.1538389, "request_id": "0x0411de15edcd131a152d64301628718cb7c09403e35c2ea1146ee88396b86b11", "mode": "flip", "event": "arrived"}
+{"t": 1791488828.1538904, "request_id": "0x0411de15edcd131a152d64301628718cb7c09403e35c2ea1146ee88396b86b11", "mode": "flip", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-3.4\"}"}

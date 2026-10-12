@@ -1,0 +1,10 @@
+Run 3 (rv-core-b, 2026-10-08), audit commit 361aaf3: the merged design's own recovery tests, unmodified.
+Command: cargo test -p safenet-core --lib, with the test-name filters recovers_an_unused_authorization, only_recovers_the_authorization, marks_a_cancellation_executed, authorization_uses_up_the_next_nonce and delegates_an_undelegated_account passed after the double hyphen.
+
+test tx::storage::tests::only_recovers_the_authorization_at_the_account_nonce ... ok
+test tx::storage::tests::recovers_an_unused_authorization_nonce_once ... ok
+test tx::storage::tests::authorization_uses_up_the_next_nonce ... ok
+test tx::storage::tests::marks_a_cancellation_executed_once_the_account_is_past_it ... ok
+test tx::tests::recovers_an_unused_authorization_nonce_with_a_full_budget ... ok
+test tx::tests::delegates_an_undelegated_account_to_the_executor ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 172 filtered out; finished in 0.01s

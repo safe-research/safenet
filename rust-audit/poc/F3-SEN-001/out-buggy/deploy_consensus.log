@@ -1,0 +1,32 @@
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+consensus: address 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+
+== Logs ==
+  Consensus deployed at: 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 100
+
+Estimated gas price: 1.339843751 gwei
+
+Estimated total gas used for script: 2593819
+
+Estimated amount required: 0.003475312178375069 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/build/broadcast/DeployTestConsensus.s.sol/100/run-latest.json
+
+Sensitive values saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/build/cache/DeployTestConsensus.s.sol/100/run-latest.json
+

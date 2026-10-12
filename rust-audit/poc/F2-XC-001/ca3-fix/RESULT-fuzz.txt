@@ -1,0 +1,28 @@
+CA3-FIX (2026-10-09), worktree wt/rv-xc at 361aaf3. ca3fix_config_echo.rs wired as a child of crate::config in both binaries, reverted afterwards.
+Commands: cargo test -p validator --bins -- ca3fix_f2_xc_001 ; cargo test -p sentinel --bins -- ca3fix_f2_xc_001 (CA3FIX_DB_DIR=<scratch>)
+
+--- from r3-CA3FIX-batch2.log (filters: F2-XC-001, ca3fix_f2_xc_001, engine :=, voting_window :=, config::tests)
+test config::tests::errors_do_not_contain_the_configuration ... ok
+test config::tests::parses_configuration ... ok
+test tx::config::tests::deserializes_submission_mode ... ok
+test tx::config::tests::rejects_invalid_submission_mode ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 166 filtered out; finished in 0.04s
+test config::ca3fix_config_echo::ca3fix_f2_xc_001_config_errors_never_echo_the_key ... [CA3-FIX F2-XC-001 validator] class mutation: 174108 documents, 27979 rejected, 0 echo the key
+[CA3-FIX F2-XC-001 validator] class moved: 7 documents, 7 rejected, 0 echo the key
+[CA3-FIX F2-XC-001 validator] class wrong_field: 14 documents, 8 rejected, 0 echo the key
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 77 filtered out; finished in 145.58s
+test config::ca3fix_config_echo::ca3fix_f2_xc_001_config_errors_never_echo_the_key ... [CA3-FIX F2-XC-001 sentinel] class mutation: 145252 documents, 22955 rejected, 0 echo the key
+[CA3-FIX F2-XC-001 sentinel] class moved: 5 documents, 5 rejected, 0 echo the key
+[CA3-FIX F2-XC-001 sentinel] class wrong_field: 16 documents, 12 rejected, 4 echo the key
+    engine := "012: Parse(ParseError { position: Some((45, 10)), inner: Error { message: "relative URL without a base: \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"", input: None, keys: ["sentinel", "engine"], span: S
+    engine := "0x0: Parse(ParseError { position: Some((45, 10)), inner: Error { message: "relative URL without a base: \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"", input: None, keys: ["sentinel", "engine"], span:
+    voting_window := "012: Parse(ParseError { position: Some((41, 17)), inner: Error { message: "invalid type: string \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\", expected u64", input: None, keys: ["sentinel", "voting_wind
+    voting_window := "0x0: Parse(ParseError { position: Some((41, 17)), inner: Error { message: "invalid type: string \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\", expected u64", input: None, keys: ["sentinel", "voting_wi
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 129.73s
+
+
+--- mutation (setinput: crates/core/src/config.rs 'inner.set_input(None);' commented out), validator and sentinel fuzz:
+[CA3-FIX F2-XC-001 sentinel] class mutation: 145252 documents, 22955 rejected, 22955 echo the key
+[CA3-FIX F2-XC-001 validator] class mutation: 174108 documents, 27979 rejected, 27979 echo the key
+test config::ca3fix_config_echo::ca3fix_f2_xc_001_config_errors_never_echo_the_key ... FAILED
+test config::ca3fix_config_echo::ca3fix_f2_xc_001_config_errors_never_echo_the_key ... FAILED

@@ -107,3 +107,24 @@ The one `service.rs` citation is byte-identical: the request-id derivation from 
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed, Informational, 85% (E2), `known`, canonical `F-SEN-010`.** Rediscovered by run 2 as bullet 1 of `F2-SEN-009` and, canonically, in the cross-cutting `F2-XC-008` ("zero-address contracts … the sentinel starts, indexes mainnet and idles forever"), whose row REC-XC writes; this run-1 row absorbs the sentinel-sample half (zero `oracle`/`consensus`/`fee_token`, parse-only `parses_sample_config` at `crates/sentinel/src/config.rs:136-143`, the well-known placeholder `signer`). Run 2 adds the live-mainnet `rpc` in the same sample, which run 1 had filed cross-cutting (`F-XC-009`). `config.rs` and `sentinel.sample.toml` are unchanged at `fe9e84c`. Agreed fix: a `Config::validate` rejecting `Address::ZERO` and a `voting_window` floor, together with a sample that does not load as-is. Team disposition: none. See `state/run2/reconciliation/sentinel.md` §1.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | Not fixed. #1007 (`1a292af`) lets `rpc`, `signer` and `database` reference environment variables and the sample says so, but the sample still ships the literal placeholder key and three zero addresses; #1062 (`fcc7028`) changed only `voting_window` and comments. |
+| Severity, certainty | Informational, 85 unchanged, `known`; basis now E1 |
+| Evidence | E1: `poc/F-SEN-010/run3/startup.txt` (scripts `f010_run.sh`, `f010_config.py`) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- The deferred decision: `crates/sentinel/src/config.rs:44-48` to `:37-41` (`// TODO(epic Phase E2, follow-up): pick and document a sensible default for` ...).
+- Zero addresses and the placeholder key in the sample: `crates/sentinel/sentinel.sample.toml:23-39` to `:21` (`signer`), `:29` (`oracle = "0x0000000000000000000000000000000000000000"`), `:32` (`consensus`), `:36` (`fee_token`).
+- The only test over the sample checks that it parses: `config.rs:136-143` to `:127-134` (`toml::from_str::<Config>(&contents).unwrap();`).
+- No validation after parsing: `Config::load` delegates to `safenet_core::config::load` (`config.rs:54-58`, `crates/core/src/config.rs:63-77`), which is TOML deserialization only.
+
+What was run: the real `sentinel` binary with the shipped sample, changing only `rpc` (loopback Anvil, chain id 100), `database` (a scratch file) and the log level. It started ("starting sentinel service"), served metrics, polled 9 blocks and ran 8 `eth_getLogs` for the zero addresses, committed 8 snapshots and logged no WARN or ERROR line in 12 s, then stopped on SIGINT. The same with `voting_window = 0`: 13 snapshots, no WARN or ERROR.
+
+Notes: the run-1 claim that a copied sample "parses and starts cleanly" is now executed rather than traced. Counterparts: `F-XC-009` and `F2-XC-008` (cross-cutting rows, re-validated by rv-xc), `F-SEN-007`, `F-SEN-009`.

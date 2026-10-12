@@ -402,3 +402,15 @@ Rust-only mechanism in unchanged code — `crates/validator` is untouched, so `s
 ## Reconciliation (run 2)
 
 **Final combined status: out of scope under A17 (operator database restore); mechanism recorded as real.** `take_nonce` (`store.rs:281-291`) still deletes on the spot and nothing records consumption at `fe9e84c`; the team's objection to remediation option 1 is upheld; the validator self-halts before reuse (Phase 8). Not a run-2 miss — run 2 was directed away by A17. See `state/run2/reconciliation/validator.md` (Sections 2, 3).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Settled |
+| Changed by | the code moved (per-ceremony nonces, `06e3e6e` #1033, `82d5419` #1036); the trigger did not |
+| Severity, certainty | settled: out of scope under A17 (settled.md section 1, "Triggers that need out-of-band database access: restore, copy, manual edit") |
+| Evidence | E2: the trigger is an operator database restore, an exact match to the settled A17 item |
+
+Non-live row, out of scope since run 2. One line of evidence at `361aaf3`: the burn marker is now a row whose `nonces` column is set to `NULL` by `take_signing_nonces` (`crates/validator/src/secrets/store.rs:266-292`) instead of a deleted row, and it still lives only in the current database file, so restoring an older file still un-burns it. That needs the out-of-band restore A17 excludes; the service itself never rolls the marker back (the consult on discarded resumes, recorded in the rv-val report, executed that a replayed `UseNonces` gets `Noop`).

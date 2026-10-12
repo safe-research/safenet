@@ -1,0 +1,27 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-val/debug/deps/validator-dd9411993fa56ac3)
+
+running 8 tests
+test frost::poc_f_val_001_run3::v1_copy_q_keep_own_pop_rejected ... v1 copy q, own pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+ok
+test frost::poc_f_val_001_run3::v2_copy_q_and_pop_verbatim_rejected ... v2 copy q and pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+ok
+test frost::poc_f_val_001_run3::v3_scalar_related_q_rejected ... v3a 2*q_A, own pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+v3b 2*q_A, victim pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+ok
+test frost::poc_f_val_001_run3::v4_additive_related_q_rejected ... v4 q_A + G, own pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+ok
+test frost::poc_f_val_001_run3::v5_negated_q_rejected ... v5a -q_A, own pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+v5b -q_A, negated victim pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+ok
+test frost::poc_f_val_001_run3::v6_random_pop_rejected ... v6 copy q, random pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+ok
+test frost::poc_f_val_001_run3::v7_identity_q_trivial_pop_rejected ... v7 identity q, trivial pop: impostor rejected, cause = GroupError(InvalidIdentityElement)
+ok
+test frost::poc_f_val_001_run3::v8_owned_key_harvest_opens_no_victim_slot ... v8: q_M = c_M[0] with pok reused as pop is ACCEPTED (M owns it)
+v8: 5 harvested pads opened 0 of 10 victim slots
+ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.45s
+
+exit=0

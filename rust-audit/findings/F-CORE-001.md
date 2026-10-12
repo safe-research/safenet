@@ -23,7 +23,7 @@ The worst instance is self-reinforcing: `ExceededMaxReorgDepth` is a _deliberate
 | # | Claim | Class | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
 | 1 | The snapshot table has no hash, chain-id or contract binding: a snapshot is identified by a block _number_ alone. | E2 | `crates/core/src/state/storage.rs:51-57` | <pre>"CREATE TABLE IF NOT EXISTS snapshots (<br> block_number INTEGER PRIMARY KEY,<br> state TEXT NOT NULL<br> )",<br>)<br>.execute(&pool)<br>.await?;</pre> |
-| 2 | The resume point handed to the watcher is `(MIN, MAX)` of those numbers — no identity travels with it. | E2 | `crates/core/src/state/storage.rs:86-91` | <pre>pub async fn status(&self) -> Result<Option<BlockStatus>, Error> {<br> let (safe, latest) = sqlx::query_as::<_, (Option<i64>, Option<i64>)>(<br> "SELECT MIN(block_number), MAX(block_number) FROM snapshots",<br> )<br> .fetch_one(&self.pool)<br> .await?;</pre> |
+| 2 | The resume point handed to the watcher is `(MIN, MAX)` of those numbers — no identity travels with it. | E2 | `crates/core/src/state/storage.rs:86-91` | <pre>pub async fn status(&self) -> Result<Option<BlockStatus>, Error> {<br> let (safe, latest) = sqlx::query*as::<*, (Option<i64>, Option<i64>)>(<br> "SELECT MIN(block_number), MAX(block_number) FROM snapshots",<br> )<br> .fetch_one(&self.pool)<br> .await?;</pre> |
 | 3 | `initialize` re-anchors purely on the node's current head and the persisted numbers; there is no comparison of any persisted value against the chain. | E2 | `crates/core/src/index/blocks.rs:244-246` and `255-266` | <pre>let latest = self.require_block(BlockId::latest).await?;<br>let safe = latest.number.saturating_sub(self.config.max_reorg_depth);</pre><br><pre>let uncle = indexed.safe.checked_add(1);<br>if let Some(uncle) = uncle<br> && uncle <= indexed.latest<br>{<br> self.queue.push_back(BlockUpdate::Uncle { number: uncle });<br>}</pre> |
 | 4 | The `safe` anchor used for the only fork check is itself seeded from the same startup RPC scan, so it can never contradict the persisted state. | E2 | `crates/core/src/index/blocks.rs:333-340` | <pre>let safe = self<br> .recent<br> .pop_front<br> .expect("the range scan always includes the safe block");<br>self.safe = SafeBlock {<br> number: safe.number,<br> hash: safe.hash,<br>};</pre> |
 | 5 | The fork check that _would_ catch this exists only in the running loop. | E2 | `crates/core/src/index/blocks.rs:435-439` | <pre>if self.recent.is_empty && self.safe.hash != block.parent_hash {<br> // Even the anchor - a block already considered final - does not<br> // match: the reorg went deeper than the configured depth.<br> return Err(Error::ExceededMaxReorgDepth(self.config.max_reorg_depth));<br>}</pre> |
@@ -293,3 +293,35 @@ One honest limit, unchanged from Phase 7: `anvil_reorg` produces empty replaceme
 ## Reconciliation (run 2)
 
 **Final: Confirmed, High, 99 (E1), canonical.** Rediscovered by run 2 as `F2-CORE-001` (CONFIRMS: same mechanism, `blocks.rs:244-290`, `storage.rs:50-57`, `86-101`; adds the `max_reorg_depth = 0` restart case and notes that with any downtime the anchor header is not fetched at all). Run 2 rated it Medium 90 on a literal reading of PROMPT §8's High line (the trigger is a reorg deeper than the window); the combined report carries this file's High 99 because the Phase 8 A/B is the deeper executed evidence and the consequence is persistent silent divergence of consensus state — the dissent is recorded in `state/run2/reconciliation/core.md` §1.1. A17: the "restored-backup" case named in the QA section is out of scope; the primary triggers (restart after the A5 exit, reorg during downtime) are unaffected. Still valid at `fe9e84c` (`crates/core/src/index` and `state/storage.rs` unchanged since `2893917`). Counterparts: `F2-CORE-001`; related run-2 NEW `F2-CORE-011` (fresh-start anchor never persisted) reaches this restart path by another route.
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed this code. `index/blocks.rs` moved with #1010 (per-network timings) and #1048 (`timestamp` on `BlockUpdate::New`); `state/storage.rs` and `driver.rs` are byte-identical to `fe9e84c` |
+| Severity, certainty | unchanged (High, 99) |
+| Evidence | E1 `poc/F-CORE-001/run3/` (run-1 unit PoC re-run, plus a real-binary restart run); counterpart E1 `poc/F2-CORE-001/run3/` |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/blocks.rs:244-246` to `:298-300`: `let latest = self.require_block(BlockId::latest()).await?;` / `let safe = latest.number.saturating_sub(self.config.max_reorg_depth);`
+- `index/blocks.rs:255-266` to `:315-320`: `let uncle = indexed.safe.checked_add(1);` / `if let Some(uncle) = uncle` / `&& uncle <= indexed.latest` / `{` / `self.queue.push_back(BlockUpdate::Uncle { number: uncle });` / `}`
+- `index/blocks.rs:333-340` to `:387-394`: `let safe = self` / `.recent` / `.pop_front()` / `.expect("the range scan always includes the safe block");` / `self.safe = SafeBlock {`
+- `index/blocks.rs:435-439` to `:490-494`: `if self.recent.is_empty() && self.safe.hash != block.parent_hash {` ... `return Err(Error::ExceededMaxReorgDepth(self.config.max_reorg_depth));`
+- `state/storage.rs:51-57`, `:86-101`, `:124-143`, `:151-161`: unchanged lines and content, for example `:52-53` `block_number INTEGER PRIMARY KEY,` / `state        TEXT    NOT NULL` and `:88` `"SELECT MIN(block_number), MAX(block_number) FROM snapshots",`
+- `driver.rs:257` (run 1) and `:263` (run 2) to `:263`: `self.state.prune(block_status.safe).await?;`
+
+What was run:
+
+1. The run-1 PoC (`poc_blocks.rs`, tests 1 and 2 in `index/blocks.rs`, test 3 in `state/storage.rs`), adapted only by removing em dashes from comments: `cargo test -p safenet-core --lib -- --nocapture --test-threads=1 poc_f_core_001` (batch run, output `poc/F-CORE-001/run3/rv-core-a-output.txt`). All three fail at their key assertion, which is the documented reading for "defect present", with the same values as run 1: the plan is `[("uncle", 899), ("warp", 899), ("new", 999), ("new", 1000)]` whether or not the persisted anchor 898 is canonical, the retained window is exactly `max_reorg_depth` (2), and `snapshots` has the columns `["block_number", "state"]`.
+2. Counterpart sequence A (`poc/F2-CORE-001/run3/`, `EventLog.block` adapted to `EventBlock`): the deep reorg exits with `ExceededMaxReorgDepth(2)` and leaves the store at `{998}`; the restart queues `Warp { from: 999, to: 1002 }` and two `New` updates, no error, and the orphaned block's event is carried forward (`events: [998, 1003, 1004]`).
+3. Variant on the real binary (run 1's V-INT probe, repeated): `integ bash rust-audit/poc/F-CORE-001/run3/rv-core-a-deep_reorg_restart.sh OUTDIR`, validator with `max_reorg_depth = 2`, `anvil_reorg 5` while running. The validator uncles blocks 5 and 4, logs `ExceededMaxReorgDepth(2)` and exits with status 0. The same binary restarted against the same SQLite file logs `"resume":"Some(BlockStatus { latest: 3, safe: 3 })"` and runs for 15 s with 0 WARN and 0 ERROR lines while `/health` answers `OK` (`rv-core-a-restart-output.txt`).
+
+Notes: the optimistic `NewBlock` transition (#1015) and the per-block transitions of a warp (#1017) do not touch the restart path; the anchor is still identified by its number only. The Aegis fresh-start rule (`settled.md` section 1) removes only the restored-backup aside, which A17 had already removed; the in-band triggers (restart after the deliberate exit, reorg during downtime) are unaffected. Counterpart `F2-CORE-001` holds with the same evidence; `F2-CORE-011` reaches the same restart path from a fresh start (Still valid, rv-core-a).
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-CORE-004`](F3-CORE-004.md) (CONFIRMS). This ID stays canonical.
+- Ledger values: Low, certainty 99 (CA3's one band for `F-CORE-001`, `F2-CORE-001` and `F3-CORE-004`: a reorg deeper than `max_reorg_depth`, none verified on Gnosis).

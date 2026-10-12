@@ -28,9 +28,9 @@ Related, in the same arithmetic: every timestamp expression in the scheduler is 
 | 1 | "Now" is the settable system clock; production keeps no monotonic anchor. | E2 | `crates/core/src/index/clock.rs:31-38` | <pre>/// The current wall-clock time, in Unix epoch milliseconds.<br>#[cfg(not(test))]<br>pub fn now_ms(&self) -> u64 {<br> SystemTime::now<br> .duration_since(UNIX_EPOCH)<br> .unwrap_or_default<br> .as_millis as u64<br>}</pre> |
 | 2 | The only monotonic anchor in the type is test-only, so `Clock::start` is a no-op in production and every call re-reads the wall clock. | E2 | `crates/core/src/index/clock.rs:14-29` | <pre>pub struct Clock {<br> /// The monotonic instant the clock was started at. "Now" is derived as the<br> /// time elapsed since this instant added to [`TEST_SYSTEM_TIME_EPOCH_SECONDS`].<br> #[cfg(test)]<br> anchor: Instant,<br>}<br><br>impl Clock {<br> /// Starts a new clock.<br> pub fn start -> Self {<br> Self {<br> #[cfg(test)]<br> anchor: Instant::now,<br> }<br> }</pre> |
 | 3 | The sleep duration is computed once from the current wall-clock reading, so a backwards step is committed into the sleep. | E2 | `crates/core/src/index/clock.rs:49-57` | <pre>/// Sleeps until a target Unix epoch time, in milliseconds.<br>///<br>/// If `target` is in the past, returns immediately.<br>pub async fn sleep_until(&self, target: u64) {<br> let now = self.now_ms;<br> if target > now {<br> tokio::time::sleep(Duration::from_millis(target - now)).await;<br> }<br>}</pre> |
-| 4 | The deadline is derived from the previous block's chain timestamp plus the configured block time and propagation delay — the two clocks are compared directly. | E2 | `crates/core/src/index/blocks.rs:537-551` | <pre>/// Updates the pending block to follow the given latest block.<br>fn update_next_pending_block(&mut self, number: u64, timestamp: u64) {<br> self.pending = PendingBlock {<br> number: number + 1,<br> timestamp_ms: timestamp * 1000 + self.block_time,<br> };<br>}<br>...<br>async fn wait_for_pending_block(&self) {<br> let target = self.pending.timestamp_ms + self.config.block_propagation_delay;<br> self.clock.sleep_until(target).await;<br>}</pre> |
+| 4 | The deadline is derived from the previous block's chain timestamp plus the configured block time and propagation delay — the two clocks are compared directly. | E2 | `crates/core/src/index/blocks.rs:537-551` | <pre>/// Updates the pending block to follow the given latest block.<br>fn update_next_pending_block(&mut self, number: u64, timestamp: u64) {<br> self.pending = PendingBlock {<br> number: number + 1,<br> timestamp_ms: timestamp \* 1000 + self.block_time,<br> };<br>}<br>...<br>async fn wait_for_pending_block(&self) {<br> let target = self.pending.timestamp_ms + self.config.block_propagation_delay;<br> self.clock.sleep_until(target).await;<br>}</pre> |
 | 5 | The comment on the wait acknowledges the "behind the head" case but treats it as a catch-up, not as a persistent skew. | E2 | `crates/core/src/index/blocks.rs:545-548` | <pre>/// Sleeps until the pending block is suspected to be ready. When the watcher<br>/// is behind the head, the pending block's expected time is in the past, so<br>/// this returns immediately and the watcher catches up as fast as it can.</pre> |
-| 6 | The reorg-rewind path re-derives the deadline from a chain timestamp the same way, so a skewed clock also slows recovery from a reorg. | E2 | `crates/core/src/index/blocks.rs:425-428` | <pre>self.pending = PendingBlock {<br> number: last.number,<br> timestamp_ms: last.timestamp * 1000,<br>};</pre> |
+| 6 | The reorg-rewind path re-derives the deadline from a chain timestamp the same way, so a skewed clock also slows recovery from a reorg. | E2 | `crates/core/src/index/blocks.rs:425-428` | <pre>self.pending = PendingBlock {<br> number: last.number,<br> timestamp_ms: last.timestamp \* 1000,<br>};</pre> |
 | 7 | The skipped-slot path mutates the deadline with an unchecked add on the same field. | E2 | `crates/core/src/index/blocks.rs:413-415` | <pre>} else {<br> self.pending.timestamp_ms += self.block_time;<br>}</pre> |
 | 8 | Release builds do not check the overflow in basis 4, 6 and 7: there is no `[profile]` in the workspace or in any crate manifest. | E2 | `Cargo.toml:1-3` (whole-file inspection; `grep -n "profile\|overflow" crates/*/Cargo.toml` returns nothing) | <pre>[workspace]<br>resolver = "3"<br>members = ["crates/*"]</pre> |
 
@@ -111,3 +111,30 @@ Option 5 (checked/saturating arithmetic on the five timestamp expressions, or `o
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Low, 70 (E2), canonical — not rediscovered by run 2.** Run 2's R1 recorded the same mechanism as observation O3 (`clock.rs:33-38`, `blocks.rs:538-551`, ~40 %, Low) and did not file it. Still valid at `fe9e84c` (`clock.rs`, `blocks.rs` unchanged since `2893917`). No run-2 counterpart (`state/run2/reconciliation/core.md` §2).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed this code. `index/clock.rs` is byte-identical to `fe9e84c`; #1010 moved `block_time` and `block_propagation_delay` into the resolved `Timings` without changing the arithmetic |
+| Severity, certainty | unchanged (Low, 70) |
+| Evidence | E2 trace below (no PoC exists for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/clock.rs:31-38`, `:14-29`, `:49-57`: unchanged, `SystemTime::now()` / `.duration_since(UNIX_EPOCH)` (`:34-35`), `#[cfg(test)]` / `anchor: Instant,` (`:18-19`), `let now = self.now_ms();` / `if target > now {` / `tokio::time::sleep(Duration::from_millis(target - now)).await;` (`:53-55`)
+- `index/blocks.rs:537-551` to `:594-608`: `number: number + 1,` / `timestamp_ms: timestamp * 1000 + self.timings.block_time,` ... `let target = self.pending.timestamp_ms + self.timings.block_propagation_delay;` / `self.clock.sleep_until(target).await;`
+- `index/blocks.rs:425-428` to `:480-483`: `self.pending = PendingBlock {` / `number: last.number,` / `timestamp_ms: last.timestamp * 1000,` / `};`
+- `index/blocks.rs:413-415` to `:468-470`: `} else {` / `self.pending.timestamp_ms += self.timings.block_time;` / `}`
+- `Cargo.toml:1-3`: unchanged, still no `[profile]` section (`grep -n "profile\|overflow" Cargo.toml crates/*/Cargo.toml` returns nothing at `361aaf3`)
+
+What was run: code trace only. The production clock still reads `SystemTime` with no monotonic anchor, the poll deadline is still derived from the chain timestamp of the previous block, and `sleep_until` still commits a single sleep computed once from the current wall-clock reading.
+
+Notes: the event timestamps added by #1047 to #1052 come from the chain (log or header), not the host clock, so they do not change this row. With the Gnosis defaults (`block_time` 5 s, propagation delay 500 ms) and `signing_timeout` 6 blocks (`state/run3/baseline.md`), a host clock about 30 s behind still makes the validator observe `Sign` after the signing window.
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-CORE-005`](F3-CORE-005.md) (CONFIRMS). This ID stays canonical.
+- Ledger values: Low, certainty 92 (`F3-CORE-005`'s real-binary reproduction).

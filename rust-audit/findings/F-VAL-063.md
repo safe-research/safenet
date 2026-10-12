@@ -39,7 +39,7 @@ Two supporting gaps: nothing binds the SQLite database to a chain id or contract
 | 9 | which is precisely the deployment separation the salt exists to provide | E2 | `crates/validator/src/consensus/group.rs:282-287` | `/// Genesis uses a different group context since we don't know the consensus`<br>`/// contract address as it depends on the genesis group ID (🐓 and 🥚 problem).`<br>`/// Instead, compute a different context based on the genesis salt (allowing the`<br>`/// genesis group ID to be parameterized and the same validator set to work`<br>`/// for multiple consensus contracts without needing to rotate the validator`<br>`/// accounts).` |
 | 10 | and the sample config ships the zero salt explicitly, with no note about the consequence | E2 | `crates/validator/validator.sample.toml:38-39` | `# The salt mixed into the genesis group's key generation context.`<br>`genesis_salt = "0x0000000000000000000000000000000000000000000000000000000000000000"` |
 | 11 | Nothing binds the database to a chain id or a contract set: the snapshot table is keyed by block number alone | E2 | `crates/core/src/state/storage.rs:50-55` | `        sqlx::query(`<br>`            "CREATE TABLE IF NOT EXISTS snapshots (`<br>`                 block_number INTEGER PRIMARY KEY,`<br>`                 state        TEXT    NOT NULL`<br>`             )",`<br>`        )` |
-| 12 | The four timeout parameters are independently defaulted with no relational validation | E2 | `crates/validator/src/config.rs:89-103` | `    const fn default_blocks_per_epoch -> NonZeroU64 {`<br>`        NonZeroU64::new(1440).unwrap`<br>`    }`<br>``<br>`    const fn default_keygen_timeout -> NonZeroU64 {`<br>`        NonZeroU64::new(120).unwrap`<br>`    }`<br>``<br>`    const fn default_signing_timeout -> NonZeroU64 {`<br>`        NonZeroU64::new(6).unwrap`<br>`    }`<br>``<br>`    const fn default_oracle_timeout -> NonZeroU64 {`<br>`        NonZeroU64::new(12).unwrap`<br>`    }` |
+| 12 | The four timeout parameters are independently defaulted with no relational validation | E2 | `crates/validator/src/config.rs:89-103` | `    const fn default_blocks_per_epoch -> NonZeroU64 {`<br>`        NonZeroU64::new(1440).unwrap`<br>`    }`<br>``<br>`    const fn default_keygen_timeout -> NonZeroU64 {`<br>`        NonZeroU64::new(120).unwrap`<br>`    }`<br>``<br>`    const fn default_signing_timeout -> NonZeroU64 {`<br>`        NonZeroU64::new(6).unwrap`<br>`    }`<br>``<br>` const fn default_oracle_timeout -> NonZeroU64 {`<br>` NonZeroU64::new(12).unwrap`<br>` }` |
 
 ## Trigger
 
@@ -134,3 +134,30 @@ None of these would move the certainty, which is bounded by "the harms are condi
 ## Reconciliation (run 2)
 
 **Final combined status: Medium, 72 %, Confirmed — canonical.** Counterparts `F2-VAL-067` (EXTENDS the timeout-relation sentence into a rollover livelock, Low 75 %, folded in), `F2-XC-008` item 3 (zero `genesis_salt`, no cross-field checks) and `F2-XC-006` (no chain/deployment binding). Points (1) `blocks_per_epoch` has no onchain anchor and (3) empty `oracles` means never attest are a run-2 miss; `config.rs:69-79` still has no validation step. See `state/run2/reconciliation/validator.md` (Sections 1, 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | `fcc7028` (#1062) changed the `oracle_timeout` default to 24 and the docs, `1a292af` (#1007) and `55d811e` (#1046) changed how secret values are read and logged; none added validation of the consensus-critical values |
+| Severity, certainty | unchanged, Medium 72 |
+| Evidence | E1 for the timing leg: `poc/F-VAL-063/run3/` (run-2 `F2-VAL-067` PoC re-run, 1 passed); E2 for the rest |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- `ValidatorConfig` and its defaults, still validated only for non-zero timeouts: `config.rs:53-104` is now `crates/validator/src/config.rs:43-92` (struct at `:43`, defaults at `:76-92`, `default_oracle_timeout` 24 at `:89`).
+- The only startup check is still that a genesis set can be formed: `crates/validator/src/service/mod.rs:49-57` (`.ok_or(Error::InvalidValidators)?` at `:57`).
+- (1) `blocks_per_epoch` has no onchain source and still feeds the rollover message (`crates/validator/src/state/keygen.rs:516-524`).
+- (2) A zero salt still short-circuits the genesis context: `crates/validator/src/consensus/group.rs:288-291`; the sample still ships it at `crates/validator/validator.sample.toml:44`.
+- (3) An empty `oracles` set still drops every proposal at `debug`: `crates/validator/src/state/transactions.rs:32-40`; the sample still has the field commented out (`validator.sample.toml:41`).
+
+What was run: `poc/F-VAL-063/run3/config_test_module.rs` (run 2's `F2-VAL-067/config_test_fn.rs` wrapped as a child of `crate::config`, body unchanged), `cargo test -p validator --bins poc_f_val_063_run3`, `1 passed`: `blocks_per_epoch = 100` with the default `key_gen_timeout = 120` loads without error, and the epoch boundary precedes every keygen deadline. Output `poc/F-VAL-063/run3/RESULT.txt`.
+
+Notes: the Aegis production configuration itself uses salt 0 (`.env.aegis.sample`); with every Aegis node starting from a fresh database, point (2)'s cross-deployment collision needs a database reused across deployments, which A17 and the fresh-start rule exclude, so its weight is lower than at run 1. Points (1) and (3) and the unchecked timing relation keep the row at Medium. Counterparts `F2-VAL-067`, `F2-XC-008` item 3 and `F2-XC-006` (rv-xc).
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-VAL-061`](F3-VAL-061.md) (CONFIRMS the participants, `genesis_salt` and `blocks_per_epoch` legs). This ID stays canonical.
+- Ledger values: Low, certainty 90 (`F3-VAL-061`'s CA3 value: operator configuration under A1, PC3 gate 3).

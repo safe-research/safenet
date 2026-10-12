@@ -1,0 +1,74 @@
+[
+ {
+  "iter": 0,
+  "P": 19,
+  "C": 21,
+  "restart_head": 24,
+  "commit_deadline": 25,
+  "reveal_deadline": 31,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0xd9ca5d31d82fb7f3ac66fd290bd54dbbe7cd376a38a2cea4dc13279f0bbcb29f, 4000, 3, true)"
+ },
+ {
+  "iter": 1,
+  "P": 34,
+  "C": 36,
+  "restart_head": 39,
+  "commit_deadline": 40,
+  "reveal_deadline": 46,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0xa8166695f7eae5b2bfee05769197839dbdabdfe17e1d04167bcdcb20e0a97204, 4000, 3, true)"
+ },
+ {
+  "iter": 2,
+  "P": 49,
+  "C": 51,
+  "restart_head": 54,
+  "commit_deadline": 55,
+  "reveal_deadline": 61,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0x0cc886fa12403eb3316d2d328afcf30c9e381e1ad21c94388deac2b2b5a68ead, 4000, 3, true)"
+ },
+ {
+  "iter": 3,
+  "P": 64,
+  "C": 66,
+  "restart_head": 69,
+  "commit_deadline": 70,
+  "reveal_deadline": 76,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0xa2dab8841503ea907a273985f7245bb45ae0b2e6b179560ee5fa239374faf920, 4000, 3, true)"
+ },
+ {
+  "iter": 4,
+  "P": 79,
+  "C": 81,
+  "restart_head": 84,
+  "commit_deadline": 85,
+  "reveal_deadline": 91,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0x71d72377cb9c9f629e0372a7bba694cabb2092e518018d5d9fe4bc624baac01f, 4000, 3, true)"
+ },
+ {
+  "iter": 5,
+  "P": 94,
+  "C": 96,
+  "restart_head": 99,
+  "commit_deadline": 100,
+  "reveal_deadline": 106,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0xba8098f076defb53c03de0e46c16f56cf9e1e7a6f0cf00574a01e5c173cb9c5e, 4000, 3, true)"
+ }
+]

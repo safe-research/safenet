@@ -20,7 +20,7 @@ Refusing to _vote_ on a failed check is the right call and is documented as deli
 
 | # | Claim | Class (E1, E2, I) | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
-| 1 | Every error path collapses to `Unknown`; one attempt, no retry | E2 | crates/sentinel/src/engine.rs:166-190 | `        async move {`<br>`            let result: Result<Response, reqwest::Error> =`<br>`                async { request.send.await?.error_for_status?.json.await }.await;`<br>``<br>`            let (outcome, verdict) = match result {`<br>`                Ok(Response::Secure) => (CheckOutcome::Approved, EngineCheckVerdict::Secure),`<br>`                Ok(Response::Insecure { rule }) => {`<br>`                    (CheckOutcome::Denied(rule), EngineCheckVerdict::Insecure)`<br>`                }`<br>`                Ok(Response::Abstain) => (CheckOutcome::Unknown, EngineCheckVerdict::Abstain),`<br>`                Err(err) => {`<br>`                    tracing::error!(`<br>`                        %err,`<br>`                        "sentinel engine request failed; dropping the request unanswered",`<br>`                    );`<br>`                    (CheckOutcome::Unknown, EngineCheckVerdict::Error)`<br>`                }`<br>`            };` |
+| 1 | Every error path collapses to `Unknown`; one attempt, no retry | E2 | crates/sentinel/src/engine.rs:166-190 | `        async move {`<br>`            let result: Result<Response, reqwest::Error> =`<br>`                async { request.send.await?.error_for_status?.json.await }.await;`<br>``<br>` let (outcome, verdict) = match result {`<br>` Ok(Response::Secure) => (CheckOutcome::Approved, EngineCheckVerdict::Secure),`<br>` Ok(Response::Insecure { rule }) => {`<br>` (CheckOutcome::Denied(rule), EngineCheckVerdict::Insecure)`<br>` }`<br>` Ok(Response::Abstain) => (CheckOutcome::Unknown, EngineCheckVerdict::Abstain),`<br>` Err(err) => {`<br>` tracing::error!(`<br>` %err,`<br>` "sentinel engine request failed; dropping the request unanswered",`<br>` );`<br>` (CheckOutcome::Unknown, EngineCheckVerdict::Error)`<br>` }`<br>` };` |
 | 2 | `Unknown` removes the entry, so no later path can retry | E2 | crates/sentinel/src/service.rs:173-180 | `        let (approve, reason) = match outcome {`<br>`            CheckOutcome::Approved => (true, String::new),`<br>`            CheckOutcome::Denied(rule) => (false, rule.to_string),`<br>`            CheckOutcome::Unknown => {`<br>`                tracing::warn!(%request_id, "engine check failed; dropping request unanswered");`<br>`                return (state, Vec::new);`<br>`            }`<br>`        };` |
 | 3 | The handler performs exactly one call and resumes with its outcome | E2 | crates/sentinel/src/effect.rs:55-73 | `    async fn perform_effect(&self, effect: Effect) -> Resume {`<br>`        match effect {`<br>`            Effect::EngineCheck {`<br>`                request_id,`<br>`                transaction,`<br>`                block,`<br>`            } => {`<br>`                let outcome = self`<br>`                    .engine`<br>`                    .security_check(block, &transaction)`<br>`                    .request_id(request_id)`<br>`                    .timeout(self.engine_timeout)`<br>`                    .execute`<br>`                    .await;`<br>`                Resume::EngineCheckResult {`<br>`                    request_id,`<br>`                    outcome,`<br>`                }`<br>`            }`<br>`        }`<br>`    }` |
 | 4 | Transport failure, non-2xx and malformed rule are all covered by the same collapse, and the tests confirm it | E2 | crates/sentinel/src/engine.rs:306-321 | `    #[tokio::test]`<br>`    async fn fails_on_a_malformed_rule_code {`<br>`        let url = respond_once(`<br>`            "200 OK",`<br>`            r#"{"verdict":"insecure","rule":"not-a-real-rule"}"#,`<br>`        )`<br>`        .await;`<br>`        let engine = EngineClient::new(url).unwrap;`<br>`        assert_eq!(`<br>`            engine`<br>`                .security_check(1, &SafeTransaction::default)`<br>`                .execute`<br>`                .await,`<br>`            CheckOutcome::Unknown`<br>`        );`<br>`    }` |
@@ -115,3 +115,37 @@ The merge added three new _oracle-event_ handlers; none of them can re-create a 
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed, Low, 90% (E1), canonical `F-SEN-012`.** Run-2 counterpart `F2-SEN-008` (Low 90) **confirms** it and executed the mechanism with the real `effect::Handler`: connection refused → `CheckOutcome::Unknown` → `handle_engine_check_result` removes the entry (`crates/sentinel/src/service.rs:176-179`) with the commit window open (block 100, deadline 120); an HTTP 503 likewise; and `x-request-timeout` equals the client timeout, so the engine has no margin. Small extension from run 2: `reqwest::Client::new()` defaults (redirects followed, system proxy honoured, no connection cap, unbounded `.json()` body) and the error log printing the engine URL including any userinfo, source-verified against the pinned `reqwest 0.13.4`. `engine.rs`, `effect.rs` and `main.rs` are unchanged at `fe9e84c`; the retry window a fix would have is one block shorter (`WaitingForEngineCheck` now expires at `block == commit_deadline`, `407-412`). Both runs agree on splitting `Unknown` into abstained/failed and retrying failures inside the window (which also closes `F-SEN-015` variant 2's drop). Team disposition: none. See `state/run2/reconciliation/sentinel.md` §1.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | Not fixed. #975 (`c2f11bf`) split the request into a builder and added headers; #979 (`be86ee3`) put the verdict store in front of the engine. There is still one attempt, every failure is `Unknown`, and `Unknown` still removes the entry. |
+| Severity, certainty | Low, 90 unchanged |
+| Evidence | E1: `poc/F2-SEN-008/run3/output.txt` |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- Every failure collapses to `Unknown`: `crates/sentinel/src/engine.rs:163-194` to `:174-204`, with `Err(err) => { ... (CheckOutcome::Unknown, EngineCheckVerdict::Error) }` at `:191-197` and `Ok(Response::Abstain) => (CheckOutcome::Unknown, EngineCheckVerdict::Abstain)` at `:185`.
+- `Unknown` drops the entry after it was removed: `service.rs:156-171`, `:176-179` to `:165-180`, `:185-188`:
+
+```rust
+            CheckOutcome::Unknown => {
+                tracing::warn!(%request_id, "engine check failed; dropping request unanswered");
+                return (state, Vec::new());
+            }
+```
+
+- The client keeps `reqwest::Client::new()` defaults: `engine.rs:112`.
+- A new source of `Unknown`: a failed verdict-store read or write (`crates/sentinel/src/effect.rs:79-93`, `:108-118`).
+
+What was run (`wt/rv-sen`, pasted into `mod tests`, reverted): `qa2_sen::f2_sen_008`, adapted to give the handler a `VerdictStore`. FAILED as before: one refused connection resolves `Unknown` and the request is dropped at block 100 with the commit deadline at 120 (`tracked after failed check: false`); a 503 also resolves `Unknown`; `x-request-timeout` equals the client timeout. A run 3 precondition shows the store itself was readable after the failure (`Ok(None)`), so the `Unknown` came from the engine.
+
+Notes: because `Unknown` is never recorded, a check replayed after a restart or reorg asks the engine again, which is a retry of sorts; live operation still has none. The client timeout item is settled and not part of this verdict. Counterparts: `F2-SEN-008`, `F-SEN-009`.
+
+## Run 3 counterpart
+
+- Run 3's [`F3-XC-004`](F3-XC-004.md) settles the userinfo sub-claim of this file's run-2 extension the other way: reqwest moves userinfo into the `Authorization` header, while path and query tokens are logged (its Basis 4, executed).
+- This row's own claim is unchanged. Ledger values: Low, certainty 90.

@@ -1,0 +1,302 @@
+# R8 PoC: sentinel bond stranding (F3-XC-001, F3-XC-002)
+# date: 2026-10-08T17:12:04Z
+# tree: git archive 361aaf3 Cargo.toml Cargo.lock crates | tar -x -C $RUN/scratch/R8/ws (scratch copy, outside the repository)
+# change: the test functions below appended inside 'mod tests' of crates/sentinel/src/service.rs in that copy; no other edit
+# diff of the copy against 361aaf3:
+2213a2214,2484
+> 
+>     // ---- R8 PoC tests (scratch copy only, never in the checkout) ----
+#   ... (271 added lines, 0 removed lines)
+# command: CARGO_TARGET_DIR=$RUN/scratch/R8/target cargo test --locked --offline -p sentinel --bins r8_ -- --nocapture --test-threads=1
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running unittests src/main.rs ($RUN/scratch/R8/target/debug/deps/sentinel-702b20590452b382)
+
+running 4 tests
+test service::tests::r8_control_accurate_tally_claims ... ok
+test service::tests::r8_poc_missed_reveal_never_claims_unslashed_bond ... R8 missed reveal: commands after OracleResult: []
+ok
+test service::tests::r8_poc_undercount_drops_request_before_own_reveal ... R8 variant A: request dropped, commands after OracleResult: []
+ok
+test service::tests::r8_poc_undercount_premature_finalize_waits_forever ... R8 variant B: still WaitingForOutcome { approve: true, slash_amount: 400000 } at block 1000112
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.01s
+
+
+# full sentinel suite in the same copy (existing tests unaffected):
+running 54 tests
+test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+# ---- PoC test source (appended to mod tests) ----
+
+    // ---- R8 PoC tests (scratch copy only, never in the checkout) ----
+
+    /// Kinds of the actions in `commands`, for compact assertions.
+    fn r8_kinds(commands: &Commands<State, SentinelTransition>) -> Vec<&'static str> {
+        commands
+            .iter()
+            .map(|command| match command {
+                Command::Action(action) => match action.kind {
+                    SentinelActionKind::ApproveToken { .. } => "approve",
+                    SentinelActionKind::Commit { .. } => "commit",
+                    SentinelActionKind::Reveal { .. } => "reveal",
+                    SentinelActionKind::Finalize { .. } => "finalize",
+                    SentinelActionKind::Claim { .. } => "claim",
+                    SentinelActionKind::TimeoutArbitration { .. } => "timeout_arbitration",
+                },
+                Command::Effect(_) => "effect",
+            })
+            .collect()
+    }
+
+    /// Aegis production windows: commit 6, reveal 6. The proposal and the
+    /// oracle request land in block 100 (one `proposeTransaction` emits both),
+    /// so `commitDeadline` is 106 and `revealDeadline` is 112.
+    const R8_COMMIT_DEADLINE: u64 = 106;
+    const R8_REVEAL_DEADLINE: u64 = 112;
+
+    /// Drives a request to `CollectingVotes` where the other sentinel's
+    /// commitment landed while our engine check was still running.
+    fn r8_undercounted_request() -> (SentinelTransition, B256, State) {
+        let svc = transition();
+        let safe_tx_hash = B256::repeat_byte(0x31);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, commands) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(100, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        assert_eq!(r8_kinds(&commands), ["effect"]);
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                100,
+                new_request_event(
+                    id,
+                    U256::from(400_000u64),
+                    U256::from(800_000_000u64),
+                    U256::from(400_000u64),
+                    R8_COMMIT_DEADLINE,
+                    R8_REVEAL_DEADLINE,
+                ),
+            )),
+        );
+        // Block 101: the other sentinel's engine answered first and its
+        // commitment lands while ours is still being checked.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(101, committed_event(id, OTHER, 800_000_000))),
+        );
+        assert!(commands.is_empty());
+        // Our engine check resolves; we commit.
+        let (state, commands) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        assert_eq!(r8_kinds(&commands), ["approve", "commit"]);
+        // Block 102: our commitment lands.
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(102, committed_event(id, self_address(), 800_000_000))),
+        );
+        match &state.0[&id] {
+            RequestState::CollectingCommitments {
+                committed_count,
+                self_committed,
+                ..
+            } => {
+                // Two commitments are onchain, the local tally has one.
+                assert_eq!(*committed_count, 1);
+                assert!(*self_committed);
+            }
+            other => panic!("unexpected state {other:?}"),
+        }
+        // First block past the commit deadline: we reveal.
+        let (state, commands) =
+            svc.apply_transition(state, Message::NewBlock(R8_COMMIT_DEADLINE + 1));
+        assert_eq!(r8_kinds(&commands), ["reveal"]);
+        (svc, id, state)
+    }
+
+    /// Variant A: the other sentinel's reveal is ordered before ours. The early
+    /// finalize fires on the undercounted tally, the guard in `finalize` sees
+    /// `self_revealed == false` and drops the request, and no `Claim` is ever
+    /// emitted although our reveal lands and the request resolves onchain.
+    #[test]
+    fn r8_poc_undercount_drops_request_before_own_reveal() {
+        let (svc, id, state) = r8_undercounted_request();
+        let reveal_block = R8_COMMIT_DEADLINE + 1;
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(reveal_block, revealed_event(id, OTHER, true, 800_000_000))),
+        );
+        assert!(commands.is_empty());
+        assert!(!state.0.contains_key(&id), "request dropped after one reveal");
+
+        // Our own reveal is the last one: onchain `reveal` finalizes in the same
+        // transaction and emits `OracleResult`.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(reveal_block, revealed_event(id, self_address(), true, 800_000_000))),
+        );
+        assert!(commands.is_empty());
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(reveal_block, oracle_result_event(id, true))),
+        );
+        assert!(commands.is_empty(), "no claim for our revealed bond");
+        let (state, commands) =
+            svc.apply_transition(state, Message::NewBlock(R8_REVEAL_DEADLINE + 1_000));
+        assert!(commands.is_empty());
+        assert!(!state.0.contains_key(&id));
+        println!("R8 variant A: request dropped, commands after OracleResult: {commands:?}");
+    }
+
+    /// Variant B: our reveal is ordered first and the other sentinel never
+    /// reveals. The early finalize sends `Finalize` while onchain one of two
+    /// commitments is revealed and the reveal window is open, so the call
+    /// reverts with `FinalizeTooEarly`. `WaitingForOutcome` has no deadline and
+    /// no retry, so nothing moves the request again.
+    #[test]
+    fn r8_poc_undercount_premature_finalize_waits_forever() {
+        let (svc, id, state) = r8_undercounted_request();
+        let reveal_block = R8_COMMIT_DEADLINE + 1;
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(reveal_block, revealed_event(id, self_address(), true, 800_000_000))),
+        );
+        assert_eq!(r8_kinds(&commands), ["finalize"]);
+        assert!(matches!(
+            state.0[&id],
+            RequestState::WaitingForOutcome { .. }
+        ));
+
+        let mut state = state;
+        for block in [R8_REVEAL_DEADLINE, R8_REVEAL_DEADLINE + 1, R8_REVEAL_DEADLINE + 1_000_000] {
+            let (next, commands) = svc.apply_transition(state, Message::NewBlock(block));
+            assert!(commands.is_empty(), "no action at block {block}");
+            state = next;
+        }
+        assert!(matches!(
+            state.0[&id],
+            RequestState::WaitingForOutcome { .. }
+        ));
+        println!("R8 variant B: still {:?} at block {}", state.0[&id], R8_REVEAL_DEADLINE + 1_000_000);
+    }
+
+    /// Control: the same reveal order with an accurate tally (the other
+    /// commitment lands after our engine check) keeps the request and claims.
+    #[test]
+    fn r8_control_accurate_tally_claims() {
+        let svc = transition();
+        let safe_tx_hash = B256::repeat_byte(0x32);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(100, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                100,
+                new_request_event(
+                    id,
+                    U256::from(400_000u64),
+                    U256::from(800_000_000u64),
+                    U256::from(400_000u64),
+                    R8_COMMIT_DEADLINE,
+                    R8_REVEAL_DEADLINE,
+                ),
+            )),
+        );
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(101, committed_event(id, OTHER, 800_000_000))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(102, committed_event(id, self_address(), 800_000_000))),
+        );
+        let (state, _) = svc.apply_transition(state, Message::NewBlock(R8_COMMIT_DEADLINE + 1));
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(107, revealed_event(id, OTHER, true, 800_000_000))),
+        );
+        assert!(commands.is_empty());
+        assert!(state.0.contains_key(&id));
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(107, revealed_event(id, self_address(), true, 800_000_000))),
+        );
+        assert_eq!(r8_kinds(&commands), ["finalize"]);
+        let (_, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(107, oracle_result_event(id, true))),
+        );
+        assert_eq!(r8_kinds(&commands), ["claim"]);
+    }
+
+    /// Our reveal does not land in the reveal window (offline, fee spike, RPC
+    /// outage) while the other sentinel revealed. At the first block past the
+    /// reveal deadline `finalize` drops the request; the `OracleResult` of the
+    /// other sentinel's `finalize()` can only land in that block or later, so
+    /// the unslashed remainder of our bond is never claimed.
+    #[test]
+    fn r8_poc_missed_reveal_never_claims_unslashed_bond() {
+        let svc = transition();
+        let safe_tx_hash = B256::repeat_byte(0x33);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(100, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                100,
+                new_request_event(
+                    id,
+                    U256::from(400_000u64),
+                    U256::from(800_000_000u64),
+                    U256::from(400_000u64),
+                    R8_COMMIT_DEADLINE,
+                    R8_REVEAL_DEADLINE,
+                ),
+            )),
+        );
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(101, committed_event(id, self_address(), 800_000_000))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(101, committed_event(id, OTHER, 800_000_000))),
+        );
+        let (state, commands) =
+            svc.apply_transition(state, Message::NewBlock(R8_COMMIT_DEADLINE + 1));
+        assert_eq!(r8_kinds(&commands), ["reveal"]);
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(107, revealed_event(id, OTHER, true, 800_000_000))),
+        );
+        // Our reveal never lands. NewBlock(revealDeadline + 1) is applied
+        // before that block's logs (crates/core/src/state/mod.rs:196-211,
+        // 259-268).
+        let (state, commands) =
+            svc.apply_transition(state, Message::NewBlock(R8_REVEAL_DEADLINE + 1));
+        assert!(commands.is_empty());
+        assert!(!state.0.contains_key(&id), "request dropped at the reveal deadline");
+        // The other sentinel's finalize() lands: one side is established, our
+        // bond minus slashAmount is claimable onchain.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(R8_REVEAL_DEADLINE + 1, oracle_result_event(id, true))),
+        );
+        assert!(commands.is_empty(), "no claim for the unslashed remainder");
+        assert!(!state.0.contains_key(&id));
+        println!("R8 missed reveal: commands after OracleResult: {commands:?}");
+    }

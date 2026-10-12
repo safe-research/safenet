@@ -1,0 +1,17 @@
+Run 3 (rv-core-b, 2026-10-08), audit commit 361aaf3: forge 1.5.1, cd contracts && forge test --match-path test/Safenet7702Executor.t.sol -vv
+Reference only (Solidity is not in scope): shows the executor swallows a failing call (CallFailed) and reverts the whole batch, earlier calls included, on InsufficientGas.
+Note: forge first tried to auto-install the uninitialised submodules (git clone, failed because the directories exist); the run used the existing build cache.
+
+Ran 10 tests for test/Safenet7702Executor.t.sol:Safenet7702ExecutorTest
+[PASS] test_Execute_AppliesPerCallGasLimit() (gas: 43166)
+[PASS] test_Execute_ContinuesPastFailure_EmitsCallFailed() (gas: 105958)
+[PASS] test_Execute_ForwardsToPerCallTargets() (gas: 152654)
+[PASS] test_Execute_ForwardsValueFromAccountBalance() (gas: 131454)
+[PASS] test_Execute_GasCost_PinnedForFixedBatch() (gas: 172434)
+[PASS] test_Execute_InsufficientGas_Reverts() (gas: 24032)
+[PASS] test_Execute_InsufficientGas_RollsBackEarlierCalls() (gas: 375639)
+[PASS] test_Execute_NotSelf_Reverts() (gas: 18679)
+[PASS] test_Execute_UnaffordableValue_ContinuesPastFailure() (gas: 91742)
+[PASS] test_Receive_AcceptsNativeToken() (gas: 20903)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 2.22ms (1.39ms CPU time)
+Ran 1 test suite in 8.44ms (2.22ms CPU time): 10 tests passed, 0 failed, 0 skipped (10 total tests)

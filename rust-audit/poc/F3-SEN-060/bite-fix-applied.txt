@@ -1,0 +1,11 @@
+running 1 test
+test service::tests::lead13_dropped_dispute_entry_leaves_no_claim_on_later_timeout ... FAILED
+failures:
+---- service::tests::lead13_dropped_dispute_entry_leaves_no_claim_on_later_timeout stdout ----
+thread 'service::tests::lead13_dropped_dispute_entry_leaves_no_claim_on_later_timeout' (279221) panicked at crates/sentinel/src/service.rs:2258:9:
+entry is dropped at deadline+1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+failures:
+    service::tests::lead13_dropped_dispute_entry_leaves_no_claim_on_later_timeout
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p sentinel --bin sentinel`

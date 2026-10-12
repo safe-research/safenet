@@ -2,11 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Critiqued |
+| Status | Final: Accepted (same defect as F3-SEN-001; report one row) |
 | Crate and module | sentinel, service.rs |
 | Location | crates/sentinel/src/service.rs:676-740 (related: 226-242) |
-| Severity | Low / Low |
-| Certainty | 52% (set by Critic C-SEN; QA may raise) |
+| Severity | Low / High |
+| Certainty | 95% (CA3: gas-limit half reproduced; USDT-family half not applicable to USDC.e) |
 | Assumptions involved | A1, A7 |
 | Tags | config, input-validation |
 
@@ -118,3 +118,84 @@ No estimation and no configuration knob was added. The unconditional non-zero `a
 ## Reconciliation (run 2)
 
 **Final combined status: Plausible, Low, 52% (E2), canonical `F-SEN-008` — not rediscovered by run 2 (a miss).** `F2-SEN-006` and `F2-SEN-007` cite the gas literals and the unused `allowance` binding as facts but neither raises the proxied/hooked/allowance-reset fee-token hazard. Still valid at `fe9e84c`: the encoder is byte-identical apart from relocation — `approve` at `crates/sentinel/src/service.rs:841-851` (`gas: 55_000`), `commit`/`reveal`/`finalize`/`claim` at `866`, `884`, `892`, `900` (`gas: 250_000`); `commit_vote` still emits `approve(oracle, bondTarget)` unconditionally (`226-242`); `ERC20.allowance` at `bindings.rs:68` has no call site (`git grep`). One narrowing from the delta: the reference contract now documents the fee-token requirements — "a standard, non-rebasing ERC20 with at most 18 decimals and no transfer hooks" (`contracts/src/SentinelOracle.sol:62-68`) — which is the contract-side half of option 4, so the hooked-token variant is now a documented deployment precondition; the proxy-gas and USDT-style allowance-reset variants are not covered by it. Verdict, severity and certainty unchanged; the Critic's note stands that one fact (the deployed `FEE_TOKEN`'s `approve`) settles it. Team disposition: none. See `state/run2/reconciliation/sentinel.md` §2.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | Code unchanged (the encoder keeps `gas: 55_000` for `approve`). What changed is the deployment fact this finding was conditional on: #1062 (`fcc7028`) sets the Aegis fee token to USDC.e, `0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0` (`contracts/.env.aegis.sample:26`), a `FiatTokenProxy` in front of `FiatTokenV2_2`. |
+| Severity, certainty | Proposed High, 90 (was Low, 52). Section 8: an honest sentinel loses liveness (it can never commit), fleet-wide for the default submission mode, with a silent gas burn on every request. Not attacker-triggered; conditional on `Direct` submission, which is the default. |
+| Evidence | E1: `poc/F-SEN-008/run3/output.txt` (scripts `f008_usdce.py`, `f008_run.sh`) |
+
+What changed: the "non-plain fee token" branch is now the production configuration. A zero-to-non-zero `approve(SentinelOracle, 800 USDC.e)` on USDC.e needs 55,437 gas as a plain transaction. The sentinel sends it with a gas limit of 55,000, so it runs out of gas, the allowance stays 0 and the `commit` behind it reverts in `safeTransferFrom`. Each `commit` consumes the allowance again (`FiatTokenV2_2.transferFrom` decrements it to 0), so every request starts from a zero allowance and every `approve` fails. Only `Batched` submission avoids it: there the 55,000 is the call's own gas stipend, not the transaction's limit.
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- The limit: `crates/sentinel/src/service.rs:841-851` to `:867-877`:
+
+```rust
+            SentinelActionKind::ApproveToken { bond } => Transaction {
+                to: self.fee_token,
+                value: U256::ZERO,
+                data: ERC20::approveCall {
+                    spender: self.oracle,
+                    amount: bond,
+                }
+                .abi_encode()
+                .into(),
+                gas: 55_000,
+            },
+```
+
+- `Direct` mode sends it as the transaction gas limit: `crates/core/src/tx/types.rs:124` (`gas_limit: self.transaction.gas,`); the direct bundler adds nothing unless an authorization is attached (`crates/core/src/tx/bundle.rs:180-184`). `Direct` is the default (`crates/core/src/tx/config.rs:28-37`), and the sample leaves `executor` commented out (`crates/sentinel/sentinel.sample.toml:78`).
+- Unconditional `approve` before every `commit`: `service.rs:226-242` to `:235-251`; `ERC20.allowance` still unused (`bindings.rs:69`).
+- The other oracle calls keep `gas: 250_000` (`service.rs:892`, `:910`, `:918`, `:926`, `:934`); not measured with USDC.e.
+
+What was run: a loopback Anvil (chain id 100) loaded with the USDC.e proxy code, the `FiatTokenV2_2` implementation code and the proxy's 14 cached storage slots from the local Foundry fork cache written by the 2026-10-07 Aegis env review (Gnosis block 48,635,154; the cache shows implementation `0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7` and admin `0x7a48…75bd` in the proxy slots). No live RPC was contacted. Then the sentinel's exact call, `approve(0x4F61B8832978e83b80D69551AEf07557DBE41d03, 800000000)`:
+
+| Case | Gas limit | Status | Gas used |
+| --- | --- | --- | --- |
+| allowance 0 to 800 USDC.e (every request) | 55,000 | 0 (out of gas), allowance stays 0 | 54,629 |
+| same call, room to spare | 200,000 | 1 | 55,437 |
+| allowance non-zero to non-zero | 55,000 | 1 | 35,537 |
+
+Identical on Anvil's latest hardfork, `prague` and `cancun`. Gnosis runs these gas rules (EIP-2929 cold access, EIP-2200/3529 storage); the measurement does not depend on the chain id.
+
+Notes:
+
+- Nobody has run a sentinel against USDC.e yet: the testnet oracle uses an 18-decimal test token (`contracts/.env.testnet.sample:18`), and the devnet and integration scripts use `MyToken`. The production oracle was deployed on 2026-10-07, and no sentinel was registered at the last recorded check (Gnosis block 48,636,124, team notes).
+- `Batched` mode (`executor` set) is the workaround the code already has; it depends on the 7702 executor, which is a post-audit contract (process note, not a defect).
+- Remediation as before: estimate the gas, or read the allowance and skip or size the approve (option 2), or raise the limit with margin for a proxied token (option 1). This finding is canonical for the limit; `F-SEN-007` covers the missing pre-flight that would have made the failure loud.
+
+## Practicality (PC3, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Actor | Nobody needs to act; any permissionless proposal on the Aegis `SentinelOracle` (`contracts/src/Consensus.sol:253-267`) |
+| Cost | None for anyone; each Direct-mode sentinel burns about 155,000 gas per request on an out-of-gas `approve` and a reverted `commit` |
+| Condition | Direct submission, which is the default and the published Aegis sentinel configuration (`docs/configuration.md:110-121`, `crates/sentinel/sentinel.sample.toml:78`) |
+| Gate | Passes all four for the gas-limit half (rv-sen and QA3-SEN executions on the real USDC.e bytecode). The USDT-family half (a non-zero-to-non-zero `approve` that reverts) fails gate 1 on Aegis: USDC.e accepts it (35,537 gas, rv-sen table) |
+| Practicality | practical for the 55,000 gas limit; theoretical for the USDT-family half (USDC.e has no reset-to-zero rule) |
+| Recommended severity | High, the band rv-sen proposed (ledger Low). Same defect and same rating as `F3-SEN-001` |
+| Intended route and parameters | rv-sen: loopback Anvil with the USDC.e proxy, implementation and 14 storage slots from the fork cache, the sentinel's exact call `approve(0x4F61…1d03, 800000000)` with gas limit 55,000; QA3-SEN repeated it end to end on the real binary at the Aegis parameters |
+| Cheapest settling change | None needed |
+
+Reason. The condition run 1 named ("a proxied fee token") became the production configuration with #1062: every Direct-mode sentinel fails every commit, so with the documented configuration no Aegis request gets a vote and nothing oracle-gated is attested (see the `F3-SEN-001` Practicality section for the halt argument). The report should carry one row for this defect, rated High, with the USDT-family half dropped as not applicable to Aegis.
+
+## Confidence (CA3, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Result | Reproduced for the gas-limit half. Final: Accepted, High, certainty 95; carry it in the report as one row with `F3-SEN-001` |
+| Reproductions | rv-sen's probe `poc/F-SEN-008/run3/f008_run.sh` on Anvil (prague) with the cached USDC.e code: 1 of 1, `approve` 0 to 800,000,000 at 55,000 gas status 0 (54,629 used), at 200,000 gas status 1 (55,437), non-zero to non-zero at 55,000 status 1 (35,537). The end-to-end runs under `F3-SEN-001` (2 of 2) are the same defect on the real binary |
+| Route and parameters | The sentinel's exact call `approve(0x4F61…1d03, 800000000)` with its encoder's gas limit; the real token bytecode |
+| Final severity | High for the gas-limit half, agree with PC3. The USDT-family half (a non-zero-to-non-zero `approve` that reverts) does not apply to USDC.e, which accepts it, so it carries no rating on Aegis |
+| Certainty | 95 for the applicable half (E1 twice by different agents, plus `F3-SEN-001`) |
+| Evidence | `poc/F-SEN-008/ca3/output-ca3.txt` (the first attempt in that folder failed only because `latest` is not a valid Anvil hardfork name; rerun with `prague`) |
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-SEN-001`](F3-SEN-001.md) (CONFIRMS the gas-limit half). This ID stays canonical.
+- Ledger values: High, certainty 97 (`F3-SEN-001`'s real-binary reproduction; CA3 set 95 here for the applicable half).

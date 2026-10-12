@@ -1,0 +1,7 @@
+
+running 1 test
+test state::keygen::ca3_forged_complaints::forged_complaints_from_an_oracle_address_leak_the_polynomial ... 2 forged complaints from 0x00000000000000000000000000000000000BAd00 answered; f_me(0)*G matches c_me[0]: true
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 47 filtered out; finished in 0.04s
+

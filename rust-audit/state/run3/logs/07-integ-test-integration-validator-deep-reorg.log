@@ -1,0 +1,113 @@
+# command: integ just test-integration-validator-deep-reorg
+# cwd: $RUN/wt/base
+# head: 361aaf3b25e12d2e04f296184c326830968f3727
+# start: 2026-10-08T14:30:15Z
+./scripts/run_validator_deep_reorg_test.sh
+==> Using temporary directory /var/tmp/tmp.HLjE9e1ltS
+==> Building Rust services...
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s
+==> Building Solidity contracts...
+Missing dependencies found. Installing now...
+
+fatal: destination path '$RUN/wt/base/contracts/lib/forge-std' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/foundry-rs/forge-std' into submodule path '$RUN/wt/base/contracts/lib/forge-std' failed
+Failed to clone 'contracts/lib/forge-std'. Retry scheduled
+fatal: destination path '$RUN/wt/base/contracts/lib/openzeppelin-contracts' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/OpenZeppelin/openzeppelin-contracts' into submodule path '$RUN/wt/base/contracts/lib/openzeppelin-contracts' failed
+Failed to clone 'contracts/lib/openzeppelin-contracts'. Retry scheduled
+fatal: destination path '$RUN/wt/base/contracts/lib/safe-smart-account' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/safe-fndn/safe-smart-account' into submodule path '$RUN/wt/base/contracts/lib/safe-smart-account' failed
+Failed to clone 'contracts/lib/safe-smart-account'. Retry scheduled
+fatal: destination path '$RUN/wt/base/contracts/lib/forge-std' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/foundry-rs/forge-std' into submodule path '$RUN/wt/base/contracts/lib/forge-std' failed
+Failed to clone 'contracts/lib/forge-std' a second time, aborting
+Warning: Your project has missing dependencies that could not be installed.
+Solc 0.8.30 finished in 984.22ms
+Solc 0.8.30 finished in 16.19s
+Compiler run successful!
+==> Starting Anvil...
+==> Deploying contracts...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+coordinator: contract FROSTCoordinator 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+consensus: contract Consensus 0x706f3533B199078F30BE5520b183d130a5cbb17F
+groupId: FROSTGroupId.T 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000
+
+== Logs ==
+  Genesis Group ID: 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000
+  Genesis Group Participants Root: 0x43c8bee048e0480d644b3fe14e67fe0bf976d6ec2c649e37c28719ce63f6a1c8
+  Genesis Group Count: 2
+  Genesis Group Threshold: 2
+  Genesis Group Context: 0x0000000000000000000000000000000000000000000000000000000000000000
+  FROSTCoordinator: 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+  Consensus: 0x706f3533B199078F30BE5520b183d130a5cbb17F
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 7240248
+
+Estimated amount required: 0.014480496007240248 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeployConsensus.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeployConsensus.s.sol/31337/run-latest.json
+
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+alwaysApproveOracle: contract AlwaysApproveOracle 0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+
+== Logs ==
+  AlwaysApproveOracle: 0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 297742
+
+Estimated amount required: 0.000595484000297742 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeployAlwaysApproveOracle.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeployAlwaysApproveOracle.s.sol/31337/run-latest.json
+
+    coordinator: 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+    consensus:   0x706f3533B199078F30BE5520b183d130a5cbb17F
+    oracle:      0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+==> Starting validator...
+    pid 46025
+==> Waiting for the validator to index a few blocks before reorging...
+==> Reorging 5 block(s), deeper than max_reorg_depth (2)...
+==> Waiting for the validator to detect the reorg and fail loudly (timeout: 30s)...
+SUCCESS: the validator failed loudly after a reorg exceeding the configured max_reorg_depth.
+# end: 2026-10-08T14:30:39Z
+# duration_s: 24
+# exit: 0

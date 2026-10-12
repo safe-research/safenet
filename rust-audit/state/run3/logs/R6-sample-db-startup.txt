@@ -1,0 +1,155 @@
+# R6: fresh-node startup with the database URL shape of crates/validator/validator.sample.toml at 361aaf3 (2026-10-08)
+# binary: target-base/debug/validator built from wt/base at 361aaf3; rpc: loopback JSON-RPC stub answering only eth_chainId (0x64); data dir: empty directory standing in for the handbook's named volume
+# script: run_sample_db.sh (scratch), reproduced below the output
+
+== binary: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-base/debug/validator
+-rwxrwxr-x 2 sj sj 210056112 Oct  8 19:53 /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-base/debug/validator
+== worktree HEAD: 361aaf3b25e12d2e04f296184c326830968f3727
+== stub on 127.0.0.1:35239 (pid 114234)
+26:database = "sqlite:/var/lib/safenet/validator/data/storage.db"
+
+== run 1: sample URL shape, sqlite:<path>, no mode parameter
+15c15
+< rpc = "https://rpc.gnosischain.com"
+---
+> rpc = "http://127.0.0.1:35239"
+26c26
+< database = "sqlite:/var/lib/safenet/validator/data/storage.db"
+---
+> database = "sqlite:/tmp/claude-501/-home-sj-guest-safe-safenet/9b829ae4-50e9-4b8f-ad1b-0d612c4ee797/scratchpad/r6/run-sample-db-1791479227/data/storage.db"
+exit status: 1
+{"timestamp":"2026-10-08T17:07:07.910521Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:33961"},"target":"safenet_core::observability"}
+Error: Database(SqliteError { code: 14, message: "unable to open database file" })
+-- data dir after run 1:
+total 0
+drwxrwxr-x 2 sj sj  40 Oct  8 22:37 .
+drwxrwxr-x 3 sj sj 160 Oct  8 22:37 ..
+
+== run 2: same URL with ?mode=rwc (the integration scripts' form)
+15c15
+< rpc = "https://rpc.gnosischain.com"
+---
+> rpc = "http://127.0.0.1:35239"
+26c26
+< database = "sqlite:/var/lib/safenet/validator/data/storage.db"
+---
+> database = "sqlite:/tmp/claude-501/-home-sj-guest-safe-safenet/9b829ae4-50e9-4b8f-ad1b-0d612c4ee797/scratchpad/r6/run-sample-db-1791479227/data/storage.db?mode=rwc"
+exit status: 1
+{"timestamp":"2026-10-08T17:07:07.999689Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:45195"},"target":"safenet_core::observability"}
+Error: TransportError(ErrorResp(ErrorPayload { code: -32601, message: "stub: method not served", data: None }))
+-- data dir after run 2:
+total 0
+drwxrwxr-x 2 sj sj  60 Oct  8 22:37 .
+drwxrwxr-x 3 sj sj 200 Oct  8 22:37 ..
+-rw-r--r-- 1 sj sj   0 Oct  8 22:37 storage.db
+
+== stub requests
+stub served eth_chainId
+stub served eth_chainId
+stub served eth_call
+== done
+
+## run_sample_db.sh
+#!/usr/bin/env bash
+# R6 check: does a fresh validator start with the database URL shape of
+# crates/validator/validator.sample.toml at 361aaf3? Uses the binary built in
+# the shared worktree (target-base) and a loopback JSON-RPC stub that only
+# answers eth_chainId. Writes nothing outside this scratch folder.
+set -u
+S="$(cd "$(dirname "$0")" && pwd)"
+REPO=/home/sj.guest/safe/safenet
+BIN=/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-base/debug/validator
+RUN="$S/run-sample-db-$(date +%s)"
+mkdir -p "$RUN/data"   # stands in for the empty named volume of the handbook example
+
+echo "== binary: $BIN"
+ls -la "$BIN"
+echo "== worktree HEAD: $(git -C /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/base rev-parse HEAD)"
+
+python3 -I "$S/mockrpc.py" "$RUN/port" 90 2> "$RUN/stub.log" &
+STUB=$!
+for _ in $(seq 1 50); do [ -s "$RUN/port" ] && break; sleep 0.1; done
+PORT="$(cat "$RUN/port")"
+echo "== stub on 127.0.0.1:$PORT (pid $STUB)"
+
+git -C "$REPO" show 361aaf3:crates/validator/validator.sample.toml > "$RUN/sample.toml"
+grep -n '^database' "$RUN/sample.toml"
+
+make_config() {
+  # $1 = output file, $2 = database URL
+  sed -e "s#^rpc = .*#rpc = \"http://127.0.0.1:$PORT\"#" \
+      -e "s#^database = .*#database = \"$2\"#" "$RUN/sample.toml" > "$1"
+  grep -q "^rpc = \"http://127.0.0.1:$PORT\"" "$1" || { echo "rpc edit failed"; exit 2; }
+  grep -q "^database = \"$2\"" "$1" || { echo "database edit failed"; exit 2; }
+  diff "$RUN/sample.toml" "$1"
+}
+
+echo
+echo "== run 1: sample URL shape, sqlite:<path>, no mode parameter"
+make_config "$RUN/cfg1.toml" "sqlite:$RUN/data/storage.db"
+timeout 30 "$BIN" --config-file "$RUN/cfg1.toml" > "$RUN/run1.out" 2>&1
+echo "exit status: $?"
+cat "$RUN/run1.out"
+echo "-- data dir after run 1:"; ls -la "$RUN/data"
+
+echo
+echo "== run 2: same URL with ?mode=rwc (the integration scripts' form)"
+make_config "$RUN/cfg2.toml" "sqlite:$RUN/data/storage.db?mode=rwc"
+timeout 30 "$BIN" --config-file "$RUN/cfg2.toml" > "$RUN/run2.out" 2>&1
+echo "exit status: $?"
+cat "$RUN/run2.out"
+echo "-- data dir after run 2:"; ls -la "$RUN/data"
+
+echo
+echo "== stub requests"
+cat "$RUN/stub.log"
+kill "$STUB" 2>/dev/null
+wait "$STUB" 2>/dev/null
+echo "== done"
+
+## mockrpc.py
+"""Minimal loopback JSON-RPC stub for R6 startup checks.
+
+Answers eth_chainId with 0x64 (Gnosis); every other method gets a JSON-RPC
+error. Binds 127.0.0.1 on an OS-assigned port and writes the port to argv[1].
+Exits after argv[2] seconds.
+"""
+
+import json
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("content-length", "0")))
+        req = json.loads(body)
+
+        def answer(r):
+            if r.get("method") == "eth_chainId":
+                return {"jsonrpc": "2.0", "id": r.get("id"), "result": "0x64"}
+            return {
+                "jsonrpc": "2.0",
+                "id": r.get("id"),
+                "error": {"code": -32601, "message": "stub: method not served"},
+            }
+
+        out = [answer(r) for r in req] if isinstance(req, list) else answer(req)
+        data = json.dumps(out).encode()
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+        sys.stderr.write("stub served %s\n" % (req.get("method") if isinstance(req, dict) else "batch"))
+
+    def log_message(self, *args):
+        pass
+
+
+server = HTTPServer(("127.0.0.1", 0), Handler)
+with open(sys.argv[1], "w") as f:
+    f.write(str(server.server_address[1]))
+threading.Timer(float(sys.argv[2]), server.shutdown).start()
+server.serve_forever()

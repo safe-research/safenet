@@ -1,0 +1,79 @@
+# Toolchain (A9), 2026-10-08T14:15:35Z
+## worktree
+pwd: $RUN/wt/base
+HEAD: 361aaf3b25e12d2e04f296184c326830968f3727
+## rust
+/usr/bin/rustc
+$RUN/bin/cargo
+/usr/bin/rustup
+rustc 1.96.0 (ac68faa20 2026-05-25)
+binary: rustc
+commit-hash: ac68faa20c58cbccd01ee7208bf3b6e93a7d7f96
+commit-date: 2026-05-25
+host: aarch64-unknown-linux-gnu
+release: 1.96.0
+LLVM version: 22.1.2
+cargo 1.96.0 (30a34c682 2026-05-25)
+Default host: aarch64-unknown-linux-gnu
+rustup home:  ~/.rustup
+
+installed toolchains
+--------------------
+
+stable-aarch64-unknown-linux-gnu (default)
+1.99.0-aarch64-unknown-linux-gnu
+
+active toolchain
+----------------
+
+stable-aarch64-unknown-linux-gnu (default)
+rustc 1.96.0 (ac68faa20 2026-05-25)
+
+rustc 1.99.0 (b940084d7 2026-09-28)
+cargo 1.99.0 (5f94df478 2026-08-27)
+[review-cargo] 105 input file(s) differ from the last build in $RUN/target-base; rebuilding them
+clippy 0.1.99 (b940084d7e 2026-09-28)
+clippy 0.1.96 (ac68faa20c 2026-05-25)
+rustfmt 1.9.0-stable (ac68faa20c 2026-05-25)
+## rust-toolchain file
+ls: cannot access 'rust-toolchain*': No such file or directory
+## foundry
+$RUN/bin/forge
+~/.foundry/bin/anvil
+~/.foundry/bin/cast
+forge Version: 1.5.1-v1.5.1
+Commit SHA: b0a9dd9ceda36f63e2326ce530c10e6916f4b8a2
+Build Timestamp: 2025-12-19T14:08:03.748714033Z (1766153283)
+Build Profile: maxperf
+anvil Version: 1.5.1-v1.5.1
+Commit SHA: b0a9dd9ceda36f63e2326ce530c10e6916f4b8a2
+Build Timestamp: 2025-12-19T14:08:03.748714033Z (1766153283)
+Build Profile: maxperf
+cast Version: 1.5.1-v1.5.1
+Commit SHA: b0a9dd9ceda36f63e2326ce530c10e6916f4b8a2
+Build Timestamp: 2025-12-19T14:08:03.748714033Z (1766153283)
+Build Profile: maxperf
+## other
+just 1.40.0
+jq-1.8.1
+podman version 5.4.2
+GNU bash, version 5.2.37(1)-release (aarch64-unknown-linux-gnu)
+git version 2.51.0
+## cargo-audit
+error: no such command: `audit`
+
+help: a command with a similar name exists: `add`
+## machine
+Linux lima-default 6.17.0-41-generic #41-Ubuntu SMP PREEMPT_DYNAMIC Sat Jun 20 17:41:03 UTC 2026 aarch64 GNU/Linux
+10
+               total        used        free      shared  buff/cache   available
+Mem:            23Gi        10Gi       7.3Gi       5.0Gi        10Gi        12Gi
+Swap:             0B          0B          0B
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1       242G   58G  184G  24% /
+
+######## cargo install cargo-audit --locked (tail)
+    Finished `release` profile [optimized] target(s) in 1m 57s
+  Installing ~/.cargo/bin/cargo-audit
+   Installed package `cargo-audit v0.22.2` (executable `cargo-audit`)
+# exit: 0

@@ -224,3 +224,15 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 ## Reconciliation (run 2)
 
 **Final combined status: Low, 40 %, Plausible — run-2 miss, still valid at `fe9e84c`.** `state/preprocess.rs:194` still assigns `next_sequence = sequence.saturating_add(1)` unconditionally. `F2-VAL-061` scenario (b) exercises only the forward jump. See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Moot |
+| Changed by | `a9023ac` "[Direct Nonce 8]: Remove preprocessing from the state machine" (#1038) removed `NonceState::observe` and `available`; `392d7c8` (#1040) removed the rest of the chunk code |
+| Severity, certainty | resolved (code removed) |
+| Evidence | E2: `git log -S 'fn observe' fe9e84c..361aaf3 -- crates/validator` gives `a9023ac`; `grep -rn sequence crates/validator/src/state/` finds only a log field |
+
+The replacement does not carry the defect: the validator keeps no counter derived from `Sign.sequence`. The field is only logged (`crates/validator/src/state/sign.rs:69`, `sequence = event.sequence,`), and nonces are generated per signature id on demand, so a stale or forged lower sequence has nothing to rewind and no capacity to inflate. The executed check is F-VAL-032 run-3 variant V4 (200 junk `Sign` calls, then the real one at `sequence = 2^63`, accepted normally).

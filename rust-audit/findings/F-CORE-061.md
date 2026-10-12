@@ -22,13 +22,13 @@ Because the row already holds an allocated nonce and the queue never releases an
 | --- | --- | --- | --- | --- |
 | 1 | Both match arms require a _replacement_ rejection. A message such as geth's `transaction underpriced` satisfies the second regex but not the first, so the conjunction fails, and it is not the vendor string either. | E2 | `crates/core/src/tx/mod.rs:360-368` | <pre>/// Whether `err` is a node rejection indicating that the transaction's fees<br>/// are too low for the mempool.<br>fn is_transaction_underpriced(err: &TransportError) -> bool {<br> err.as_error_resp.is_some_and(\|payload\| {<br> (iregex!("replacement transaction").is_match(&payload.message)<br> && iregex!("underpriced").is_match(&payload.message))<br> \|\| iregex!("INTERNAL_ERROR: could not replace existing tx").is_match(&payload.message)<br> })<br>}</pre> |
 | 2 | The generic branch logs and returns without calling `record_submission`, so neither `submitted_at` nor the fee floor is written. | E2 | `crates/core/src/tx/mod.rs:284-295` | <pre>// Other failures do not establish that the transaction reached the<br>// mempool or that its fees were insufficient. Leave the last<br>// accepted fee floor unchanged and retry without increasing it.<br>Err(err) => {<br> tracing::warn!(<br> nonce = submission.nonce,<br> ?err,<br> "submission failed, will retry without bumping fees"<br> );<br>}<br>}<br>Ok()</pre> |
-| 3 | A row whose `submitted_at` is still `NULL` is returned as stale on every call. | E2 | `crates/core/src/tx/storage.rs:293-298` | <pre>sqlx::query_scalar::&lt;_, String&gt;(<br> "SELECT json_set(request, '$.nonce', nonce)<br> FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL<br> AND (submitted_at IS NULL OR submitted_at <= ?)<br> ORDER BY nonce ASC",<br>)</pre> |
+| 3 | A row whose `submitted_at` is still `NULL` is returned as stale on every call. | E2 | `crates/core/src/tx/storage.rs:293-298` | <pre>sqlx::query*scalar::&lt;*, String&gt;(<br> "SELECT json_set(request, '$.nonce', nonce)<br> FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL<br> AND (submitted_at IS NULL OR submitted_at <= ?)<br> ORDER BY nonce ASC",<br>)</pre> |
 | 4 | With no stored fees, `AllocatedTransaction::fees` yields `None` and `bump` returns the fresh estimate verbatim — the retry is fee-identical whenever the estimate has not moved. | E2 | `crates/core/src/tx/types.rs:79-86` | <pre>/// The fees the transaction was last submitted with, if it has been<br>/// submitted before.<br>fn fees(&self) -> Option&lt;Eip1559Estimation&gt; {<br> Some(Eip1559Estimation {<br> max_fee_per_gas: self.max_fee_per_gas?,<br> max_priority_fee_per_gas: self.max_priority_fee_per_gas?,<br> })<br>}</pre> |
 | 5 | `bump` with no previous submission is the identity on the fresh estimate. | E2 | `crates/core/src/tx/fees.rs:39-42` | <pre>pub fn bump(fresh: Eip1559Estimation, previous: Option&lt;Eip1559Estimation&gt;) -> Eip1559Estimation {<br> let Some(previous) = previous else {<br> return fresh;<br> };</pre> |
-| 6 | An allocated nonce is never released: `prune` deletes only executed rows and _queued_ (`nonce IS NULL`) expired rows. A row holding a nonce with `executed_at IS NULL` matches neither statement. | E2 | `crates/core/src/tx/storage.rs:249-265` | <pre>// Prune transactions executed at or below the reorg-safe block.<br>sqlx::query("DELETE FROM transactions WHERE executed_at IS NOT NULL AND executed_at <= ?")<br> .bind(safe)<br> .execute(&mut *tx)<br> .await?;<br><br>// Remove queued (not-yet-submitted) transactions that expired at or<br>// before the reorg-safe block. Never-expiring transactions have a<br>// `NULL` `expires_at` and are excluded explicitly rather than relying<br>// on the fact that SQL comparisons against `NULL` are never true.<br>sqlx::query(<br> "DELETE FROM transactions<br> WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?",<br>)</pre> |
-| 7 | Every later transaction is allocated a strictly higher nonce, so it queues behind the stuck one. | E2 | `crates/core/src/tx/storage.rs:144-156` | <pre>let Some(request) = sqlx::query_scalar::&lt;_, String&gt;(<br> "UPDATE transactions<br> SET nonce = MAX(?, COALESCE(<br> (SELECT MAX(nonce) + 1 FROM transactions),<br> 0<br> ))<br> WHERE id = (<br> SELECT id FROM transactions<br> WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)<br> ORDER BY id ASC<br> LIMIT 1<br> )<br> RETURNING json_set(request, '$.nonce', nonce)",<br>)</pre> |
+| 6 | An allocated nonce is never released: `prune` deletes only executed rows and _queued_ (`nonce IS NULL`) expired rows. A row holding a nonce with `executed_at IS NULL` matches neither statement. | E2 | `crates/core/src/tx/storage.rs:249-265` | <pre>// Prune transactions executed at or below the reorg-safe block.<br>sqlx::query("DELETE FROM transactions WHERE executed_at IS NOT NULL AND executed_at <= ?")<br> .bind(safe)<br> .execute(&mut \*tx)<br> .await?;<br><br>// Remove queued (not-yet-submitted) transactions that expired at or<br>// before the reorg-safe block. Never-expiring transactions have a<br>// `NULL` `expires_at` and are excluded explicitly rather than relying<br>// on the fact that SQL comparisons against `NULL` are never true.<br>sqlx::query(<br> "DELETE FROM transactions<br> WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?",<br>)</pre> |
+| 7 | Every later transaction is allocated a strictly higher nonce, so it queues behind the stuck one. | E2 | `crates/core/src/tx/storage.rs:144-156` | <pre>let Some(request) = sqlx::query*scalar::&lt;*, String&gt;(<br> "UPDATE transactions<br> SET nonce = MAX(?, COALESCE(<br> (SELECT MAX(nonce) + 1 FROM transactions),<br> 0<br> ))<br> WHERE id = (<br> SELECT id FROM transactions<br> WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)<br> ORDER BY id ASC<br> LIMIT 1<br> )<br> RETURNING json_set(request, '$.nonce', nonce)",<br>)</pre> |
 | 8 | Only the positive cases are tested; there is no test that a non-replacement fee rejection is (or is not) recognised. | E2 | `crates/core/src/tx/mod.rs:424-435` | <pre>#[test]<br>fn identifies_transaction_underpriced_error_messages {<br> for message in [<br> "replacement transaction is underpriced",<br> "rEpLaCeMeNt TrAnSaCtIoN uNdErPrIcEd",<br> "INTERNAL_ERROR: could not replace existing tx",<br> ] {<br> let err =<br> TransportError::err_resp(ErrorPayload::internal_error_message(message.into));<br> assert!(is_transaction_underpriced(&err));<br> }<br>}</pre> |
-| 9 | An RPC error is classified as intermittent, so the driver logs it and continues rather than surfacing it — the stall is invisible above `warn`. | E2 | `crates/core/src/tx/mod.rs:47-54` | <pre>fn is_intermittent(&self) -> bool {<br> // Note that we only consider RPC errors as transient - everything else<br> // including SQLite errors (which only happen if you are in a pretty<br> // borked FS situation or there is a bug in the SQL logic) and signing<br> // errors (which indicate some issue with the signer configuration) are<br> // considered more serious.<br> matches!(self, Self::Rpc(_))<br>}</pre> |
+| 9 | An RPC error is classified as intermittent, so the driver logs it and continues rather than surfacing it — the stall is invisible above `warn`. | E2 | `crates/core/src/tx/mod.rs:47-54` | <pre>fn is*intermittent(&self) -> bool {<br> // Note that we only consider RPC errors as transient - everything else<br> // including SQLite errors (which only happen if you are in a pretty<br> // borked FS situation or there is a bug in the SQL logic) and signing<br> // errors (which indicate some issue with the signer configuration) are<br> // considered more serious.<br> matches!(self, Self::Rpc(*))<br>}</pre> |
 
 ## Trigger
 
@@ -112,3 +112,77 @@ Option 4 (count consecutive failed attempts per row; after N log at `error` and 
 ## Reconciliation (run 2)
 
 **Final: Plausible, Medium, 65 (E1 in-crate), canonical.** Rediscovered and extended by run 2 as `F2-CORE-062` (EXTENDS): same regex gap (`tx/mod.rs:362-368`, executed: `is_transaction_underpriced("transaction underpriced") == false`, identical re-sends on every block), plus the zero-tip arithmetic — `cap_priority_fee(.., 0.0)` yields tip 0, NaN → 0, and `bump_fee(0, 0) = 0`, so `priority_fee_cap_percentage <= 0` stalls every submission on a geth-family node and no replacement can ever raise it. Node wording remains `I` in both runs (Anvil carries no first-submission "underpriced" string). 58 → 65. Still valid at `fe9e84c`. Counterparts: `F2-CORE-062`; `F2-CORE-065` (= `F-CORE-066`) is the NaN entry point.
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | Nothing changed the mechanism. `is_transaction_underpriced`, the generic rejection arm and `crates/core/src/tx/fees.rs` are textually unchanged; the 7702 stack (#991 to #1005, #1023) only moved the row into `allocated_nonces` (`622cf89` #993) and the account read to `eth_getProof` (`d791e67` #999). |
+| Severity, certainty | Unchanged: Medium, 65 (Plausible; node wording still `I`) |
+| Evidence | E1 `poc/F2-CORE-062/run3/` (run-2 PoC adapted and re-run) |
+
+Re-based anchors (old location at `fe9e84c`, new location at `361aaf3`, verbatim quote).
+
+- `tx/mod.rs:360-368` to `crates/core/src/tx/mod.rs:429-437` (unchanged text):
+
+```rust
+/// Whether `err` is a node rejection indicating that the transaction's fees
+/// are too low for the mempool.
+fn is_transaction_underpriced(err: &TransportError) -> bool {
+    err.as_error_resp().is_some_and(|payload| {
+        (iregex!("replacement transaction").is_match(&payload.message)
+            && iregex!("underpriced").is_match(&payload.message))
+            || iregex!("INTERNAL_ERROR: could not replace existing tx").is_match(&payload.message)
+    })
+}
+```
+
+- `tx/mod.rs:284-295` (generic arm records nothing) to `crates/core/src/tx/mod.rs:351-362`:
+
+```rust
+            // Other failures do not establish that the transaction reached the
+            // mempool or that its fees were insufficient. Leave the last
+            // accepted fee floor unchanged and retry without increasing it.
+            Err(err) => {
+                tracing::warn!(
+                    nonce = submission.nonce,
+                    ?err,
+                    "submission failed, will retry without bumping fees"
+                );
+            }
+        }
+        Ok(())
+```
+
+- `tx/storage.rs:293-298` (a never-recorded row is stale on every call) to `crates/core/src/tx/storage.rs:400-401`: `WHERE n.request IS NOT NULL AND n.executed_at IS NULL` / `AND (n.submitted_at IS NULL OR n.submitted_at <= ?)`.
+- `tx/types.rs:79-86` (no stored fees yields `None`) to `crates/core/src/tx/types.rs:134-141` (unchanged body).
+- `tx/fees.rs:39-42` (`bump(fresh, None)` is the identity) to `crates/core/src/tx/fees.rs:39-42` (unchanged).
+- `tx/storage.rs:249-265` (no statement releases an allocated, unexecuted nonce) to `crates/core/src/tx/storage.rs:322-360`: `prune` deletes `allocated_nonces` rows only `WHERE executed_at IS NOT NULL AND executed_at <= ?` and queued rows only `WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?`.
+- `tx/storage.rs:144-156` (later allocations floored above the stuck row) to `crates/core/src/tx/storage.rs:190-195`:
+
+```rust
+        let nonce = sqlx::query_scalar::<_, i64>(
+            "SELECT MAX(?, COALESCE((SELECT MAX(nonce) + 1 FROM allocated_nonces), 0))",
+        )
+        .bind(i64::try_from(status.nonce)?)
+```
+
+- `tx/mod.rs:424-435` (positive cases only) to `crates/core/src/tx/mod.rs:574-585`, test `identifies_transaction_underpriced_error_messages`, the same three positive messages and no negative case.
+- `tx/mod.rs:47-54` (RPC errors are intermittent) to `crates/core/src/tx/mod.rs:62-72` (unchanged text).
+- Zero-tip half (`F2-CORE-062`): `crates/core/src/tx/fees.rs:9-11` still documents "A cap of 0% or negative disables priority fees", and `:16` still clamps with `cap_percentage.max(0.0)`.
+
+What was run (worktree at `361aaf3`, `poc/F2-CORE-062/run3/tx_mod_tests_run3.rs` appended to `crates/core/src/tx/mod.rs`'s `mod tests`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`.
+- `rv3_f2_core_062_first_submission_underpriced_wordings_are_not_recognised`: ok; `"transaction underpriced"`, `"underpriced"`, `"FeeTooLow"`, `"fee too low"` and `"max priority fee per gas below minimum"` all return `false`.
+- `rv3_f2_core_062_zero_priority_fee_is_never_bumped`: ok; cap 0% and NaN both give `{200, 0}`, and five replacements keep the tip at 0.
+- `rv3_f2_core_062_unrecognised_first_submission_rejection_retries_identically_forever`: ok; with cap 0 and every send answered `transaction underpriced`, both rows hold nonces 0 and 1 after 11 blocks, `submitted_at` is `NULL` and the `allocated_nonces.request` carries no fee floor (22 sends, 22 rejections, response queue drained exactly).
+
+Notes:
+
+- Same result as run 2 on every assertion. The node-side wording for a first-submission fee rejection is still not verifiable offline (Anvil has no such string), so the certainty stays in the Plausible band.
+- In batched mode the stuck row is a whole batch and the in-flight limit is 1 (`crates/core/src/tx/config.rs:62-75`), so one unrecognised rejection stops all submissions at once rather than after `max_in_flight_transactions` rows.
+- The 7702 stack adds new generic rejections for a delegated account (Geth `ErrInflightTxLimitReached`, Nethermind `NotCurrentNonceForDelegation`, named in the merged epic). They are not fee rejections and the queue avoids them by keeping one transaction in flight, so they do not change this row.
+- Counterpart `F2-CORE-062`; `F-CORE-066` (still valid) is the NaN entry point; `F-CORE-060`'s ceiling must land before any widening of this classifier.

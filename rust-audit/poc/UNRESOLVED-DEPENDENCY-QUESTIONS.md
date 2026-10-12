@@ -109,7 +109,7 @@ If you want the upstream read as well (you do not need it): after `cargo fetch`,
 
 **Unblocks:** `F-SEN-013` (65%), whose severity is currently written as the conditional _"High if basis 8 holds, else Informational"_. **Effort: 15 minutes.**
 
-> *(QA-CORE-SEN appended to this question the source-read steps C-SEN asked for by name, plus a warning that an `Ok` answer does **not** close `F-CORE-004`. That addendum was lost in the same overwrite. QA-CORE-SEN restored its own text, which is merged in directly below this line.
+> \*(QA-CORE-SEN appended to this question the source-read steps C-SEN asked for by name, plus a warning that an `Ok` answer does **not** close `F-CORE-004`. That addendum was lost in the same overwrite. QA-CORE-SEN restored its own text, which is merged in directly below this line.
 
 The single biggest answer in this list. If `decode_raw_log` returns `Err` on non-UTF-8, then one `reveal` call by any active sentinel — an actor inside A2's fault bound — stalls **every** sentinel's _and_ every validator's indexer permanently, not just the attacker's own:
 

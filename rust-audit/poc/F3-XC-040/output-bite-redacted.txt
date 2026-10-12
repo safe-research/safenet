@@ -1,0 +1,16 @@
+=================== c-val (validator) exit=1 marker_hits=0
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+=================== v1-key-in-blocks_per_epoch (validator) exit=1 marker_hits=0
+Error: Parse(ParseError { position: Some((7, 20)), message: "invalid type: string \"<redacted>\", expected a nonzero u64\nin `validator.blocks_per_epoch`" })
+=================== v2-key-in-key_gen_timeout (validator) exit=1 marker_hits=0
+Error: Parse(ParseError { position: Some((7, 19)), message: "invalid type: string \"<redacted>\", expected a nonzero u64\nin `validator.key_gen_timeout`" })
+=================== c-sen (sentinel) exit=1 marker_hits=0
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+=================== s1-key-in-voting_window (sentinel) exit=1 marker_hits=0
+Error: Parse(ParseError { position: Some((8, 17)), message: "invalid type: string \"<redacted>\", expected u64\nin `sentinel.voting_window`" })
+=================== s2-bare-hex-in-engine (sentinel) exit=1 marker_hits=0
+Error: Parse(ParseError { position: Some((9, 10)), message: "relative URL without a base: \"<redacted>\"\nin `sentinel.engine`" })
+=================== s3-0x-hex-in-engine (sentinel) exit=1 marker_hits=0
+Error: Parse(ParseError { position: Some((9, 10)), message: "relative URL without a base: \"<redacted>\"\nin `sentinel.engine`" })
+=================== s4-key-in-fee_token (sentinel) exit=1 marker_hits=0
+Error: Parse(ParseError { position: Some((7, 13)), message: "invalid string length\nin `sentinel.fee_token`" })

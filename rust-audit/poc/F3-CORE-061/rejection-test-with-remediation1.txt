@@ -1,0 +1,10 @@
+max_in_flight_transactions = 0 -> Err(Error { message: "`max_in_flight_transactions` must be at least 1", input: Some("[transactions]\nmax_in_flight_transactions = 0\n"), keys: ["transactions"], span: Some(0..14) })
+priority_fee_cap_percentage = nan -> Err(Error { message: "`priority_fee_cap_percentage` must be a finite number", input: Some("[transactions]\npriority_fee_cap_percentage = nan\n"), keys: ["transactions"], span: Some(0..14) })
+blocks_before_resubmit = 0 -> Err(Error { message: "`blocks_before_resubmit` must be at least 1", input: Some("[transactions]\nblocks_before_resubmit = 0\n"), keys: ["transactions"], span: Some(0..14) })
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+--- whole core suite with remediation 1:
+test effects::tests::skips_panicked_tasks_without_losing_successful_resumes ... ok
+test result: ok. 152 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+--- validator and sentinel config tests with remediation 1:
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 0.00s

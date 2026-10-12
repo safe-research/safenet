@@ -1,0 +1,125 @@
+diff --git a/crates/validator/src/state/keygen.rs b/crates/validator/src/state/keygen.rs
+index a59ee7b..aed2e47 100644
+--- a/crates/validator/src/state/keygen.rs
++++ b/crates/validator/src/state/keygen.rs
+@@ -1445,3 +1445,120 @@ macro_rules! fail_rollover {
+     }};
+ }
+ use fail_rollover;
++
++// F3-VAL-061 PoC (temporary): a validator whose configured genesis participant
++// set (or salt) differs from the deployment derives a different genesis group
++// id, so `handle_genesis_key_gen` drops the deployment's genesis `KeyGen` event
++// (gid != local id) with no state change and -- by inspection of the early
++// return -- no log line, and never joins genesis. A matching id does start the
++// ceremony, so the drop is specifically the silent id mismatch.
++#[cfg(test)]
++mod poc_f3_val_061 {
++    use super::*;
++    use crate::{
++        bindings::Coordinator,
++        config::{Participant, ValidatorConfig},
++        consensus::hashing::ConsensusDomain,
++        service::Event,
++    };
++    use alloy::primitives::{Address, address};
++    use safenet_core::{
++        index::{EventBlock, EventLog},
++        state::{Message, StateTransition},
++    };
++
++    const A: Address = address!("0x1000000000000000000000000000000000000001");
++    const B: Address = address!("0x2000000000000000000000000000000000000002");
++    const C: Address = address!("0x3000000000000000000000000000000000000003");
++    const D: Address = address!("0x4000000000000000000000000000000000000004");
++    const E: Address = address!("0x5000000000000000000000000000000000000005");
++    const CONSENSUS: Address = address!("0x00000000000000000000000000000000000000c0");
++
++    fn participants(addrs: &[Address]) -> Vec<Participant> {
++        addrs
++            .iter()
++            .map(|&address| Participant {
++                address,
++                active_from: 0,
++                active_before: None,
++            })
++            .collect()
++    }
++
++    // A validator configured with the four-member set {A,B,C,D}, i.e. missing
++    // the deployment's fifth genesis member E.
++    fn transition() -> Transition {
++        let config = ValidatorConfig {
++            consensus: CONSENSUS,
++            staker: None,
++            participants: participants(&[A, B, C, D]),
++            oracles: BTreeSet::new(),
++            genesis_salt: B256::ZERO,
++            blocks_per_epoch: NonZeroU64::new(1440).unwrap(),
++            key_gen_timeout: NonZeroU64::new(120).unwrap(),
++            signing_timeout: NonZeroU64::new(6).unwrap(),
++            oracle_timeout: NonZeroU64::new(24).unwrap(),
++        };
++        let genesis =
++            group::participants_set(&config.participants, group::Epoch::Genesis { salt: B256::ZERO })
++                .unwrap();
++        Transition {
++            account: A,
++            genesis,
++            consensus: ConsensusDomain::new(100, CONSENSUS),
++            config,
++        }
++    }
++
++    fn key_gen_log(gid: B256) -> EventLog<Event> {
++        EventLog {
++            block: EventBlock {
++                number: 1,
++                timestamp: 1,
++            },
++            index: 0,
++            address: Address::ZERO,
++            data: Event::Coordinator(Coordinator::CoordinatorEvents::KeyGen(Coordinator::KeyGen {
++                gid,
++                participants: B256::ZERO,
++                count: 5,
++                threshold: 3,
++                context: B256::ZERO,
++            })),
++        }
++    }
++
++    #[test]
++    fn divergent_genesis_set_silently_ignores_the_deployment_key_gen() {
++        let t = transition();
++        let local_gid = t.genesis.group().id();
++        // The deployment's genesis group is the five-member set {A,B,C,D,E}.
++        let deployed_gid =
++            group::participants_set(&participants(&[A, B, C, D, E]), group::Epoch::Genesis { salt: B256::ZERO })
++                .unwrap()
++                .group()
++                .id();
++        assert_ne!(
++            local_gid, deployed_gid,
++            "a missing genesis member must change the derived group id"
++        );
++
++        // The deployment's genesis KeyGen is dropped: no state change, no
++        // commands (and, by the early-return path, no log).
++        let (state, commands) =
++            t.apply_transition(State::default(), Message::Event(key_gen_log(deployed_gid)));
++        assert!(matches!(state.rollover, RolloverState::WaitingForGenesis));
++        assert!(commands.is_empty(), "the mismatched KeyGen must be ignored");
++
++        // Control: the KeyGen for the locally derived id does start the ceremony.
++        let (state, commands) =
++            t.apply_transition(State::default(), Message::Event(key_gen_log(local_gid)));
++        assert!(matches!(state.rollover, RolloverState::CollectingCommitments { .. }));
++        assert!(
++            commands
++                .iter()
++                .any(|c| matches!(c, Command::Effect(Effect::KeyGenSetup { .. }))),
++            "a matching id starts key generation"
++        );
++    }
++}

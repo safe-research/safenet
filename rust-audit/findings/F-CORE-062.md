@@ -22,13 +22,13 @@ Under A4 the RPC may be "inconsistent between calls". The queue accepts whatever
 
 | # | Claim | Class | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
-| 1 | Allocation is `MAX(chain_nonce, MAX(nonce)+1)` over the whole table, with no validation of `status.nonce` against what is already allocated. | E2 | `crates/core/src/tx/storage.rs:144-156` | <pre>let Some(request) = sqlx::query_scalar::&lt;_, String&gt;(<br> "UPDATE transactions<br> SET nonce = MAX(?, COALESCE(<br> (SELECT MAX(nonce) + 1 FROM transactions),<br> 0<br> ))<br> WHERE id = (<br> SELECT id FROM transactions<br> WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)<br> ORDER BY id ASC<br> LIMIT 1<br> )<br> RETURNING json_set(request, '$.nonce', nonce)",<br>)</pre> |
+| 1 | Allocation is `MAX(chain_nonce, MAX(nonce)+1)` over the whole table, with no validation of `status.nonce` against what is already allocated. | E2 | `crates/core/src/tx/storage.rs:144-156` | <pre>let Some(request) = sqlx::query*scalar::&lt;*, String&gt;(<br> "UPDATE transactions<br> SET nonce = MAX(?, COALESCE(<br> (SELECT MAX(nonce) + 1 FROM transactions),<br> 0<br> ))<br> WHERE id = (<br> SELECT id FROM transactions<br> WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)<br> ORDER BY id ASC<br> LIMIT 1<br> )<br> RETURNING json_set(request, '$.nonce', nonce)",<br>)</pre> |
 | 2 | The chain nonce is taken from the RPC and passed straight through with no sanity check. | E2 | `crates/core/src/tx/mod.rs:303-314` | <pre>None => {<br> let block_id = self<br> .block_status<br> .map(\|block_status\| BlockId::from(block_status.latest))<br> .unwrap_or_else(BlockId::latest);<br> let nonce = self<br> .provider<br> .get_transaction_count(self.signer.address)<br> .block_id(block_id)<br> .await?;<br> self.nonce_cache = Some(nonce);<br> Ok(nonce)<br>}</pre> |
-| 3 | Pruning removes only executed rows and unallocated expired rows. A row with a nonce and `executed_at IS NULL` matches neither `DELETE`. | E2 | `crates/core/src/tx/storage.rs:249-265` | <pre>// Prune transactions executed at or below the reorg-safe block.<br>sqlx::query("DELETE FROM transactions WHERE executed_at IS NOT NULL AND executed_at <= ?")<br> .bind(safe)<br> .execute(&mut *tx)<br> .await?;<br><br>// Remove queued (not-yet-submitted) transactions that expired at or<br>// before the reorg-safe block. Never-expiring transactions have a<br>// `NULL` `expires_at` and are excluded explicitly rather than relying<br>// on the fact that SQL comparisons against `NULL` are never true.<br>sqlx::query(<br> "DELETE FROM transactions<br> WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?",<br>)</pre> |
-| 4 | Such a row counts as in flight forever, and the in-flight cap is the only gate on new allocations. | E2 | `crates/core/src/tx/storage.rs:108-116` | <pre>pub async fn count_in_flight(&self) -> Result&lt;usize, Error&gt; {<br> let count = sqlx::query_scalar::&lt;_, i64&gt;(<br> "SELECT COUNT(*) FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL",<br> )<br> .fetch_one(&self.pool)<br> .await?;<br> Ok(usize::try_from(count)?)<br>}</pre> |
-| 5 | Once `count_in_flight >= max_in_flight_transactions` the loop body never runs, so no queued transaction is ever allocated again. | E2 | `crates/core/src/tx/mod.rs:204-216` | <pre>async fn submit_pending(&mut self, block: u64) -> Result&lt;, Error&gt; {<br> let in_flight = self.storage.count_in_flight.await?;<br> for _ in in_flight..self.config.max_in_flight_transactions {<br> let nonce = self.nonce.await?;<br> let Some(transaction) = self<br> .storage<br> .next_transaction(Status { nonce, block })<br> .await?<br> else {<br> break;<br> };<br> self.submit_transaction(transaction, block).await?;<br> }</pre> |
-| 6 | The only mechanism that clears an execution marker is a _block-number_ regression; nothing releases an allocated nonce, and nothing reacts to the chain nonce moving down. | E2 | `crates/core/src/tx/mod.rs:166-179` | <pre>// Invalidate execution markers for transactions as necessary.<br>if let Some(block) = match previous {<br> // On startup, conservatively invalidate all transactions executed<br> // past the `safe` block, as there may have been reorgs.<br> None => status.safe.checked_add(1),<br> // In case of a reorg (where the status has a latest block before<br> // the last status we've seen) indicates a reorg to `latest`, so<br> // invalidate markers accordingly.<br> Some(previous) if previous.latest > status.latest => status.latest.checked_add(1),<br> // In all other cases, there are no markers to invalidate.<br> _ => None,<br>} {<br> self.storage.unmark_executed(block).await?;<br>}</pre> |
-| 7 | The wedged rows are re-signed and re-broadcast on every advancing block for the rest of the process's life, each attempt logged only at `warn`. | E2 | `crates/core/src/tx/storage.rs:293-298` | <pre>sqlx::query_scalar::&lt;_, String&gt;(<br> "SELECT json_set(request, '$.nonce', nonce)<br> FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL<br> AND (submitted_at IS NULL OR submitted_at <= ?)<br> ORDER BY nonce ASC",<br>)</pre> |
+| 3 | Pruning removes only executed rows and unallocated expired rows. A row with a nonce and `executed_at IS NULL` matches neither `DELETE`. | E2 | `crates/core/src/tx/storage.rs:249-265` | <pre>// Prune transactions executed at or below the reorg-safe block.<br>sqlx::query("DELETE FROM transactions WHERE executed_at IS NOT NULL AND executed_at <= ?")<br> .bind(safe)<br> .execute(&mut \*tx)<br> .await?;<br><br>// Remove queued (not-yet-submitted) transactions that expired at or<br>// before the reorg-safe block. Never-expiring transactions have a<br>// `NULL` `expires_at` and are excluded explicitly rather than relying<br>// on the fact that SQL comparisons against `NULL` are never true.<br>sqlx::query(<br> "DELETE FROM transactions<br> WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?",<br>)</pre> |
+| 4 | Such a row counts as in flight forever, and the in-flight cap is the only gate on new allocations. | E2 | `crates/core/src/tx/storage.rs:108-116` | <pre>pub async fn count*in_flight(&self) -> Result&lt;usize, Error&gt; {<br> let count = sqlx::query_scalar::&lt;*, i64&gt;(<br> "SELECT COUNT(\*) FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL",<br> )<br> .fetch_one(&self.pool)<br> .await?;<br> Ok(usize::try_from(count)?)<br>}</pre> |
+| 5 | Once `count_in_flight >= max_in_flight_transactions` the loop body never runs, so no queued transaction is ever allocated again. | E2 | `crates/core/src/tx/mod.rs:204-216` | <pre>async fn submit*pending(&mut self, block: u64) -> Result&lt;, Error&gt; {<br> let in_flight = self.storage.count_in_flight.await?;<br> for * in in_flight..self.config.max_in_flight_transactions {<br> let nonce = self.nonce.await?;<br> let Some(transaction) = self<br> .storage<br> .next_transaction(Status { nonce, block })<br> .await?<br> else {<br> break;<br> };<br> self.submit_transaction(transaction, block).await?;<br> }</pre> |
+| 6 | The only mechanism that clears an execution marker is a _block-number_ regression; nothing releases an allocated nonce, and nothing reacts to the chain nonce moving down. | E2 | `crates/core/src/tx/mod.rs:166-179` | <pre>// Invalidate execution markers for transactions as necessary.<br>if let Some(block) = match previous {<br> // On startup, conservatively invalidate all transactions executed<br> // past the `safe` block, as there may have been reorgs.<br> None => status.safe.checked*add(1),<br> // In case of a reorg (where the status has a latest block before<br> // the last status we've seen) indicates a reorg to `latest`, so<br> // invalidate markers accordingly.<br> Some(previous) if previous.latest > status.latest => status.latest.checked_add(1),<br> // In all other cases, there are no markers to invalidate.<br> * => None,<br>} {<br> self.storage.unmark_executed(block).await?;<br>}</pre> |
+| 7 | The wedged rows are re-signed and re-broadcast on every advancing block for the rest of the process's life, each attempt logged only at `warn`. | E2 | `crates/core/src/tx/storage.rs:293-298` | <pre>sqlx::query*scalar::&lt;*, String&gt;(<br> "SELECT json_set(request, '$.nonce', nonce)<br> FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL<br> AND (submitted_at IS NULL OR submitted_at <= ?)<br> ORDER BY nonce ASC",<br>)</pre> |
 | 8 | The design deliberately trusts the chain nonce so that nonces consumed outside the queue are respected; there is no counterpart guarding the opposite direction. | E2 | `crates/core/src/tx/storage.rs:126-130` | <pre>/// The nonce is the first free nonce at or above `status.nonce` (the<br>/// account's current onchain transaction count, passed in so nonces<br>/// consumed by transactions submitted outside the queue are respected),<br>/// accounting for the nonces of other in-flight transactions. Selecting the<br>/// nonce and reserving it for the transaction happen atomically.</pre> |
 | 9 | The table has no `UNIQUE` constraint and no index, so nothing at the database level would reject or even notice a bad allocation. | E2 | `crates/core/src/tx/storage.rs:69-80` | <pre>sqlx::query(<br> "CREATE TABLE IF NOT EXISTS transactions (<br> id INTEGER PRIMARY KEY,<br> request TEXT NOT NULL,<br> expires_at INTEGER DEFAULT NULL,<br> nonce INTEGER DEFAULT NULL,<br> submitted_at INTEGER DEFAULT NULL,<br> executed_at INTEGER DEFAULT NULL<br> )",<br>)</pre> |
 
@@ -129,3 +129,82 @@ Option 6 (document the operator recovery procedure) is the one thing here that i
 ## Reconciliation (run 2)
 
 **Final: Plausible, Medium, 60 (E2; the gap half E1), canonical for the queue wedge.** Rediscovered in parts by run 2: `F2-CORE-061` executes the permanent gap (`poc/F2-CORE-061`: a second action allocated nonce 1 while the chain reads 0, row 0 pruned, row 1 stuck and bumped) and narrows its trigger (the gap closes unless an action is queued inside the retention window); `F2-CORE-064` states the missing cancellation / no-op-replacement path. Not filed standalone by run 2. Still valid at `fe9e84c` (`tx/storage.rs:145-149`, `249-253` unchanged). A17: instance 2 (external use of the signer key) is not database access and stays in scope under A1. Counterparts: `F2-CORE-061`, `F2-CORE-064`.
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | The mechanism is unchanged; the 7702 stack moved it: `622cf89` #993 (allocation over the new `allocated_nonces` table, `nonce INTEGER PRIMARY KEY`), `ce01715` #995 (bundles and authorization rows), `d791e67` #999 (the chain nonce now comes from `eth_getProof` at `block_status.latest`). `4847664` #996 adds the queue's first release path, but only for an unused authorization nonce; it does not reach this row's gaps. |
+| Severity, certainty | Unchanged: Medium, 60 (Plausible; the gap half E1) |
+| Evidence | E1 `poc/F2-CORE-061/run3/` (the permanent gap, re-run, plus a batched variant) and `poc/F2-CORE-064/run3/` (no cancellation path) |
+
+Re-based anchors (old location at `fe9e84c`, new location at `361aaf3`, verbatim quote).
+
+- `tx/storage.rs:144-156` (monotone high-water allocation) to `crates/core/src/tx/storage.rs:190-195`:
+
+```rust
+        let nonce = sqlx::query_scalar::<_, i64>(
+            "SELECT MAX(?, COALESCE((SELECT MAX(nonce) + 1 FROM allocated_nonces), 0))",
+        )
+        .bind(i64::try_from(status.nonce)?)
+        .fetch_one(&mut *tx)
+        .await?;
+```
+
+- `tx/mod.rs:303-314` (chain nonce taken from the RPC by block number, no sanity check) to `crates/core/src/tx/mod.rs:368-386`, now `eth_getProof`:
+
+```rust
+                let block_id = self
+                    .block_status
+                    .map(|block_status| BlockId::from(block_status.latest))
+                    .unwrap_or_else(BlockId::latest);
+                let proof = self
+                    .provider
+                    .get_proof(self.signer.address(), vec![])
+                    .block_id(block_id)
+                    .await?;
+                let account = AccountStatus::new(proof.nonce, proof.code_hash);
+```
+
+- `tx/storage.rs:249-265` (prune never deletes an allocated, unexecuted row) to `crates/core/src/tx/storage.rs:329-356`: `DELETE FROM allocated_nonces WHERE executed_at IS NOT NULL AND executed_at <= ?` and `DELETE FROM transactions WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?`.
+- `tx/storage.rs:108-116` (such a row is in flight forever) to `crates/core/src/tx/storage.rs:131-139`:
+
+```rust
+    pub async fn count_in_flight(&self) -> Result<usize, Error> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM allocated_nonces
+             WHERE request IS NOT NULL AND executed_at IS NULL",
+        )
+```
+
+- `tx/mod.rs:204-216` (the in-flight cap gates allocation) to `crates/core/src/tx/mod.rs:235-246`, now `while in_flight < self.config.mode.max_in_flight_transactions()`, with a limit of 1 in batched mode (`crates/core/src/tx/config.rs:62-75`).
+- `tx/mod.rs:166-179` (markers cleared only on a block-number regression) to `crates/core/src/tx/mod.rs:187-200` (unchanged text).
+- `tx/storage.rs:293-298` (wedged rows rebroadcast every advancing block) to `crates/core/src/tx/storage.rs:398-402`.
+- `tx/storage.rs:126-130` (external nonce use documented as supported) to `crates/core/src/tx/storage.rs:151-155`:
+
+```rust
+    /// The nonce is the first free nonce at or above `status.nonce` (the
+    /// account's current onchain transaction count, passed in so nonces
+    /// consumed by transactions submitted outside the queue are respected),
+    /// accounting for the nonces already allocated. Selecting the nonce and
+    /// reserving it for the transactions happen atomically.
+```
+
+- `tx/storage.rs:69-80` (basis row 9, "no `UNIQUE` constraint and no index") to `crates/core/src/tx/storage.rs:85-101`: **no longer holds**. `allocated_nonces` is keyed `nonce INTEGER PRIMARY KEY` and `transactions.nonce` `REFERENCES allocated_nonces (nonce)`. That was remediation option 5, which this file already said does not fix the wedge.
+- The new release path, `crates/core/src/tx/storage.rs:301-312`, only matches `WHERE nonce = ? AND delegate IS NOT NULL AND request IS NULL`, i.e. an authorization row at exactly the account nonce. A gap at a transaction nonce (this row's two instances, and `F2-CORE-061`'s false mark) has no such row and is not touched.
+
+What was run (worktree at `361aaf3`, `poc/F2-CORE-061/run3/tx_mod_tests_run3.rs` appended to `crates/core/src/tx/mod.rs`'s `mod tests`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`.
+- `rv3_f2_core_061_false_execution_mark_is_irrevocable_and_opens_a_nonce_gap`: ok, identical to run 2. One reading of nonce 1 marks row 0 executed; the next action is allocated nonce 1 while the chain reads 0; after block 30 row 0 is pruned and row 1 is stuck, rebroadcast seven times (`maxFeePerGas=414`).
+- `rv3_f2_core_061_gap_closes_when_nothing_is_queued_inside_the_retention_window`: ok, the run-2 counter-case still holds (the gap closes if nothing is queued while the false-marked row is retained).
+- Variant, batched mode (`rv3_f2_core_061_batched_variant_false_mark_drops_the_whole_batch`): ok. One reading of nonce 1 marks a three-call batch at nonce 0 executed and turns its authorization row into a cancellation at nonce 1. Canonical readings of 0 never revoke the mark; at safe 12 the batch row and its three calls are pruned, the cancellation at nonce 1 stays in flight behind the gap at 0, and a newly queued action is not even allocated (the batched in-flight limit of 1 is used up). The wedge is total after one bad reading.
+- `poc/F2-CORE-064/run3/`: no cancellation path exists for a transaction row (see `F-CORE-064`).
+
+Notes:
+
+- The finding's spine, "no release path from an allocated transaction nonce, by any route", still holds; the only new release path is for authorization nonces and is the reason `F-CORE-069` is moot.
+- Batched mode makes the wedge immediate (one stuck row instead of `max_in_flight_transactions` rows) and costs a whole batch per occurrence. Severity is left at Medium because the triggers still need an inconsistent RPC view or external key use, as run 1 rated it.
+- No queue metric was added (#1003 adds only batch size and gas histograms, `crates/core/src/metrics.rs:81-96`), so remediation option 2 is still open. Counterparts `F2-CORE-061`, `F2-CORE-064`.

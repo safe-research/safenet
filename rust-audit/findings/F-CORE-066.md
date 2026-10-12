@@ -25,10 +25,10 @@ The sibling structs in this crate are validated with `NonZero` types where zero 
 | # | Claim | Class | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
 | 1 | The config declares plain `usize`/`u64`/`Option<f64>` with no `NonZero`, no range check and no validation hook; `deny_unknown_fields` only rejects unknown keys. | E2 | `crates/core/src/tx/mod.rs:69-83` | <pre>#[derive(Clone, Debug, Deserialize, PartialEq)]<br>#[serde(default, deny_unknown_fields)]<br>pub struct Config {<br> /// The maximum number of transactions that may be in flight (submitted<br> /// onchain but not yet executed) at any one time. The queue only submits new<br> /// transactions while it is below this limit.<br> pub max_in_flight_transactions: usize,<br> /// How many blocks a submitted transaction may go unexecuted before it is<br> /// resubmitted with a bumped fee.<br> pub blocks_before_resubmit: u64,<br> /// Caps the priority fee of estimated fees to at most this percentage of the<br> /// total max fee per gas, lowering the priority fee (and max fee) when an<br> /// estimate exceeds it. `None` applies no cap.<br> pub priority_fee_cap_percentage: Option&lt;f64&gt;,<br>}</pre> |
-| 2 | With `max_in_flight_transactions = 0` the range `in_flight..0` is empty for every `in_flight`, so the body never runs and `next_transaction` is never called. | E2 | `crates/core/src/tx/mod.rs:204-216` | <pre>async fn submit_pending(&mut self, block: u64) -> Result&lt;, Error&gt; {<br> let in_flight = self.storage.count_in_flight.await?;<br> for _ in in_flight..self.config.max_in_flight_transactions {<br> let nonce = self.nonce.await?;<br> let Some(transaction) = self<br> .storage<br> .next_transaction(Status { nonce, block })<br> .await?<br> else {<br> break;<br> };<br> self.submit_transaction(transaction, block).await?;<br> }</pre> |
+| 2 | With `max_in_flight_transactions = 0` the range `in_flight..0` is empty for every `in_flight`, so the body never runs and `next_transaction` is never called. | E2 | `crates/core/src/tx/mod.rs:204-216` | <pre>async fn submit*pending(&mut self, block: u64) -> Result&lt;, Error&gt; {<br> let in_flight = self.storage.count_in_flight.await?;<br> for * in in_flight..self.config.max_in_flight_transactions {<br> let nonce = self.nonce.await?;<br> let Some(transaction) = self<br> .storage<br> .next_transaction(Status { nonce, block })<br> .await?<br> else {<br> break;<br> };<br> self.submit_transaction(transaction, block).await?;<br> }</pre> |
 | 3 | With `blocks_before_resubmit = 0`, `submitted_before == block`, so `submitted_at <= block` matches every row submitted at or before the current block — i.e. all of them, every block. | E2 | `crates/core/src/tx/mod.rs:224-229` | <pre>async fn resubmit_stale(&mut self, block: u64) -> Result&lt;, Error&gt; {<br> let submitted_before = block.checked_sub(self.config.blocks_before_resubmit);<br> let stale = self.storage.stale_submissions(submitted_before).await?;<br> if stale.is_empty {<br> return Ok();<br> }</pre> |
 | 4 | Each such resubmission applies the compounding bump. | E2 | `crates/core/src/tx/fees.rs:52-56` | <pre>/// Returns `fresh`, raised to at least 10% above `previous`.<br>fn bump_fee(fresh: u128, previous: u128) -> u128 {<br> let bumped = previous.saturating_add(previous.div_ceil(10));<br> fresh.max(bumped)<br>}</pre> |
-| 5 | `NaN.max(0.0)` is `0.0` in Rust (`f64::max` returns the non-NaN operand), so a `nan` cap scales to 0, `capped` is 0, and the priority fee is forced to 0. A negative cap takes the same path. | E2 | `crates/core/src/tx/fees.rs:12-25` | <pre>pub fn cap_priority_fee(fees: Eip1559Estimation, cap_percentage: f64) -> Eip1559Estimation {<br> // Scale the percentage into integer space for the fee math, allowing up to<br> // six digits of precision in `cap_percentage`.<br> const PRECISION: u128 = 1_000_000;<br> let scaled_percent = ((cap_percentage.max(0.0) / 100.0) * PRECISION as f64).round as u128;<br> if scaled_percent >= PRECISION {<br> return fees;<br> }<br><br> let base_fee = fees<br> .max_fee_per_gas<br> .saturating_sub(fees.max_priority_fee_per_gas);<br> let capped = base_fee.saturating_mul(scaled_percent) / (PRECISION - scaled_percent);<br> let max_priority_fee_per_gas = fees.max_priority_fee_per_gas.min(capped);</pre> |
+| 5 | `NaN.max(0.0)` is `0.0` in Rust (`f64::max` returns the non-NaN operand), so a `nan` cap scales to 0, `capped` is 0, and the priority fee is forced to 0. A negative cap takes the same path. | E2 | `crates/core/src/tx/fees.rs:12-25` | <pre>pub fn cap_priority_fee(fees: Eip1559Estimation, cap_percentage: f64) -> Eip1559Estimation {<br> // Scale the percentage into integer space for the fee math, allowing up to<br> // six digits of precision in `cap_percentage`.<br> const PRECISION: u128 = 1_000_000;<br> let scaled_percent = ((cap_percentage.max(0.0) / 100.0) \* PRECISION as f64).round as u128;<br> if scaled_percent >= PRECISION {<br> return fees;<br> }<br><br> let base_fee = fees<br> .max_fee_per_gas<br> .saturating_sub(fees.max_priority_fee_per_gas);<br> let capped = base_fee.saturating_mul(scaled_percent) / (PRECISION - scaled_percent);<br> let max_priority_fee_per_gas = fees.max_priority_fee_per_gas.min(capped);</pre> |
 | 6 | The crate's own test fixes the zero/negative behaviour as intended at the `fees.rs` level, so nothing below the config layer will ever reject it. | E2 | `crates/core/src/tx/fees.rs:83-89` | <pre>#[test]<br>fn priority_fee_cap_saturates_at_its_bounds {<br> // A cap of 0% disables the priority fee, leaving just the base fee of 40.<br> assert_eq!(cap_priority_fee(fees(100, 60), 0.0), fees(40, 0));<br><br> // A negative cap is clamped to 0% and behaves identically.<br> assert_eq!(cap_priority_fee(fees(100, 60), -25.0), fees(40, 0));</pre> |
 | 7 | The cap is applied silently; the only trace of it is a `debug` log, and only when it actually lowered the fee. | E2 | `crates/core/src/tx/mod.rs:327-340` | <pre>let fees = match self.config.priority_fee_cap_percentage {<br> Some(cap) => {<br> let capped = cap_priority_fee(fees, cap);<br> if capped.max_priority_fee_per_gas < fees.max_priority_fee_per_gas {<br> tracing::debug!(<br> original = fees.max_priority_fee_per_gas,<br> capped = capped.max_priority_fee_per_gas,<br> "priority fee capped"<br> );<br> }<br> capped<br> }<br> None => fees,<br>};</pre> |
 | 8 | The neighbouring index config _does_ use `NonZero` for values where zero is meaningless, so this is an inconsistency within the crate. | E2 | `crates/core/src/index/events.rs:94-99` | <pre>impl Default for Config {<br> fn default -> Self {<br> Self {<br> block_page_size: NonZeroU64::new(100).expect("100 is nonzero"),<br> block_single_query_retry_count: NonZeroU64::new(3).expect("3 is nonzero"),<br> use_client_filtering: false,</pre> |
@@ -114,3 +114,63 @@ Option 4 (queue-depth and effective-fee gauges) is the same metric set **F-CORE-
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Medium, 90 (E1), canonical.** Rediscovered by run 2 as `F2-CORE-065` (CONFIRMS, executed for all three values including TOML `nan` through the validator's real loader: 0 submissions in 3 blocks, a bump on every block, tip 0). Run 2 rated Low under A1; Medium is carried because `max_in_flight_transactions = 0` silently removes the service's entire on-chain function while every exported signal reports health — not "limited impact" (`state/run2/reconciliation/core.md` §1). 78 → 90. Still valid at `fe9e84c`. Counterpart: `F2-CORE-065`; the NaN case is `F-CORE-061`/`F2-CORE-062`'s entry point.
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | `9ed4b80` #991 moved `tx::Config` to `crates/core/src/tx/config.rs`; `e9101e2` #992 added `SubmissionMode` and a `TryFrom<RawConfig>` that validates only the mode combination and rejects a zero `executor`. None of the three values in this row is validated. `cd46431` #1023 added a startup check on `max_batch_gas` against the block gas limit, which is a different field. |
+| Severity, certainty | Unchanged: Medium, 90 |
+| Evidence | E1 `poc/F2-CORE-065/run3/` (run-2 PoC adapted and re-run, including TOML `nan` through the validator's real loader) |
+
+Re-based anchors (old location at `fe9e84c`, new location at `361aaf3`, verbatim quote).
+
+- `tx/mod.rs:69-83` (no validation beyond serde types) to `crates/core/src/tx/config.rs:13-25` and `:78-86` (`RawConfig`, `#[serde(default, deny_unknown_fields)]`, `max_in_flight_transactions: Option<usize>`, `blocks_before_resubmit: u64`, `priority_fee_cap_percentage: Option<f64>`), and the conversion at `crates/core/src/tx/config.rs:104-134`:
+
+```rust
+            (max_in_flight_transactions, None, None) => SubmissionMode::Direct {
+                max_in_flight_transactions: max_in_flight_transactions
+                    .unwrap_or(DEFAULT_MAX_IN_FLIGHT_TRANSACTIONS),
+            },
+            (_, None, Some(_)) => return Err("`max_batch_gas` requires `executor`"),
+            (Some(_), Some(_), _) => {
+                return Err("`max_in_flight_transactions` cannot be combined with `executor`");
+            }
+```
+
+and, after the zero-executor arm:
+
+```rust
+        Ok(Self {
+            mode,
+            blocks_before_resubmit: raw.blocks_before_resubmit,
+            priority_fee_cap_percentage: raw.priority_fee_cap_percentage,
+        })
+```
+
+- `tx/mod.rs:204-216` (zero in-flight limit never allocates) to `crates/core/src/tx/mod.rs:235-237`: `while in_flight < self.config.mode.max_in_flight_transactions()`, which is `while 0 < 0` for `Direct { max_in_flight_transactions: 0 }`.
+- `tx/mod.rs:224-229` (zero resubmit interval) to `crates/core/src/tx/mod.rs:291-293` (unchanged text).
+- `tx/fees.rs:52-56` (each resubmission bumps) unchanged at `crates/core/src/tx/fees.rs:52-56`.
+- `tx/fees.rs:12-25` (`NaN.max(0.0)` is 0, tip forced to 0) unchanged at `crates/core/src/tx/fees.rs:12-25`.
+- `tx/fees.rs:83-89` (test pins the zero and negative behaviour) to `crates/core/src/tx/fees.rs:84-89`.
+- `tx/mod.rs:327-340` (the cap's only trace is a `debug` log) to `crates/core/src/tx/mod.rs:396-409`.
+- `index/events.rs:94-99` (`NonZeroU64` used next door) to `crates/core/src/index/events.rs:87-90, 108-109`.
+- `validator.sample.toml:72-77` to `crates/validator/validator.sample.toml:77-104`; the sample now documents `max_in_flight_transactions`, `executor` and `max_batch_gas` but still says nothing about zero values or a non-finite cap.
+
+What was run (worktree at `361aaf3`, PoC snippets appended to the `mod tests` of `crates/core/src/tx/mod.rs` and `crates/validator/src/config.rs`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`: `rv3_f2_core_065_degenerate_config_values_are_accepted_and_misbehave_silently` ok. JSON `{"max_in_flight_transactions":0,"blocks_before_resubmit":0}` parses to `Config { mode: Direct { max_in_flight_transactions: 0 }, blocks_before_resubmit: 0, .. }`; `max_in_flight_transactions = 0` gives 3 blocks, 3 account requests and 0 submissions; `blocks_before_resubmit = 0` bumps on every block, 210/10 to 281/15 by block 13; a NaN cap gives `{40, 0}`. Identical to run 2.
+- `cargo test -p validator --bins rv3_ -- --nocapture`: `rv3_f_core_066_toml_accepts_zero_and_nan_transaction_values` ok; the validator's TOML loader returns `Config { mode: Direct { max_in_flight_transactions: 0 }, blocks_before_resubmit: 0, priority_fee_cap_percentage: Some(NaN) }`.
+
+Notes:
+
+- The new `TryFrom<RawConfig>` is the natural place for the missing checks and shows the pattern is now in use in the same struct (it already rejects `executor = 0x0` with an explicit message), which strengthens remediation option 1.
+- `max_batch_gas = 0` is a documented setting ("`0` sends every transaction through the executor without batching", `crates/core/src/tx/config.rs:55-58`) and is not part of this row. `blocks_before_resubmit = 0` and a NaN or non-positive cap apply in batched mode too, through the same resubmission and fee path.
+- Counterpart `F2-CORE-065`; the NaN case is `F-CORE-061`'s zero-tip entry point.
+
+## Run 3 counterpart
+
+- Rediscovered blind by run 3 as [`F3-CORE-061`](F3-CORE-061.md) (CONFIRMS). This ID stays canonical.
+- Ledger values: Informational, certainty 90 (`F3-CORE-061`'s CA3 value: operator values under A1).

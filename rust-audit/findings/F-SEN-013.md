@@ -240,3 +240,15 @@ The merge adds two further attacker- or arbitrator-influenced dynamic fields to 
 ## Reconciliation (run 2)
 
 **Final combined status: Refuted (as filed), retained Informational, 98% in the refutation (E1), canonical `F-SEN-013`.** Run 2 correctly did not re-file it. The refutation holds at `fe9e84c`: `alloy-sol-types` is unchanged in `Cargo.lock` (the delta adds two edges to the out-of-scope `sentinel-engine` only — no package or version change, `state/run2/baseline-delta.md` §1.3), so the lossy `detokenize` path that `watcher_events!` reaches through the non-validating `decode_raw_log` is the one in use; `crates/core/src/index/events.rs` is byte-identical. The batch-poisoning design residual remains with the core mechanism finding (run 1 `F-CORE-004`; REC-CORE maps it to run 2). Team disposition: none.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid (as a refutation; non-live row) |
+| Changed by | Nothing that affects it: `alloy-sol-types` is still 1.6.0 in `Cargo.lock` at both `fe9e84c` and `361aaf3`. |
+| Severity, certainty | Informational (refuted as filed), 98 in the refutation, unchanged |
+| Evidence | E2: `git show fe9e84c:Cargo.lock` and `git show 361aaf3:Cargo.lock` both list `alloy-sol-types` version `1.6.0`; the lossy-decoding refutation executed in run 1 stands |
+
+The Event Timestamps stack (#1047 to #1052) changed log metadata handling in `crates/core/src/index/events.rs`, not `string` decoding, and the watched event set still decodes `Revealed.reason` and `DisputeResolved.context` through the same `decode_raw_log` path. Not re-executed.

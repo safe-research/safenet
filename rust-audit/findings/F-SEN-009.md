@@ -123,3 +123,48 @@ Consequence 3 is if anything sharper after the merge: it names the replay paths 
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed, Low, 82% (E1), `known`, canonical `F-SEN-009`.** Rediscovered by run 2 across three files rather than one: `F2-SEN-006` claim 6 executed consequence 1 (`voting_window = 0` accepted by `toml::from_str`; engine timeout collapses to the 1 s floor for `w ∈ {0, 1}`), `F2-SEN-008` claim 3 restates that the timeout is a fraction of the configured window with no relation to the onchain `COMMIT_WINDOW` (`crates/sentinel/src/main.rs:45-60`, unchanged at `fe9e84c`), and the `Preparing` documentation mismatch (`config.rs:54-56`) is carried by `F2-SEN-009` bullet 3, canonicalised into `F2-XC-008` (REC-XC). The `TODO` at `main.rs:45-49` is still open. Basis rises to E1 on the executed `voting_window` collapse; certainty stays 82 (run 1's number, now executed). Remediation convergence: validate `voting_window ≥ 2` now; derive the engine budget from the request's own `commit_deadline` (option 3), which also shrinks `F-SEN-015` variant 2's window and is what `F2-SEN-008` option 1 needs. Team disposition: none. See `state/run2/reconciliation/sentinel.md` §1, §2.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | Not fixed. #1062 (`fcc7028`) sets the sample to `voting_window = 6` and documents it as "set it to the oracle's commit window"; #1010 (`96e16c8`) moved `block_time` into per-chain timings. The value is still unvalidated and the `TODO` is open. |
+| Severity, certainty | Low, 82 unchanged, `known` |
+| Evidence | E1: `poc/F2-SEN-006/run3/output.txt`, `poc/F-SEN-010/run3/startup.txt` (`voting_window = 0` starts), `poc/F2-SEN-008/run3/output.txt` (header equals the client timeout) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- The derivation: `crates/sentinel/src/main.rs:45-60` to `:48-65`:
+
+```rust
+    let engine_timeout = {
+        let block_time = config.driver.index.blocks.timings(chain_id)?.block_time;
+        Duration::from_millis(
+            u64::try_from(
+                u128::from(config.sentinel.voting_window.saturating_sub(1))
+                    .saturating_mul(u128::from(block_time))
+                    .saturating_mul(3)
+                    / 4,
+            )
+            .unwrap_or(u64::MAX)
+            .max(1_000),
+        )
+    };
+```
+
+- The field: `crates/sentinel/src/config.rs:54-56` to `:47-49` (a plain `pub voting_window: u64,`, no validation; `Config::load` is TOML parsing only, `config.rs:54-58` and `crates/core/src/config.rs:63-77`).
+- The local pre-request deadline: `service.rs:127` to `:135` (`let deadline = block.saturating_add(self.voting_window);`).
+- Documentation still disagrees: `main.rs:50-51` says "three quarters of the configured time until the block before the reveal deadline", while `sentinel.sample.toml:38-40` says to set it to the commit window.
+
+What was run:
+
+- `qa2_sen::f2_sen_006` FAILED as before: `voting_window = 0` accepted; the timeout is 1,000 ms for 0 and 1, 371,250 ms for 100. With the sample's 6 on Gnosis it is 18,750 ms, as `state/run3/settled.md` records.
+- The real binary started and indexed with `voting_window = 0` (see `F-SEN-007`'s run 3 section).
+- `qa2_sen::f2_sen_008`: the `x-request-timeout` header equals the client timeout (4321 ms), so the engine gets no margin.
+
+Notes:
+
+- The verdict store (#979) does not use the timeout: a replayed check reuses the recorded verdict without calling the engine, so consequence 3 (a re-spawned check given the full budget after its commit deadline passed) now applies only to checks that never produced a verdict.
+- Counterparts: `F2-SEN-006` claim 6, `F2-SEN-008` claim 3, `F-SEN-010`, `F2-XC-008` (documentation, cross-cutting row).

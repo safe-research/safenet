@@ -102,3 +102,27 @@ Option 5 (incremental re-scan) is sound but is the wrong cost/benefit for a rare
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Low, 70 (E2), canonical.** Rediscovered by run 2 as `F2-CORE-009` (CONFIRMS: `blocks.rs:311-326`, unbounded, undelayed rescan); run 2's Critic contrasts the `MissingBlock` fail-stop when the node's chain shrinks, this file carries the `debug`-only log and the `/health`-already-`OK` point. Plausible 60 → Confirmed 70. Still valid at `fe9e84c`. Counterpart: `F2-CORE-009`.
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed the start-up scan (`blocks.rs` lines moved with #1010 and #1048; the restart branch is byte-identical in content) |
+| Severity, certainty | unchanged (Low, 70) |
+| Evidence | E2 trace below (no PoC exists for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/blocks.rs:311-327` to `:365-380`: `if parent_hash.is_none_or(|hash| hash == block.parent_hash) {` ... `} else {` / `// Reorg observed mid-init: discard and re-query the range. We` ... `tracing::debug!(` / `number,` / `"reorg observed during initialization, restarting range scan"` / `);` / `parent_hash = None;` / `canonical_latest = None;` / `self.recent.clear();` / `number = safe;`
+- `index/blocks.rs:294-309` to `:348-363`: `let mut number = safe;` / `while number <= latest_number {` ... `None => self.require_block(BlockId::number(number)).await?,`
+- `index/blocks.rs:244-246` to `:298-300`: `let safe = latest.number.saturating_sub(self.config.max_reorg_depth);`
+- `observability/mod.rs:29-36`: unchanged, `log_filter: EnvFilter::new("info"),`
+- `crates/validator/src/main.rs:41-45` and `:71-79`: unchanged positions, `observability::init(config.observability)?;` (`:41`) before `let mut driver = Driver::new(` (`:71`); the sentinel has the same order (`crates/sentinel/src/main.rs:41` and `:79`).
+- sample configs: `crates/validator/validator.sample.toml:64` and `crates/sentinel/sentinel.sample.toml:49` read `log_filter = "info"`.
+- `index/blocks.rs:839-879` (single-restart test) to `:939`: `async fn handles_reorgs_during_initialization() {`
+
+What was run: code trace only. The restart branch has no counter, no sleep and a `debug!` log; `require_block` errors only on `null` (`:294-296`), so a backend on another fork keeps the loop going; `Driver::new` (where the scan runs) is still awaited after `observability::init`, so `/health` answers before indexing starts.
+
+Notes: since #1010 the Gnosis defaults are per-network (`block_time` 5,000 ms, propagation 500 ms, retry ladder `[500, 500, 500, 1000, 250, 250]`), but none of them applies to this loop. Counterpart `F2-CORE-009` holds.

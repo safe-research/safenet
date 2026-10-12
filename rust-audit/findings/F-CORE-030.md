@@ -25,7 +25,7 @@ The operational consequences are asymmetric and both bad. Under `Restart=on-fail
 
 | # | Claim | Class | Citation | Verbatim quote |
 | --- | --- | --- | --- | --- |
-| 1 | `run` returns ``; the shutdown signal, an unrecoverable watcher error and an unrecoverable driver error all leave through `break` and are indistinguishable to the caller. | E2 | `crates/core/src/driver.rs:170-197` | <pre>pub async fn run(mut self) {<br> let shutdown = utils::shutdown_signal;<br> tokio::pin!(shutdown);<br><br> loop {<br> let input = tokio::select! {<br> biased;<br> _ = shutdown.as_mut => {<br> tracing::info!("received shutdown signal; stopping service");<br> break;<br> },<br> input = self.next_input => input,<br> };</pre> |
+| 1 | `run` returns ``; the shutdown signal, an unrecoverable watcher error and an unrecoverable driver error all leave through `break` and are indistinguishable to the caller. | E2 | `crates/core/src/driver.rs:170-197` | <pre>pub async fn run(mut self) {<br> let shutdown = utils::shutdown*signal;<br> tokio::pin!(shutdown);<br><br> loop {<br> let input = tokio::select! {<br> biased;<br> * = shutdown.as_mut => {<br> tracing::info!("received shutdown signal; stopping service");<br> break;<br> },<br> input = self.next_input => input,<br> };</pre> |
 | 2 | Both error paths only log and `break`. | E2 | `crates/core/src/driver.rs:186-196` | <pre>let result = match input {<br> Err(err) => {<br> tracing::error!(?err, "unrecoverable watcher error; exiting");<br> break;<br> }<br> Ok(input) => self.update(input).await,<br>};<br>if let Err(err) = result {<br> tracing::error!(?err, "unrecoverable driver error; exiting");<br> break;<br>}</pre> |
 | 3 | Everything reachable from `update` is fatal-by-`break`: `state::Error` from `handle_update`/`prune`, and non-intermittent `tx::Error` lifted by `lift_intermittent_error`. | E2 | `crates/core/src/driver.rs:247-257` | <pre>let result = self.transactions.update_block_status(block_status).await;<br>if let Err(err) = tx::lift_intermittent_error(result)? {<br> tracing::warn!(<br> ?err,<br> "transaction queue failed to handle new block; will continue"<br> );<br>}<br><br>let commands = self.state.handle_update(update).await?;<br>recorder.processed;<br>self.state.prune(block_status.safe).await?;</pre> |
 | 4 | The validator returns `Ok()` straight after `run`, so the process exit status is 0. | E2 | `crates/validator/src/main.rs:95-98` | <pre>tracing::info!("starting validator service");<br>driver.run.await;<br><br>Ok()</pre> |
@@ -66,7 +66,7 @@ Tests to add: a `driver.rs` unit test (the file currently has none — 0.0% line
 
 ## Critic (C-CORE-B)
 
-I derived the mechanism from `driver.rs:170-198` and both `main.rs` tails before reading the Claim, and reached the same conclusion: `run` returns ``, all four terminal conditions leave through the same `break`, and both binaries then `return Ok()` from an `async fn main -> Result<, Box<dyn Error>>` (`crates/validator/src/main.rs:33`, `crates/sentinel/src/main.rs:30`), so the process exit status is 0 after a fatal error.
+I derived the mechanism from `driver.rs:170-198` and both `main.rs` tails before reading the Claim, and reached the same conclusion: `run` returns ``, all four terminal conditions leave through the same `break`, and both binaries then `return Ok()`from an`async fn main -> Result<, Box<dyn Error>>` (`crates/validator/src/main.rs:33`, `crates/sentinel/src/main.rs:30`), so the process exit status is 0 after a fatal error.
 
 ### Per-claim verdicts
 
@@ -111,3 +111,26 @@ The finding's own note that the deep-reorg integration script should assert a no
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Medium, 85 (E2), canonical for the exit-status defect** (over `F-VAL-064` and run 2's `F2-VAL-066`). Rediscovered by run 2 as `F2-CORE-031` (CONFIRMS: `driver.rs:172-198`, both `main`s return `Ok(())`; adds the storage-error path and that `run_validator_deep_reorg_test.sh:86-94` never asserts the status). Run 2 rated it Low; its Critic offered Medium, #820 asked explicitly for an observable failure, and the fix is two lines, so Medium is carried (`state/run2/reconciliation/core.md` §1). The `/health` half is restated in `F2-CORE-033`. Anchor note: `driver.rs` lines ≥ 238 shifted by the housekeeping hook merged after `2893917`; mechanism unchanged. Counterparts: `F2-CORE-031`, `F2-CORE-033`.
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed this code: `driver.rs` and `observability/metrics.rs` are byte-identical to `fe9e84c`, and both `main`s still return `Ok(())` after `driver.run().await` |
+| Severity, certainty | severity unchanged (Medium); certainty 85 to 95 proposed: the exit status and the constant `/health` are now executed on the real binary (E1). `settled.md` section 2 lists this behaviour as known (A12), so the row keeps a `known` tag |
+| Evidence | E1 `poc/F2-VAL-066/run3/` (the run-2 sketch, executed for the first time) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `driver.rs:170-198` to `:172-200`: `pub async fn run(mut self) {` ... `Err(err) => {` / `tracing::error!(?err, "unrecoverable watcher error; exiting");` / `break;` / `}` ... `if let Err(err) = result {` / `tracing::error!(?err, "unrecoverable driver error; exiting");` / `break;`
+- `driver.rs:247-257` to `:249-263`: `let result = self.transactions.update_block_status(block_status).await;` / `if let Err(err) = tx::lift_intermittent_error(result)? {` ... `let commands = self.state.handle_update(update).await?;` ... `self.state.prune(block_status.safe).await?;`
+- `crates/validator/src/main.rs:95-98`: unchanged, `tracing::info!("starting validator service");` / `driver.run().await;` / `Ok(())` (`:95-98`)
+- `crates/sentinel/src/main.rs:85-88` to `:89-92`: `tracing::info!("starting sentinel service");` / `driver.run().await;` / `Ok(())`
+- `observability/metrics.rs:6-12`: unchanged, ``/// `/health`, which returns a plain `OK` for liveness probes.``
+- `scripts/run_validator_deep_reorg_test.sh` (reference): still asserts process death and the log line only, never `$?`
+
+What was run: `integ bash rust-audit/poc/F2-VAL-066/run3/rv-core-a-deep_reorg_exit_status.sh OUTDIR` (private network namespace, loopback only). It is the repository's deep-reorg test with three additions: `metrics_address = "127.0.0.1:9464"`, `curl /health` while running and after the reorg, and `wait` on the validator's PID. Result (`rv-core-a-output.txt`): `health while indexing: OK`, the reorg of 5 blocks with `max_reorg_depth = 2` produces `"message":"unrecoverable watcher error; exiting","err":"Blocks(ExceededMaxReorgDepth(2))"`, `health while the validator processes the reorg: OK`, and `validator exit status: 0`.
+
+Notes: the same deliberate exit followed by a restart is the entry point of `F-CORE-001`, which run 3 also executed on the real binary (`poc/F-CORE-001/run3/rv-core-a-restart-output.txt`: exit status 0, then a silent resume from the orphaned anchor). Counterparts `F2-CORE-031`, `F2-VAL-066` and the exit-status half of `F-VAL-064` are covered by this evidence.

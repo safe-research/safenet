@@ -180,3 +180,70 @@ The bond **is** claimed. The finding's headline impact — "a frozen request's b
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed (residual), Low, 80% (E1), canonical `F-SEN-003`.** Run 2 did not re-file the missing-`NewBlock`-on-warp defect as a standalone finding — a partial miss — but executed its route twice at `fe9e84c`: `F2-SEN-003` (b) (anchor `CollectingCommitments { self_committed: true }`, warp page carrying our own `Revealed@122` discarded at `crates/sentinel/src/service.rs:347-362`, duplicate `Reveal` at `NewBlock(125)`, entry dropped at `NewBlock(131)` after a live peer reveal — full bond plus fee share unclaimed) and `F2-SEN-011`'s trigger (the same warp route into `WaitingForDisputeResolution` without a reveal). The warp arm is unchanged (`crates/core/src/state/mod.rs:173-181`, `(state, status, vec![])`). The post-merge picture above stands: the FROZEN-bond loss is closed by `handle_dispute_triggered`'s recovery; the `timed_out` branch still emits a wrong `Finalize` and now parks in `WaitingForOutcome` (never expires, `F-SEN-005`); `RevealMissed` is mis-metered. PR #914 narrows the restart variant by one block (anchor must be `≤ commit_deadline − 1`). The drop that fires when a peer's reveal _is_ counted (`!self_revealed && !timed_out`, `649-655`) is now its own canonical finding, `F2-SEN-003` (Medium 90). Team disposition: @rmeissner's question to @nlordell ("why no `NewBlock` when warping?") is a design question; the audit's answer with run-2 evidence is in `state/run2/reconciliation/sentinel.md` §4 — the consequence is executed and current, and the two agreed fixes are a synthesised `NewBlock(to)` at warp end (core, emitted before the page's logs) or never dropping a bonded entry plus reconciling `Revealed(self)` in `CollectingCommitments` (`F2-SEN-003` options 1–2, option 1 compiled with all tests passing).
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Fixed |
+| Changed by | #1017 (`24eaf8d`, "[New Block 3]: Apply new block transitions for every warped block"), with #1015 (`73967cf`) for the post-warp tick |
+| Severity, certainty | n/a (was Low, 80) |
+| Evidence | E1: `poc/F2-SEN-003/run3/output.txt` (route b), `poc/F2-SEN-010/run3/rv-sen-variants.txt`, `poc/F2-SEN-004/run3/output.txt` |
+
+The residual defect was the warp delivering no `NewBlock`: reveals in the warped range were discarded, the first post-warp block took a bogus `timed_out` finalize, and a recovered request was metered `RevealMissed`. The warp arm no longer exists in that form; every warped block now gets its tick before its logs.
+
+Re-based anchors:
+
+- Old: `crates/core/src/state/mod.rs:173-181` (`fe9e84c`), the `Warp` arm returning `(state, status, vec![])` and nothing per block. New: the `Warp` arm only switches status (`state/mod.rs:178-186`), and the page loop ticks every block (`state/mod.rs:230-239`):
+
+```rust
+                for block in blocks {
+                    // Live blocks have their transition applied when observed,
+                    // but warped blocks never are. Apply each warped block's
+                    // transition before its logs, including blocks without any
+                    // logs, so that block-driven transitions (such as timeouts)
+                    // happen at exactly the same blocks.
+                    if warping {
+                        (state, commands) =
+                            self.accumulate_transition(state, commands, Message::NewBlock(block));
+                    }
+```
+
+- The sentinel side is unchanged: `Revealed` outside `CollectingVotes` is still discarded (`service.rs:347-362` to `:356-371`), but a warped entry now reaches `CollectingVotes` at `NewBlock(commit_deadline + 1)` before any reveal log.
+
+What was run (`wt/rv-sen`, pasted into `mod tests`, reverted):
+
+- Adapted route b (`qa2_sen::f2_sen_003b`, two setup preconditions marked `RUN 3:` because the page now re-emits the `Reveal` itself): passed. After the warp page carrying our own `Revealed@122`, the entry is `CollectingVotes { committed_count: 2, revealed_count: 1, self_revealed: true }`; at 131 it is still tracked, and `OracleResult@132` emits `Claim`. At `fe9e84c` the same route discarded the reveal and dropped the entry.
+- Variant: `rv_sen_run3::f2_sen_010_run3_b` (warp page across the commit deadline) passed: `NewBlock(107)` runs after block 106's logs inside the page and the reveals are counted.
+- Variant: `rv_sen_run3::f_sen_005_run3_dispute_times_out_live_and_in_a_warp` passed: an arbitration deadline inside a warp fires `TimeoutArbitration` + `Claim` from the page.
+- Variant: `rv_sen_run3::f_sen_003_run3_downtime_over_reveal_window_claims_after_arbitration` (this finding's own scenario at Aegis windows: our `Reveal` queued, the process stops before it is mined, peers reveal both sides and a peer finalizes into `FROZEN` during the outage). The bogus timeout is gone: both peer reveals are counted inside the page. The bond is still not claimed, but now through `F2-SEN-003`'s drop: at `NewBlock(113)` (reveal deadline + 1) the entry has `self_revealed = false` with 2 reveals counted and is removed before `DisputeTriggered`, so `DisputeResolved` is ignored as untracked. That test FAILED on its healthy-outcome assertion, and the loss is recorded under `F2-SEN-003`.
+
+Notes:
+
+- Before #1017 this scenario ended in a claim: with no tick inside the warp the entry stayed `CollectingCommitments`, and `handle_dispute_triggered` recovered it (run 1's `RV003` probe at `a7f3915`). #1017 makes a warping sentinel behave like a live one, and a live one drops a bonded entry whose own reveal is not onchain. The funds outcome of this finding's scenario therefore moves to `F2-SEN-003` (verdict Changed there). E2 for the before/after comparison; only the `361aaf3` side was executed here.
+- The comment at `service.rs:481-483` ("warp-mode catch-up doesn't deliver a `NewBlock` for every block") is stale since #1017. Behaviour is unaffected.
+- `F2-SEN-011` loses its warp trigger for the same reason (see its section).
+
+## Fix verification (CA3-FIX, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Result | Fixed confirmed for this row's mechanism (no block ticks during a warp) |
+| Fix | #1017 (`24eaf8d`): every warped block's `NewBlock` before its logs (`crates/core/src/state/mod.rs:228-243`); #1015 (`73967cf`): the optimistic tick after the last page (`:257-268`) |
+| Re-validation re-run | Matches rv-sen: route b (`qa2_sen::f2_sen_003b`) passes; `f_sen_003_run3` fails as rv-sen recorded (without our own reveal onchain the bond is lost through `F2-SEN-003`'s drop) |
+| New variants | 2 (our own reveal mined before the outage; the terminal events inside the warp, in two forms); all pass and all fail with the warp ticks removed |
+| Confidence | 92 |
+| Evidence | E1: `poc/F-SEN-003/ca3-fix/RESULT.txt` (source `poc/F-SEN-015/ca3-fix/ca3fix_sen.rs`) |
+
+What was run: rv-sen's fragments and `ca3fix_sen.rs` pasted into `mod tests` of `crates/sentinel/src/service.rs` (reverted), `cargo test -p sentinel --bins --locked --offline`, test filters `f2_sen_003b`, `f_sen_003_run3` and `ca3fix_sen_f_sen_003`, with `--nocapture` and `--test-threads=1`. Aegis windows.
+
+Variants the re-validation did not list:
+
+1. Our own reveal mined before the outage (the finding's "including the sentinel's own, if its reveal had been mined"), peers revealing both sides, the dispute raised and ruled after the restart. After the first warp page the entry is `CollectingVotes { committed_count: 3, revealed_count: 2, self_revealed: true }`; before the fix it stayed `CollectingCommitments` with every reveal discarded, and the recovered request was metered `RevealMissed` because `self_revealed` read false. The request is tracked into `WaitingForDisputeResolution`, no `Claim` is emitted before the ruling, and the ruling is claimed.
+2. The terminal events inside the warp: (a) `DisputeResolved` inside the page (the finding says it was discarded in a warp): claimed from the page and the entry cleared; (b) one peer never reveals and nobody finalizes inside the warp: the entry reaches `NewBlock(reveal_deadline + 1)` inside the page and finalizes with the reveals counted (the run-1 residual was a post-warp `CollectingVotes { revealed_count: 0 }` taking the "nobody revealed" timeout branch), and the later `OracleResult` is claimed.
+
+Mutation: with the per-block ticks in warps removed, both variants fail, as does rv-sen's route b.
+
+Notes: deleting this row leaves the bond loss of the no-own-reveal scenario to `F2-SEN-003` and `F3-SEN-003`, both still open. The comment at `service.rs:481-483` that warps deliver no `NewBlock` per block is stale (rv-sen).

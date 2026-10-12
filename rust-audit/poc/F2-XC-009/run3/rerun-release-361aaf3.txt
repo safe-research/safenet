@@ -1,0 +1,14 @@
+# rv-xc run 3, canonical F-XC-001: release profile (what the Dockerfiles build), same paste, at 361aaf3
+# command: cargo test --offline --locked --profile release -p safenet-core --lib index::blocks::tests::qa2_xc_009 -v -- --nocapture (run with run-bg; full verbose log kept outside the repo)
+# the rustc invocation for the safenet_core test target, flags only (paths shortened):
+--edition=2024 -C opt-level=3 -C embed-bitcode=no --test -C metadata=cd3bcef42c419460 -C extra-filename=-eefbcde2b6675fce -C strip=debuginfo 
+# '-C overflow-checks' occurrences in the whole verbose log: 0; '-C debug-assertions' on the safenet_core test invocation: 0
+    Finished `release` profile [optimized] target(s) in 1m 50s
+     Running `$RUN/target-rv-xc/release/deps/safenet_core-eefbcde2b6675fce 'index::blocks::tests::qa2_xc_009' --nocapture`
+
+running 1 test
+no panic: timestamp 18446744073709552 * 1000 + 2000 wrapped; pending = { number: 1001, timestamp_ms: 2384 } (cfg!(debug_assertions) = false)
+test index::blocks::tests::qa2_xc_009::header_timestamp_arithmetic_wraps_in_the_shipped_profile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+

@@ -1,0 +1,24 @@
+[review-cargo] 1 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a; rebuilding them
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.29s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/safenet_core-1a555efd99e0fbb6)
+
+running 1 test
+htps://gnosis-mainnet.example.invalid/v2/QA3-SECRET-KEY: display=failed to read IPC path htps://gnosis-mainnet.example.invalid/v2/QA3-SECRET-KEY: No such file or directory (os error 2) debug=Transport(Custom("failed to read IPC path htps://gnosis-mainnet.example.invalid/v2/QA3-SECRET-KEY: No such file or directory (os error 2)"))
+
+thread 'provider::qa3_tests::qa3_connect_error_does_not_quote_the_rpc_url' (253978) panicked at crates/core/src/provider/mod.rs:197:13:
+failed to read IPC path htps://gnosis-mainnet.example.invalid/v2/QA3-SECRET-KEY: No such file or directory (os error 2)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test provider::qa3_tests::qa3_connect_error_does_not_quote_the_rpc_url ... FAILED
+
+failures:
+
+failures:
+    provider::qa3_tests::qa3_connect_error_does_not_quote_the_rpc_url
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p safenet-core --lib`
+
+real	0m6.385s
+user	0m6.798s
+sys	0m1.109s

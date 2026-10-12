@@ -106,3 +106,19 @@ Option 4 (document next to the existing "ensure this survives restarts" guidance
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Low, 62 (E2), canonical — examined by run 2, partly rediscovered.** Run 2's R2 O10 records the same unversioned-snapshot property and did not file it because `F2-CORE-066` (= `F-CORE-065`) already asks for a schema version; `F2-CORE-066`'s Critic names the snapshot store explicitly as the same class. Still valid at `fe9e84c` (`state/storage.rs:47-79` unchanged). A17: the binary downgrade is in-band, in scope. Counterpart (version half): `F2-CORE-066` (`state/run2/reconciliation/core.md` §2).
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Settled |
+| Changed by | nothing in scope changed this code (`state/storage.rs` is byte-identical to `fe9e84c`); the row now falls under a settled item |
+| Severity, certainty | not re-scored (settled) |
+| Evidence | E2: `settled.md` section 1, item "Migration, backward compatibility, old databases, old snapshots, old configs. Every Aegis node starts fresh." (Aegis release rule; PROMPT.md section 12) |
+
+Re-based anchors (old location, new location, verbatim quote): `state/storage.rs:47-79` and `:103-116` are unchanged in lines and content, for example `:51-54` `"CREATE TABLE IF NOT EXISTS snapshots (` / `block_number INTEGER PRIMARY KEY,` / `state        TEXT    NOT NULL` / `)",` and `:106` `let state = serde_json::to_string(state)?;`; `state/mod.rs:134-143` to `:139-148`: `.unwrap_or_else(|| (init(), Status::Initialized));`.
+
+What was run: code trace only. The snapshot store still has no version marker and the start-fresh path is still taken only for an empty store.
+
+Notes: both consequences in the claim (an upgrade that changes a state type fails to start, a downgrade drops fields) concern a snapshot written by one binary version and read by another, which is the backward-compatibility class the run-3 settled list excludes for Aegis. The match is exact for every trigger in the row. If the team later supports in-place upgrades within Aegis, the mechanism above is still present and the row would return. The version half of `F2-CORE-066` (`F-CORE-065`, rv-core-b) is the same class for the transactions table.

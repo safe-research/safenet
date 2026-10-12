@@ -1,0 +1,6 @@
+$ cargo test -p validator --bins state::keygen:: -- --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3, PoC modules wired into crates/validator/src/state/keygen.rs, reverted afterwards)
+test state::keygen::poc_f_val_067_run3::responded_complaints_still_count_towards_abort ... abort at total == threshold (3) after 2 answered complaints; new rollover = Discriminant(4); 1 command(s)
+restarted without PEER2: {0x70997970c51812dc3a010c7d01b50e0d17dc79c8, 0x90f79bf6eb2c4f870365e785982e1f101e93b906, 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266}
+ok
+
+(full run) test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.28s

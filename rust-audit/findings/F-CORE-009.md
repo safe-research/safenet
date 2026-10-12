@@ -112,3 +112,32 @@ Option 4 (honour or reject a future `start_block`) is sound; of the two branches
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Low, 78 (E2), canonical — partly missed by run 2.** Run 2's R1 O4 covers case 1 (`block_time = 0` with empty retry delays) as an Informational observation; cases 2 (unbounded `max_reorg_depth` sizing the startup scan and the retained window) and 3 (`start_block > head` silently ignored) appear in no run-2 log. Still valid at `fe9e84c` (`blocks.rs:46-87`, `279-289`, `345-365` unchanged). No run-2 counterpart (`state/run2/reconciliation/core.md` §2). Related run-2 NEW `F2-CORE-011` concerns `start_block` inside the window, a different case.
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | #1010 replaced `BlockTime` with the generic `Timing<T>` (each of `block_time`, `block_propagation_delay` and `block_retry_delays` is `auto` or explicit), but added no range or cross-field validation; `max_reorg_depth` and `start_block` are unchanged |
+| Severity, certainty | severity unchanged (Low); certainty 78 to 85 proposed: cases 1 and 3 are now executed (E1), case 2 stays E2 |
+| Evidence | E1 `poc/F-CORE-009/run3/` (first executed PoC for this row) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/blocks.rs:46-87` (config) to `:73-102`: `#[serde(default, deny_unknown_fields)]` / `pub struct Config {` / `pub block_time: Timing<u64>,` ... `pub block_retry_delays: Timing<Vec<u64>>,` ... `pub max_reorg_depth: u64,` ... `pub start_block: Option<u64>,`
+- `index/blocks.rs:24-36` (`BlockTime::resolve`) to `:30-38` (`Timing::resolve`): `Self::Millis(value) => Ok(value.clone()),` / `Self::Auto => default().ok_or(Error::UnknownChainTimings { chain_id }),`
+- `index/blocks.rs:404-415` to `:459-470`: `let index = retry_count % (self.timings.block_retry_delays.len() + 1);` ... `if let Some(delay) = self.timings.block_retry_delays.get(index).copied() {` ... `self.pending.timestamp_ms += self.timings.block_time;`
+- `index/blocks.rs:548-551` to `:605-608`: `let target = self.pending.timestamp_ms + self.timings.block_propagation_delay;`
+- `index/mod.rs:162-168` (test config with empty delays) to `:160-171`: `block_retry_delays: blocks::Timing::Millis(vec![]),`; the blocks tests also accept `Timing::Millis(vec![])` (`index/blocks.rs:652-661`)
+- `index/blocks.rs:244-246` to `:298-300`, `:147-156` to `:204-210`, `:186-190` to `:241-243`: `let safe = latest.number.saturating_sub(self.config.max_reorg_depth);`, the `BlockHeader` with its `logs_bloom: Bloom`, and `recent: VecDeque<BlockHeader>,`
+- `index/blocks.rs:279-289` and `:345-358` to `:333-343` and `:399-413`: `} else if let Some(start_block) = self.config.start_block` / `&& start_block <= safe` and `.is_none_or(|start_block| block.number >= start_block)`
+- `index/blocks.rs:464-469` to `:520-526`: `tracing::trace!(number, %hash, "new canonical block");` / `Ok(BlockUpdate::New {`
+
+What was run (`poc/F-CORE-009/run3/rv-core-a-blocks_tests.rs`, batch `cargo test -p safenet-core --lib -- --nocapture --test-threads=1 ... rv3_ ...`):
+
+1. Case 1, `rv3_f_core_009_zero_block_time_with_no_retry_delays_polls_without_sleeping`: `block_time = Timing::Millis(0)` with `block_retry_delays = Timing::Millis(vec![])` resolves without error, and the watcher then issues 51 `eth_getBlockByNumber` requests for block 1001 (50 misses, then the block) in 500 ms of paused time, which is the single propagation delay before the first poll; no retry slept.
+2. Case 3, `rv3_f_core_009_start_block_above_head_is_silently_ignored`: with `start_block = 5000` and the node at 1000, nothing is queued at startup and the next update is `New { number: 1001, .. }`; indexing starts at the head with no warning.
+3. Case 2 (unbounded `max_reorg_depth`) by trace only: the scan and the retained window are still sized by the unvalidated `u64`.
+
+Notes: under #1010 an operator on Gnosis who sets only `block_time = 0` keeps the automatic retry ladder, so the loop degrades rather than spins; the delay-free loop needs both values explicit, as the row says. On a chain without defaults all three timings must now be set by hand (`Error::UnknownChainTimings`), which is where a zero is most plausible.

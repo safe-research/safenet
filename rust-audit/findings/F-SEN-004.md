@@ -150,3 +150,40 @@ No concurrency limit, outstanding-bond cap or reveal-throughput guard was added 
 ## Reconciliation (run 2)
 
 **Final combined status: Confirmed (branch ii), Medium, 78% (E1), canonical `F-SEN-004`.** Run-2 counterpart `F2-SEN-005` **confirms** the mechanism and settles the trigger this file left open ("if QA measures a saturation point … this becomes High"): the reveal-starvation branch was executed against the real `TransactionQueue` (default 16 in flight, `ORDER BY id`, expiry skip at `crates/core/src/tx/storage.rs:150-156`) — onset at ≈ 8 sustained proposals per block at parity windows at `3ec8bc5`, 124 of 300 commitments slashable at 10/block. At `fe9e84c` PR #914 emits the `Reveal` one block earlier (`crates/sentinel/src/service.rs:423-425`, `444-455`), which moves the FIFO knife-edge by exactly that block: at `CW = RW` and `R ≤ 16` the model shows no slashable reveal, starvation returns for `RW < CW` (24/126/180) and for `R > 16` (8/24 at 17/20 per block), and the deployment samples straddle the edge. Certainty 62 → 78 (executed, then narrowed by measurement); severity stays Medium — bounded griefing capped by the victim's balance, so run 1's "becomes High" condition was not met. The engine-saturation branch (i) remains `I` in both runs (engine out of scope). Agreed fix: a reveal priority lane in `next_transaction` (`F-SEN-004` option 4 = `F2-SEN-005` option 2; a core change), plus a bond budget. Team disposition: none. See `state/run2/reconciliation/sentinel.md` §1.
+
+## Run 3 re-validation (rv-sen, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | Code mechanism unchanged. #1014/#1015 (`fef8cfd`, `73967cf`) keep the `Reveal` emission one block before `commit_deadline + 1` is observed (now through the optimistic `NewBlock`), the same queue timing as #914. The 7702 stack (`9ed4b80` to `cd46431`) rewrote the queue but kept `ORDER BY id ASC`, the expiry skip and 16 in flight in the default mode. What changed is the trigger at the Aegis production parameters. |
+| Severity, certainty | Medium, 78 unchanged |
+| Evidence | E1: `poc/F2-SEN-005/run3/output.txt` (queue model against the real `TransactionQueue`); E2 for the bond arithmetic |
+
+What changed: branch (ii), reveal starvation, needs more than 16 proposals per block at parity windows. Aegis production uses commit 6 and reveal 6 (`contracts/.env.aegis.sample:19-20`), and each starved reveal costs the victim `slashAmount` = 0.40 USDC.e while the attacker pays the 0.40 USDC.e fee for every proposal, so the slashing branch is not an economic attack there. The operative branch at production is consequence 3: every bond is 800 USDC.e (fee 0.40 x 2000), nothing caps outstanding bonds, so a sentinel with balance `B` runs out after about `B / 800` live requests (about `B / 9,600` proposals per block sustained over the 12-block commit and reveal windows). From then on each further request costs an `approve` and a reverting `commit` (`F-SEN-007`) and the sentinel abstains on everything else, legitimate requests included.
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- One unbounded engine effect per proposal: `crates/sentinel/src/service.rs:137-144` to `:145-153`; `crates/core/src/effects.rs:61-69` (spawn into a `JoinSet` with no permit) unchanged.
+- Bond posted on every verdict, no budget: `service.rs:226-242` to `:235-251` (`ApproveToken` and `Commit`, `expires_at: Some(commit_deadline)`).
+- FIFO selection with expiry skip: `crates/core/src/tx/storage.rs:150-156` to `:172-176`:
+
+```rust
+        let mut queued = sqlx::query_as::<_, (i64, String)>(
+            "SELECT id, request FROM transactions
+             WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)
+             ORDER BY id ASC",
+        )
+```
+
+- In-flight cap: `crates/core/src/tx/mod.rs:88` (`max_in_flight_transactions: 16`) to `crates/core/src/tx/config.rs:7` (`DEFAULT_MAX_IN_FLIGHT_TRANSACTIONS: usize = 16`), and `Batched` mode allows 1 (`tx/config.rs:65-74`).
+- The `Reveal` expires at the reveal deadline: `service.rs:444-455` to `:436-447` (`expires_at: Some(reveal_deadline)`).
+
+What was run (`wt/rv-sen`, pasted into `mod tests`, reverted): run 2's flood model adapted to the 7702 queue (account read via `eth_getProof`, `allocated_nonces` schema; `poc/F2-SEN-001/run3/qa2_sen_all.run3.rs`), with the `Reveal` queued at block `p + CW` as the optimistic `NewBlock(cd + 1)` does. `qa2_sen::f2_sen_005` (CW = RW = 10): 0 slashable at 5 to 16 proposals per block, 8 at 17, 24 at 20 (the `fe9e84c` sensitivity numbers). `qa2_sen::f2_sen_005_run3_aegis_windows`: CW = RW = 6 gives 0 slashable up to 16 per block, then 4 at 17, 12 at 20, 24 at 32; testnet CW 2 / RW 3 gives 0 at every rate. Both tests FAILED their zero-slashable assertion because of the rates above 16. The model assumes every submitted transaction is mined in the next block and an unlimited bond balance.
+
+Notes:
+
+- At 16 or more proposals per block the model also shows most commits expiring unsubmitted (392 of 480 at 16 per block, Aegis windows), which is abstention without a bond.
+- `Batched` submission (the optional `executor`) keeps one transaction in flight, and a batch is capped by `max_batch_gas` (2,000,000 by default) against 250,000 per oracle call, about 7 oracle actions per block. That mode was not modelled here; its starvation onset is lower.
+- Counterparts: `F2-SEN-005` (canonical number carried), `F-CORE-033` (unbounded effects, core), `F-SEN-007`, `F-SEN-008`.

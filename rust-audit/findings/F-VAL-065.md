@@ -34,7 +34,7 @@ Compounding all three: `mark_executed` decides a transaction executed purely bec
 | 6 | Execution is inferred solely from the account nonce moving past the transaction; no receipt or status is ever read, so a reverted or out-of-gas transaction is recorded as executed and never retried | E2 | `crates/core/src/tx/storage.rs:222-235` | `    /// Marks every in-flight transaction the account has moved past (nonce below`<br>`   ///`execution.nonce`) as executed at `execution.block`.`<br>`    pub async fn mark_executed(&self, status: Status) -> Result<, Error> {`<br>`        sqlx::query(`<br>`            "UPDATE transactions`<br>`             SET executed_at = ?`<br>`             WHERE nonce IS NOT NULL AND nonce < ? AND executed_at IS NULL",`<br>`        )`<br>`        .bind(i64::try_from(status.block)?)`<br>`        .bind(i64::try_from(status.nonce)?)`<br>`        .execute(&self.pool)`<br>`        .await?;`<br>`        Ok()`<br>`    }` |
 | 7 | Every gas limit is a hardcoded constant with no estimation, and only one of the twelve scales with its payload | E2 | `crates/validator/src/service/action.rs:149-169` | `            Action::KeyGenSecretShare {`<br>`                group_id,`<br>`                share,`<br>`                expires_at,`<br>`            } => {`<br>`                let gas = 250_000 + 25_000 * share.f.len as u64;`<br>`                (`<br>`                    Transaction {`<br>`                        to: self.coordinator,` |
 | 8 | `Coordinator.sign` does not deduplicate by `(gid, message)`: every call increments the group sequence and mints a new signature id | E2 | `contracts/src/FROSTCoordinator.sol:530-542` | `    function sign(FROSTGroupId.T gid, bytes32 message) external returns (FROSTSignatureId.T sid) {`<br>`        require(message != bytes32(0), InvalidMessage);`<br>`        Group storage group = $groups[gid];`<br>`        GroupState memory state = group.state;`<br>`        require(state.count > 0, GroupNotInitialized);`<br>`        require(state.status == GroupStatus.FINALIZED, GroupNotReady);`<br>`        uint64 sequence = state.sequence++;`<br>`        sid = FROSTSignatureId.create(gid, sequence);`<br>`        Signature storage signature = $signatures[sid];`<br>`        group.state = state;`<br>`        signature.message = message;`<br>`        emit Sign(msg.sender, gid, message, sid, sequence);`<br>`    }` |
-| 9 | and every `Sign` event for a tracked group advances this validator's nonce sequence before any matching is attempted | E2 | `crates/validator/src/state/sign.rs:28-36` | `        let mut commands = Vec::new;`<br>``<br>`        let nonce = state`<br>`            .epochs`<br>`            .values_mut`<br>`            .find(\|epoch\| epoch.group.id == event.gid)`<br>`            .and_then(\|epoch\| epoch.nonces.observe(event.sequence));`<br>`        match (nonce, state.signing.remove(&event.message)) {`<br>`            (` |
+| 9 | and every `Sign` event for a tracked group advances this validator's nonce sequence before any matching is attempted | E2 | `crates/validator/src/state/sign.rs:28-36` | `        let mut commands = Vec::new;`<br>``<br>` let nonce = state`<br>` .epochs`<br>` .values_mut`<br>` .find(\|epoch\| epoch.group.id == event.gid)`<br>` .and_then(\|epoch\| epoch.nonces.observe(event.sequence));`<br>` match (nonce, state.signing.remove(&event.message)) {`<br>` (` |
 
 ## Trigger
 
@@ -137,3 +137,21 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two documentation-only 
 ## Reconciliation (run 2)
 
 **Final combined status: Low, 70 %, Confirmed — validator legs are a run-2 miss, still valid at `fe9e84c`.** `service/action.rs:252-254` (`Preprocess`, `None` expiry) and `:368-378` (`SetValidatorStaker`, `None`), `main.rs:82-92` unchanged. Core side of the same defect: `F-CORE-067` / `F2-CORE-032`, `F2-CORE-063` (REC-CORE). See `state/run2/reconciliation/validator.md` (Section 2).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Changed |
+| Changed by | the `Preprocess` leg left with the nonce chunks (`a9023ac` #1038, `392d7c8` #1040); the duplicate-`Sign` leg lost its nonce-sequence cost with `82d5419` (#1036); the `SetValidatorStaker` leg is unchanged |
+| Severity, certainty | unchanged band, Low; certainty 70 (E2) for the remaining leg |
+| Evidence | E2: the trace below; E1 for the duplicate-`Sign` change through F-VAL-032 run-3 variants V3 and V6 |
+
+Per leg at `361aaf3`:
+
+1. `SetValidatorStaker` still accumulates across restarts. `main.rs:81-93` still queues it on every start while the onchain staker differs (`crates/validator/src/main.rs:82-92`), it is still encoded with a `None` expiry (`crates/validator/src/service/action.rs:340-349`), and the queue still inserts unconditionally (`crates/core/src/tx/storage.rs:112-127`, `INSERT INTO transactions (request, expires_at) VALUES (?, ?)`). A restart loop before the first one is mined still yields N copies, each taking a nonce, 100,000 gas and an in-flight slot (or batch room under the 7702 executor).
+2. `Preprocess` with no expiry: moot, the action and `Effect::NonceTree` no longer exist (`git log -S 'Effect::NonceTree'` ends at `392d7c8`).
+3. A replayed `Action::Sign` (still bounded by its signing deadline, `service/action.rs:288`) no longer burns anything for the group: validators keep no sequence state, and a second `Sign` for a message whose session already moved on falls to the re-inserting arm (`crates/validator/src/state/sign.rs:94-101`). The cost is the duplicate transaction's gas and one unused coordinator signature id. F-VAL-032 run-3 variants V3 (a `Sign` against every later session state) and V6 execute that.
+
+The receipt point (a transaction recorded as executed because the account nonce moved, without reading its status) is core (`F-CORE-067`, rv-core-b) and, for 7702 batches, the settled review lows (L4).

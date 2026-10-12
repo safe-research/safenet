@@ -1,0 +1,15 @@
+run 1 on chain A stopped: snapshots [1002, 1003, 1004, 1005, 1006, 1007]
+chain B forks at 1000 (reorg depth 8), head 1011
+run 2 Driver::new: ok
+live: chain B forks at 1003 (reorg depth 6), head 1009
+run 1 exited on its own: true; snapshots [1003]
+run 2 Driver::new: ok
+run 2 Driver::run returned early: false
+run 2 applied events from 1000 to 1002 (replaced by B): 1000:A 1001:A 1002:A
+run 2 applied events after 1002: 1003:B 1004:B 1005:B 1006:B 1007:B 1008:B 1009:B 1010:B 1011:B
+test driver::qa3_deep_reorg_tests::qa3_deep_reorg_while_stopped_is_accepted_on_restart ... ok
+run 2 Driver::run returned early: false
+run 2 applied events from 1003 to 1003 (replaced by B): 1003:A
+run 2 applied events after 1003: 1004:B 1005:B 1006:B 1007:B 1008:B 1009:B 1010:B
+test driver::qa3_deep_reorg_tests::qa3_deep_reorg_exit_is_forgotten_on_restart ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 13.04s

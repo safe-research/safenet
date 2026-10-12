@@ -102,3 +102,29 @@ Option 4 (document) is the honest fallback if the behaviour is accepted, and it 
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Low, 75 (E2), canonical.** Rediscovered by run 2 as `F2-CORE-008` (CONFIRMS: identical mechanism at `blocks.rs:494-501`, identical severity and certainty); run 2 additionally frames it as the depth-0 instance of `F-CORE-004`'s starvation. Still valid at `fe9e84c`. Counterpart: `F2-CORE-008`.
+
+## Run 3 re-validation (rv-core-a, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | nothing in scope changed this code (`blocks.rs` lines moved with #1010 and #1048; `index/mod.rs` recovery unchanged) |
+| Severity, certainty | severity unchanged (Low); certainty 75 to 85 proposed: the depth-0 loop is now executed at `Watcher` level (E1); the `-32001` node behaviour stays an assumption |
+| Evidence | E1 `poc/F-CORE-005/run3/` (first executed PoC for this row, plus the two existing depth-0 tests) |
+
+Re-based anchors (old location, new location, verbatim quote):
+
+- `index/blocks.rs:66-69` to `:93-96`: ``/// `0` means no block is ever tolerated as reorg-able: every block is`` / `/// final the instant it is observed, so *any* reorg, even one block` / `/// deep, is treated as exceeding this depth and fails loudly.`
+- `index/blocks.rs:453-462` to `:509-518`: `if self.recent.len() as u64 > self.config.max_reorg_depth {` / `let evicted = self` / `.recent` / `.pop_front()`
+- `index/blocks.rs:333-340` to `:387-394`: `let safe = self` / `.recent` / `.pop_front()` / `.expect("the range scan always includes the safe block");`
+- `index/blocks.rs:494-501` to `:551-558`: `.rposition(|block| next_number.is_none_or(|number| block.number < number));` / `let Some(last_index) = last_index else {` / `// We are past the max reorg depth, so there is nothing to do.` / `return Ok(None);`
+- `index/mod.rs:123-126` and `:85-97`: unchanged, `None => Err(err.into()),` and `let update = self.blocks.next().await?;`
+- `index/blocks.rs:811-837` and `:1251-1275` (depth-0 tests) to `:911-936` and `:1350-1374`: `async fn supports_no_reorg_protection() {` and `async fn safe_block_without_reorg_protection_is_the_last_indexed_block() {`
+
+What was run:
+
+1. New PoC (`poc/F-CORE-005/run3/rv-core-a-index_mod_tests.rs`, `rv3_f_core_005_depth_zero_resource_not_found_spins_without_failing_loudly`) in the batch `cargo test -p safenet-core --lib -- --nocapture --test-threads=1 ... rv3_ supports_no_reorg_protection safe_block_without_reorg_protection_is_the_last_indexed_block ...`. With `max_reorg_depth = 0`, after `New { 1001 }` the node answers `-32001` for its logs: 8 of 8 attempts return `Err(Events(Rpc(ErrorResp(ErrorPayload { code: -32001, .. }))))`, the replacement block queued at the mock is never requested, the status stays `{ latest: 1001, safe: 1001 }`, and `ExceededMaxReorgDepth` is never raised.
+2. The two existing depth-0 tests pass, pinning that `recent` stays empty at depth 0.
+
+Notes: depth 0 is still documented as the strict mode, and nothing validates or warns about it (`F-CORE-009`). Counterpart `F2-CORE-008` holds; `F-CORE-004` is the general no-terminal-state defect this is an instance of.

@@ -1,0 +1,452 @@
+# R7: sentinel flow tests for commit undercounting and dropped requests (scratch copy, no tracked file touched)
+# Date: 2026-10-08T17:22:33Z
+# Workspace: git archive 361aaf3 (Cargo.toml Cargo.lock crates/{core,sentinel,validator,sentinel-engine}) into $RUN/scratch/R7/ws; the module below appended to crates/sentinel/src/service.rs of that copy only.
+# Command: CARGO_TARGET_DIR=$RUN/scratch/R7/target cargo test -p sentinel --bins --offline r7_poc -- --nocapture --test-threads=1
+
+[review-cargo] 1 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R7/target; rebuilding them
+   Compiling sentinel v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R7/ws/crates/sentinel)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.26s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R7/target/debug/deps/sentinel-702b20590452b382)
+
+running 5 tests
+test service::r7_poc::control_counted_commit_claims ... P TransactionProposed: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: None }
+P NewRequest: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+engine resume (secure): actions=["ApproveToken", "Commit"] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 0, self_committed: false }
+P+1 Committed(FAST): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: false }
+P+3 Committed(self): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1001): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1002): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1003): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1004): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1005): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1006): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1007): actions=["Reveal"] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false }
+CD+1 Revealed(FAST): actions=[] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: false }
+CD+1 Revealed(self): actions=["Finalize"] state=WaitingForOutcome { approve: true, slash_amount: 400000 }
+ok
+test service::r7_poc::missed_reveal_drops_before_the_outcome_so_recovery_never_runs ... P TransactionProposed: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: None }
+P NewRequest: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+engine resume (secure): actions=["ApproveToken", "Commit"] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 0, self_committed: false }
+P+2 Committed(self): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+P+2 Committed(OTHER): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1001): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1002): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1003): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1004): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1005): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1006): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1007): actions=["Reveal"] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false }
+CD+2 Revealed(OTHER): actions=[] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: false }
+NewBlock(1008): actions=[] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: false }
+NewBlock(1009): actions=[] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: false }
+NewBlock(1010): actions=[] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: false }
+NewBlock(1011): actions=[] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: false }
+NewBlock(1012): actions=[] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: false }
+NewBlock(1013): actions=[] state=<dropped>
+RD+1 OracleResult: actions=[] state=None
+ok
+test service::r7_poc::same_block_commit_by_a_silent_sentinel_leaves_the_request_unfinalized ... P TransactionProposed: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: None }
+P NewRequest: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+P Committed(silent): actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+NewBlock(P+1): actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+engine resume (secure): actions=["ApproveToken", "Commit"] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 0, self_committed: false }
+P+2 Committed(self): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+P+2 Committed(OTHER): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1002): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1003): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1004): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1005): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1006): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 2, self_committed: true }
+NewBlock(1007): actions=["Reveal"] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false }
+CD+1 Revealed(self): actions=[] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true }
+CD+1 Revealed(OTHER): actions=["Finalize"] state=WaitingForOutcome { approve: true, slash_amount: 400000 }
+after NewBlock(1042): state=Some(WaitingForOutcome { approve: true, slash_amount: 400000 })
+ok
+test service::r7_poc::undercounted_commit_drops_the_request_and_loses_the_claim ... P TransactionProposed: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: None }
+P NewRequest: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+NewBlock(P+1): actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+P+1 Committed(FAST): actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+NewBlock(P+2): actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+engine resume (secure): actions=["ApproveToken", "Commit"] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 0, self_committed: false }
+P+3 Committed(self): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1003): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1004): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1005): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1006): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1007): actions=["Reveal"] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false }
+CD+1 Revealed(FAST): actions=[] state=<dropped>
+CD+1 Revealed(self): actions=[] state=<dropped>
+CD+1 OracleResult: actions=[] state=None
+ok
+test service::r7_poc::undercounted_commit_never_finalizes_after_the_reveal_deadline ... P TransactionProposed: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: None }
+P NewRequest: actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+NewBlock(P+1): actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+P+1 Committed(FAST): actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+NewBlock(P+2): actions=[] state=WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) }
+engine resume (secure): actions=["ApproveToken", "Commit"] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 0, self_committed: false }
+P+3 Committed(self): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1003): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1004): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1005): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1006): actions=[] state=CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 1, self_committed: true }
+NewBlock(1007): actions=["Reveal"] state=CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 1012, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false }
+CD+1 Revealed(self): actions=["Finalize"] state=WaitingForOutcome { approve: true, slash_amount: 400000 }
+after NewBlock(1042): state=Some(WaitingForOutcome { approve: true, slash_amount: 400000 })
+ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.02s
+
+
+# ---- appended test module ----
+
+/// R7 (run 3) flow tests, appended to a scratch copy of `service.rs` only. Aegis parameters:
+/// commit window 6 and reveal window 6, so a request opened in block P has `commitDeadline`
+/// P + 6 and `revealDeadline` P + 12.
+#[cfg(test)]
+mod r7_poc {
+    use super::*;
+    use crate::bindings::consensus::{Operation, SafeTransaction};
+    use alloy::{
+        primitives::{Bytes, Uint, address, aliases::U96, keccak256},
+        signers::k256::ecdsa::SigningKey,
+    };
+    use safenet_core::index::{EventBlock, EventLog};
+
+    const ORACLE: Address = address!("1111111111111111111111111111111111111111");
+    const CONSENSUS: Address = address!("3333333333333333333333333333333333333333");
+    const SAFE: Address = address!("4444444444444444444444444444444444444444");
+    const FAST: Address = address!("8888888888888888888888888888888888888888");
+    const OTHER: Address = address!("9999999999999999999999999999999999999999");
+    const P: u64 = 1_000;
+    const CD: u64 = P + 6;
+    const RD: u64 = P + 12;
+    const BOND: u64 = 800_000_000;
+
+    fn signer() -> Signer {
+        Signer::new(SigningKey::from_bytes(&keccak256("r7-poc-sentinel").0.into()).unwrap())
+    }
+
+    fn me() -> Address {
+        signer().address()
+    }
+
+    fn svc() -> SentinelTransition {
+        SentinelTransition {
+            oracle: ORACLE,
+            consensus: CONSENSUS,
+            signer: signer(),
+            chain_id: U256::from(100u64),
+            voting_window: 6,
+        }
+    }
+
+    fn id() -> B256 {
+        oracle_tx_proposal_hash(
+            U256::from(100u64),
+            CONSENSUS,
+            7,
+            ORACLE,
+            Bytes::new(),
+            B256::repeat_byte(0x42),
+        )
+    }
+
+    fn log(block: u64, index: u64, data: SentinelEvents) -> Message<SentinelEvents, effect::Resume> {
+        Message::Event(EventLog {
+            block: EventBlock {
+                number: block,
+                timestamp: 1_700_000_000 + block * 5,
+            },
+            index,
+            address: Address::ZERO,
+            data,
+        })
+    }
+
+    fn proposed() -> SentinelEvents {
+        SentinelEvents::Consensus(Consensus::ConsensusEvents::TransactionProposed(
+            Consensus::TransactionProposed {
+                safeTxHash: B256::repeat_byte(0x42),
+                safeId: B256::ZERO,
+                oracle: ORACLE,
+                epoch: 7,
+                oracleData: Bytes::new(),
+                transaction: SafeTransaction {
+                    safe: SAFE,
+                    operation: Operation::CALL,
+                    ..Default::default()
+                },
+            },
+        ))
+    }
+
+    fn new_request() -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(
+            SentinelOracle::NewRequest {
+                requestId: id(),
+                sponsor: SAFE,
+                fee: Uint::from(400_000u64),
+                bondTarget: Uint::from(BOND),
+                daoFeeShare: Default::default(),
+                slashAmount: Uint::from(400_000u64),
+                commitDeadline: CD,
+                revealDeadline: RD,
+            },
+        ))
+    }
+
+    fn committed(sentinel: Address) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Committed(
+            SentinelOracle::Committed {
+                requestId: id(),
+                sentinel,
+                bondAmount: Uint::from(BOND),
+            },
+        ))
+    }
+
+    fn revealed(sentinel: Address, approved: bool) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Revealed(
+            SentinelOracle::Revealed {
+                requestId: id(),
+                sentinel,
+                approved,
+                bondAmount: Uint::from(BOND),
+                reason: String::new(),
+            },
+        ))
+    }
+
+    fn oracle_result(approved: bool) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::OracleResult(
+            SentinelOracle::OracleResult {
+                requestId: id(),
+                sponsor: SAFE,
+                result: Bytes::new(),
+                approved,
+            },
+        ))
+    }
+
+    fn resume(outcome: CheckOutcome) -> Message<SentinelEvents, effect::Resume> {
+        Message::Resume(effect::Resume::EngineCheckResult {
+            request_id: id(),
+            outcome,
+        })
+    }
+
+    fn kinds(commands: &Commands<State, SentinelTransition>) -> Vec<SentinelActionKind> {
+        commands
+            .iter()
+            .filter_map(|command| match command {
+                Command::Action(action) => Some(action.kind.clone()),
+                Command::Effect(_) => None,
+            })
+            .collect()
+    }
+
+    fn step(
+        svc: &SentinelTransition,
+        state: State,
+        message: Message<SentinelEvents, effect::Resume>,
+        trace: &mut Vec<String>,
+        label: &str,
+    ) -> State {
+        let (state, commands) = svc.apply_transition(state, message);
+        let entry = state.0.get(&id()).map(|entry| format!("{entry:?}"));
+        trace.push(format!(
+            "{label}: actions={:?} state={}",
+            kinds(&commands)
+                .iter()
+                .map(|kind| match kind {
+                    SentinelActionKind::ApproveToken { .. } => "ApproveToken",
+                    SentinelActionKind::Commit { .. } => "Commit",
+                    SentinelActionKind::Reveal { .. } => "Reveal",
+                    SentinelActionKind::Finalize { .. } => "Finalize",
+                    SentinelActionKind::Claim { .. } => "Claim",
+                    SentinelActionKind::TimeoutArbitration { .. } => "TimeoutArbitration",
+                })
+                .collect::<Vec<_>>(),
+            entry.unwrap_or_else(|| "<dropped>".to_string()),
+        ));
+        state
+    }
+
+    /// Proposal and request in block P, a faster sentinel's commit in block P + 1 processed
+    /// while this sentinel still waits for its engine, then this sentinel's own commit in
+    /// P + 3. Returns the state after the reveal step at `NewBlock(CD + 1)`.
+    fn to_reveal_with_early_foreign_commit(trace: &mut Vec<String>) -> (SentinelTransition, State) {
+        let svc = svc();
+        let mut state = State::default();
+        state = step(&svc, state, log(P, 0, proposed()), trace, "P TransactionProposed");
+        state = step(&svc, state, log(P, 2, new_request()), trace, "P NewRequest");
+        state = step(&svc, state, Message::NewBlock(P + 1), trace, "NewBlock(P+1)");
+        state = step(&svc, state, log(P + 1, 0, committed(FAST)), trace, "P+1 Committed(FAST)");
+        state = step(&svc, state, Message::NewBlock(P + 2), trace, "NewBlock(P+2)");
+        state = step(&svc, state, resume(CheckOutcome::Approved), trace, "engine resume (secure)");
+        state = step(&svc, state, log(P + 3, 0, committed(me())), trace, "P+3 Committed(self)");
+        for block in P + 3..=CD + 1 {
+            state = step(&svc, state, Message::NewBlock(block), trace, &format!("NewBlock({block})"));
+        }
+        (svc, state)
+    }
+
+    /// Honest sentinels only: the faster sentinel's reveal is processed first. This sentinel
+    /// drops the request although its own reveal is in flight and valid, and never claims.
+    #[test]
+    fn undercounted_commit_drops_the_request_and_loses_the_claim() {
+        let mut trace = Vec::new();
+        let (svc, mut state) = to_reveal_with_early_foreign_commit(&mut trace);
+        assert!(matches!(
+            state.0[&id()],
+            RequestState::CollectingVotes { committed_count: 1, .. }
+        ));
+        // Both reveals land in CD + 1; the faster sentinel's first. The last reveal makes the
+        // oracle finalize inside `reveal()`, so `OracleResult` follows in the same transaction.
+        state = step(&svc, state, log(CD + 1, 0, revealed(FAST, true)), &mut trace, "CD+1 Revealed(FAST)");
+        let dropped = !state.0.contains_key(&id());
+        state = step(&svc, state, log(CD + 1, 1, revealed(me(), true)), &mut trace, "CD+1 Revealed(self)");
+        let (state, commands) = svc.apply_transition(state, log(CD + 1, 2, oracle_result(true)));
+        trace.push(format!(
+            "CD+1 OracleResult: actions={:?} state={:?}",
+            kinds(&commands),
+            state.0.get(&id())
+        ));
+        for line in &trace {
+            println!("{line}");
+        }
+        assert!(dropped, "request dropped at the first foreign reveal");
+        assert!(kinds(&commands).is_empty(), "no Claim for a bond that is claimable onchain");
+    }
+
+    /// Same start, but this sentinel's reveal is processed first: it sends a `Finalize` that
+    /// the oracle rejects (`FinalizeTooEarly`, one committed sentinel has not revealed) and
+    /// waits in `WaitingForOutcome`. If that sentinel never reveals, nothing ever finalizes:
+    /// no `Finalize` is sent after the reveal deadline.
+    #[test]
+    fn undercounted_commit_never_finalizes_after_the_reveal_deadline() {
+        let mut trace = Vec::new();
+        let (svc, mut state) = to_reveal_with_early_foreign_commit(&mut trace);
+        state = step(&svc, state, log(CD + 1, 0, revealed(me(), true)), &mut trace, "CD+1 Revealed(self)");
+        assert!(matches!(state.0[&id()], RequestState::WaitingForOutcome { .. }));
+        let mut finalize_after_deadline = false;
+        for block in CD + 2..=RD + 30 {
+            let (next, commands) = svc.apply_transition(state, Message::NewBlock(block));
+            if block > RD
+                && kinds(&commands)
+                    .iter()
+                    .any(|kind| matches!(kind, SentinelActionKind::Finalize { .. }))
+            {
+                finalize_after_deadline = true;
+            }
+            state = next;
+        }
+        trace.push(format!("after NewBlock({}): state={:?}", RD + 30, state.0.get(&id())));
+        for line in &trace {
+            println!("{line}");
+        }
+        assert!(!finalize_after_deadline);
+        assert!(matches!(state.0[&id()], RequestState::WaitingForOutcome { .. }));
+    }
+
+    /// Control: the same flow with the faster sentinel's commit processed after this
+    /// sentinel's engine resume. The count is right, the request survives the first foreign
+    /// reveal, and the oracle result is claimed.
+    #[test]
+    fn control_counted_commit_claims() {
+        let svc = svc();
+        let mut trace = Vec::new();
+        let mut state = State::default();
+        state = step(&svc, state, log(P, 0, proposed()), &mut trace, "P TransactionProposed");
+        state = step(&svc, state, log(P, 2, new_request()), &mut trace, "P NewRequest");
+        state = step(&svc, state, resume(CheckOutcome::Approved), &mut trace, "engine resume (secure)");
+        state = step(&svc, state, log(P + 1, 0, committed(FAST)), &mut trace, "P+1 Committed(FAST)");
+        state = step(&svc, state, log(P + 3, 0, committed(me())), &mut trace, "P+3 Committed(self)");
+        for block in P + 1..=CD + 1 {
+            state = step(&svc, state, Message::NewBlock(block), &mut trace, &format!("NewBlock({block})"));
+        }
+        state = step(&svc, state, log(CD + 1, 0, revealed(FAST, true)), &mut trace, "CD+1 Revealed(FAST)");
+        assert!(state.0.contains_key(&id()));
+        state = step(&svc, state, log(CD + 1, 1, revealed(me(), true)), &mut trace, "CD+1 Revealed(self)");
+        let (_, commands) = svc.apply_transition(state, log(CD + 1, 2, oracle_result(true)));
+        for line in &trace {
+            println!("{line}");
+        }
+        assert_eq!(kinds(&commands), vec![SentinelActionKind::Claim { id: id() }]);
+    }
+
+    /// An active sentinel commits in the proposal block itself (after `NewRequest`) and never
+    /// reveals. Every honest sentinel is still waiting for its engine while that block is
+    /// processed, so none counts the commit. After both honest reveals, neither honest FSM
+    /// ever calls `finalize`, so the request stays pending onchain past the reveal deadline.
+    #[test]
+    fn same_block_commit_by_a_silent_sentinel_leaves_the_request_unfinalized() {
+        let svc = svc();
+        let mut trace = Vec::new();
+        let mut state = State::default();
+        state = step(&svc, state, log(P, 0, proposed()), &mut trace, "P TransactionProposed");
+        state = step(&svc, state, log(P, 2, new_request()), &mut trace, "P NewRequest");
+        state = step(&svc, state, log(P, 3, committed(FAST)), &mut trace, "P Committed(silent)");
+        state = step(&svc, state, Message::NewBlock(P + 1), &mut trace, "NewBlock(P+1)");
+        state = step(&svc, state, resume(CheckOutcome::Approved), &mut trace, "engine resume (secure)");
+        state = step(&svc, state, log(P + 2, 0, committed(me())), &mut trace, "P+2 Committed(self)");
+        state = step(&svc, state, log(P + 2, 1, committed(OTHER)), &mut trace, "P+2 Committed(OTHER)");
+        for block in P + 2..=CD + 1 {
+            state = step(&svc, state, Message::NewBlock(block), &mut trace, &format!("NewBlock({block})"));
+        }
+        state = step(&svc, state, log(CD + 1, 0, revealed(me(), true)), &mut trace, "CD+1 Revealed(self)");
+        state = step(&svc, state, log(CD + 1, 1, revealed(OTHER, true)), &mut trace, "CD+1 Revealed(OTHER)");
+        let mut finalize_after_deadline = false;
+        for block in CD + 2..=RD + 30 {
+            let (next, commands) = svc.apply_transition(state, Message::NewBlock(block));
+            if block > RD
+                && kinds(&commands)
+                    .iter()
+                    .any(|kind| matches!(kind, SentinelActionKind::Finalize { .. }))
+            {
+                finalize_after_deadline = true;
+            }
+            state = next;
+        }
+        trace.push(format!("after NewBlock({}): state={:?}", RD + 30, state.0.get(&id())));
+        for line in &trace {
+            println!("{line}");
+        }
+        assert!(!finalize_after_deadline);
+    }
+
+    /// Known item context: this sentinel committed but its reveal never landed; another
+    /// sentinel revealed. At `NewBlock(RD + 1)` the request is dropped before any outcome
+    /// event can arrive, so the `RevealMissed` recovery in `handle_oracle_result` never runs
+    /// and the unslashed rest of the bond is never claimed.
+    #[test]
+    fn missed_reveal_drops_before_the_outcome_so_recovery_never_runs() {
+        let svc = svc();
+        let mut trace = Vec::new();
+        let mut state = State::default();
+        state = step(&svc, state, log(P, 0, proposed()), &mut trace, "P TransactionProposed");
+        state = step(&svc, state, log(P, 2, new_request()), &mut trace, "P NewRequest");
+        state = step(&svc, state, resume(CheckOutcome::Approved), &mut trace, "engine resume (secure)");
+        state = step(&svc, state, log(P + 2, 0, committed(me())), &mut trace, "P+2 Committed(self)");
+        state = step(&svc, state, log(P + 2, 1, committed(OTHER)), &mut trace, "P+2 Committed(OTHER)");
+        for block in P + 1..=CD + 1 {
+            state = step(&svc, state, Message::NewBlock(block), &mut trace, &format!("NewBlock({block})"));
+        }
+        state = step(&svc, state, log(CD + 2, 0, revealed(OTHER, true)), &mut trace, "CD+2 Revealed(OTHER)");
+        for block in CD + 2..=RD + 1 {
+            state = step(&svc, state, Message::NewBlock(block), &mut trace, &format!("NewBlock({block})"));
+        }
+        // Someone's `finalize()` lands in RD + 1 and resolves the request for OTHER.
+        let (state, commands) = svc.apply_transition(state, log(RD + 1, 0, oracle_result(true)));
+        trace.push(format!(
+            "RD+1 OracleResult: actions={:?} state={:?}",
+            kinds(&commands),
+            state.0.get(&id())
+        ));
+        for line in &trace {
+            println!("{line}");
+        }
+        assert!(kinds(&commands).is_empty());
+        let _ = U96::ZERO;
+    }
+}

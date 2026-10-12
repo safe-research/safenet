@@ -22,12 +22,12 @@ The services use `expires_at` for real protocol deadlines — the sentinel's com
 | --- | --- | --- | --- | --- |
 | 1 | The public contract says an unsubmitted transaction is dropped at `expires_at`. | E2 | `crates/core/src/tx/mod.rs:128-135` | <pre>/// Queues `transaction` for execution, to be dropped if it has not been<br>/// submitted by block `expires_at`, or never dropped if `expires_at` is<br>/// `None`, then attempts to submit it (and any other queued transactions)<br>/// onchain.<br>pub async fn queue(<br> &mut self,<br> transactions: impl IntoIterator&lt;Item = (Transaction, Option&lt;u64&gt;)&gt;,<br>) -> Result&lt;, Error&gt; {</pre> |
 | 2 | The deadline is consulted only when selecting a _queued_ (`nonce IS NULL`) row for allocation. | E2 | `crates/core/src/tx/storage.rs:150-156` | <pre>WHERE id = (<br> SELECT id FROM transactions<br> WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)<br> ORDER BY id ASC<br> LIMIT 1<br> )<br> RETURNING json_set(request, '$.nonce', nonce)",<br>)</pre> |
-| 3 | The resubmission query has no expiry predicate at all; an allocated row is selected on submission age alone. | E2 | `crates/core/src/tx/storage.rs:293-298` | <pre>sqlx::query_scalar::&lt;_, String&gt;(<br> "SELECT json_set(request, '$.nonce', nonce)<br> FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL<br> AND (submitted_at IS NULL OR submitted_at <= ?)<br> ORDER BY nonce ASC",<br>)</pre> |
-| 4 | Pruning an expired row requires `nonce IS NULL`, so an allocated row is never dropped for expiry. | E2 | `crates/core/src/tx/storage.rs:259-265` | <pre>sqlx::query(<br> "DELETE FROM transactions<br> WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?",<br>)<br>.bind(safe)<br>.execute(&mut *tx)<br>.await?;</pre> |
-| 5 | The crate's own test asserts the behaviour as intended, and states the rationale. | E2 | `crates/core/src/tx/mod.rs:573-584` | <pre>// At block 12, another transaction gets mined, but the outstanding<br>// transaction has already expired and is not executed. However, we<br>// do get resubmissions of the remaining original inflight transactions<br>// because of the resubmit deadline, despite being past the expiry. This<br>// is because once a transaction is in the mempool, it has to execute.<br>asserter.push_success(&U64::from(2)); // signer transaction count<br>asserter.push_success(&fee_history); // fee estimate<br>for _ in 2..queue.config.max_in_flight_transactions {<br> asserter.push_success(&B256::ZERO); // transaction hash from submission<br>}<br>queue.update_block_status(block_status(12)).await.unwrap;<br>assert!(asserter.read_q.is_empty);</pre> |
+| 3 | The resubmission query has no expiry predicate at all; an allocated row is selected on submission age alone. | E2 | `crates/core/src/tx/storage.rs:293-298` | <pre>sqlx::query*scalar::&lt;*, String&gt;(<br> "SELECT json_set(request, '$.nonce', nonce)<br> FROM transactions<br> WHERE nonce IS NOT NULL AND executed_at IS NULL<br> AND (submitted_at IS NULL OR submitted_at <= ?)<br> ORDER BY nonce ASC",<br>)</pre> |
+| 4 | Pruning an expired row requires `nonce IS NULL`, so an allocated row is never dropped for expiry. | E2 | `crates/core/src/tx/storage.rs:259-265` | <pre>sqlx::query(<br> "DELETE FROM transactions<br> WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?",<br>)<br>.bind(safe)<br>.execute(&mut \*tx)<br>.await?;</pre> |
+| 5 | The crate's own test asserts the behaviour as intended, and states the rationale. | E2 | `crates/core/src/tx/mod.rs:573-584` | <pre>// At block 12, another transaction gets mined, but the outstanding<br>// transaction has already expired and is not executed. However, we<br>// do get resubmissions of the remaining original inflight transactions<br>// because of the resubmit deadline, despite being past the expiry. This<br>// is because once a transaction is in the mempool, it has to execute.<br>asserter.push*success(&U64::from(2)); // signer transaction count<br>asserter.push_success(&fee_history); // fee estimate<br>for * in 2..queue.config.max_in_flight_transactions {<br> asserter.push_success(&B256::ZERO); // transaction hash from submission<br>}<br>queue.update_block_status(block_status(12)).await.unwrap;<br>assert!(asserter.read_q.is_empty);</pre> |
 | 6 | Resubmission is unconditional over the stale set and applies the fee bump every time. | E2 | `crates/core/src/tx/mod.rs:224-236` | <pre>async fn resubmit_stale(&mut self, block: u64) -> Result&lt;, Error&gt; {<br> let submitted_before = block.checked_sub(self.config.blocks_before_resubmit);<br> let stale = self.storage.stale_submissions(submitted_before).await?;<br> if stale.is_empty {<br> return Ok();<br> }<br><br> for transaction in stale {<br> tracing::debug!(nonce = transaction.nonce, "resubmitting stale transaction");<br> self.submit_transaction(transaction, block).await?;<br> }<br><br> Ok()<br>}</pre> |
-| 7 | `expires_at` carries real protocol deadlines in the sentinel. | E2 | `crates/sentinel/src/service.rs:426-437` | <pre>actions.push(<br> SentinelAction {<br> kind: SentinelActionKind::Reveal {<br> id: *id,<br> approve,<br> salt,<br> reason,<br> },<br> expires_at: Some(reveal_deadline),<br> }<br> .into,<br>);</pre> |
-| 8 | And in the validator, where the state machine supplies a per-action deadline. | E2 | `crates/validator/src/service/action.rs:149-168` | <pre>Action::KeyGenSecretShare {<br> group_id,<br> share,<br> expires_at,<br>} => {<br> let gas = 250_000 + 25_000 * share.f.len as u64;<br> (<br> Transaction {<br> to: self.coordinator,<br> value: U256::ZERO,<br> data: Coordinator::keyGenSecretShareCall {<br> gid: group_id,<br> share,<br> }<br> .abi_encode<br> .into,<br> gas,<br> },<br> expires_at,<br> )<br>}</pre> |
+| 7 | `expires_at` carries real protocol deadlines in the sentinel. | E2 | `crates/sentinel/src/service.rs:426-437` | <pre>actions.push(<br> SentinelAction {<br> kind: SentinelActionKind::Reveal {<br> id: \*id,<br> approve,<br> salt,<br> reason,<br> },<br> expires_at: Some(reveal_deadline),<br> }<br> .into,<br>);</pre> |
+| 8 | And in the validator, where the state machine supplies a per-action deadline. | E2 | `crates/validator/src/service/action.rs:149-168` | <pre>Action::KeyGenSecretShare {<br> group_id,<br> share,<br> expires_at,<br>} => {<br> let gas = 250_000 + 25_000 \* share.f.len as u64;<br> (<br> Transaction {<br> to: self.coordinator,<br> value: U256::ZERO,<br> data: Coordinator::keyGenSecretShareCall {<br> gid: group_id,<br> share,<br> }<br> .abi_encode<br> .into,<br> gas,<br> },<br> expires_at,<br> )<br>}</pre> |
 
 ## Trigger
 
@@ -113,3 +113,65 @@ Option 4 (log at `warn` and count the first time an in-flight transaction passes
 ## Reconciliation (run 2)
 
 **Final: Confirmed, Medium, 90 (E1), canonical.** Rediscovered and extended by run 2 as `F2-CORE-064` (EXTENDS): executes the never-accepted-row case (a row with `expires_at = 12` allocated during an outage is signed and broadcast at block 14), states the missing cancellation path, and shows the "clear the nonce when highest" branch of a fix is unsafe (a crash between `send_raw_transaction` and `record_submission` can leave the transaction pooled) — always replace at the same nonce. Run 2 rated Low; Medium is carried because the defect defeats a control both services use for protocol deadlines and composes with `F-CORE-060`'s ratchet (`state/run2/reconciliation/core.md` §1). 72 → 90. Still valid at `fe9e84c`. Counterparts: `F2-CORE-064`; `F-CORE-062`.
+
+## Run 3 re-validation (rv-core-b, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Still valid |
+| Changed by | The mechanism is unchanged. `622cf89` #993 split the store: `expires_at` stays on the queued `transactions` row and the allocated `allocated_nonces` row has no expiry column at all, so the deadline can only gate allocation. `ce01715` #995 streams queued rows into a `Bundler`; the merged epic restates the rule (`git show a9f7eef^:epics/2026_09_23_safenet_7702_executor_tx_batching.md`, line 122: "After allocation, a batch is in the mempool and must execute as a whole, just as a single transaction does today once it is submitted"). |
+| Severity, certainty | Unchanged: Medium, 90 |
+| Evidence | E1 `poc/F2-CORE-064/run3/` (run-2 PoC re-run, plus a batched variant) |
+
+Re-based anchors (old location at `fe9e84c`, new location at `361aaf3`, verbatim quote).
+
+- `tx/mod.rs:128-135` (the documented contract) to `crates/core/src/tx/mod.rs:149-156` (unchanged text):
+
+```rust
+    /// Queues `transaction` for execution, to be dropped if it has not been
+    /// submitted by block `expires_at`, or never dropped if `expires_at` is
+    /// `None`, then attempts to submit it (and any other queued transactions)
+    /// onchain.
+    pub async fn queue(
+        &mut self,
+        transactions: impl IntoIterator<Item = (Transaction, Option<u64>)>,
+    ) -> Result<(), Error> {
+```
+
+- `tx/storage.rs:150-156` (deadline consulted only when selecting a queued row) to `crates/core/src/tx/storage.rs:172-176`:
+
+```rust
+        let mut queued = sqlx::query_as::<_, (i64, String)>(
+            "SELECT id, request FROM transactions
+             WHERE nonce IS NULL AND (expires_at IS NULL OR expires_at > ?)
+             ORDER BY id ASC",
+        )
+```
+
+- `tx/storage.rs:293-298` (resubmission has no expiry predicate) to `crates/core/src/tx/storage.rs:389-402`: the query reads `allocated_nonces`, which has no `expires_at` (`crates/core/src/tx/storage.rs:86-93`).
+- `tx/storage.rs:259-265` (expiry pruning needs `nonce IS NULL`) to `crates/core/src/tx/storage.rs:350-356`:
+
+```rust
+        sqlx::query(
+            "DELETE FROM transactions
+             WHERE nonce IS NULL AND expires_at IS NOT NULL AND expires_at <= ?",
+        )
+```
+
+- `tx/mod.rs:573-584` (the crate test states the rationale) to `crates/core/src/tx/mod.rs:786-796`, test `does_not_submit_expired_transactions`: "This is because once a transaction is in the mempool, it has to execute."
+- `tx/mod.rs:224-236` (unconditional resubmission with a bump) to `crates/core/src/tx/mod.rs:291-304`.
+- `driver.rs:66-69` (encoder contract) to `crates/core/src/driver.rs:66-71`: "each paired with the block number after which it should be dropped if it has not yet been submitted".
+- Service deadlines: `crates/sentinel/src/service.rs:240, 248` (`expires_at: Some(commit_deadline)` for the approval and the commit) and `:444` (`expires_at: Some(reveal_deadline)`); the validator passes the state machine's `expires_at` through in `crates/validator/src/service/action.rs` (for example `:123`, `:140`, `:166`).
+
+What was run (worktree at `361aaf3`, `poc/F2-CORE-064/run3/tx_mod_tests_run3.rs` appended to `crates/core/src/tx/mod.rs`'s `mod tests`, reverted, `git status --short` empty):
+
+- `cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1`.
+- `rv3_f2_core_064_never_accepted_row_is_broadcast_after_its_expiry`: ok, identical to run 2. A row with `expires_at = 12` allocated at block 11 during an outage (`submitted_at` `NULL`) is still failing at 12 and 13 and is signed and broadcast at block 14 (`submitted_at = 14`), two blocks after its deadline.
+- Variant, batched mode (`rv3_f2_core_064_batched_variant_expired_batch_is_broadcast`): ok. A batch of two calls that both carry `expires_at = 12`, allocated at block 11 during an outage, is broadcast at block 14 with both deadlines passed.
+
+Notes:
+
+- Run 2's caveat on remediation stands: "clear the nonce" is unsafe (a crash between `send_raw_transaction` and `record_submission` can leave the transaction pooled); replace at the same nonce. The merged design now has exactly such a same-nonce replacement, `Transaction::default()` as a cancellation (`crates/core/src/tx/storage.rs:301-312`), but it is used only for unused authorization nonces. Reusing it for an expired, never-accepted row would be the natural fix.
+- Under batching a stale batch lands all its calls at once past their deadlines, as the "In-flight impact (FWD)" section predicted; the epic's choice to start no batch with an expired transaction holds (`next_transaction` skips expired queued rows), so no batch inherits a deadline that was already past at allocation.
+- Counterparts `F2-CORE-064`; composes with `F-CORE-060` (each rebroadcast bumps the fee) and `F-CORE-062` (the row holds its nonce).

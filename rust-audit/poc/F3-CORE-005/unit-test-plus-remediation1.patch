@@ -1,0 +1,148 @@
+diff --git a/crates/core/src/index/blocks.rs b/crates/core/src/index/blocks.rs
+index 8467fdc..738520a 100644
+--- a/crates/core/src/index/blocks.rs
++++ b/crates/core/src/index/blocks.rs
+@@ -604,6 +604,16 @@ impl BlockWatcher {
+     /// this returns immediately and the watcher catches up as fast as it can.
+     async fn wait_for_pending_block(&self) {
+         let target = self.pending.timestamp_ms + self.timings.block_propagation_delay;
++        // QA3 bite check (F3-CORE-005 remediation 1, first half): a newest
++        // header ahead of the host clock means the host clock is behind, so
++        // do not let it delay the fetch.
++        let newest_header_ms = self
++            .pending
++            .timestamp_ms
++            .saturating_sub(self.timings.block_time);
++        if newest_header_ms > self.clock.now_ms() {
++            return;
++        }
+         self.clock.sleep_until(target).await;
+     }
+ }
+@@ -1373,6 +1383,102 @@ mod tests {
+         );
+     }
+ 
++    /// QA3 F3-CORE-005: a Gnosis-timed chain whose block `1000 + k` exists from
++    /// test time `5 k` s on, with header timestamps `offset_s` ahead of the
++    /// host clock (the host clock runs `offset_s` behind the chain). Answers
++    /// `eth_getBlockByNumber` with `null` for a block that does not exist yet.
++    #[derive(Clone)]
++    struct Qa3ClockChain {
++        start: Instant,
++        offset_s: u64,
++        requests: std::sync::Arc<std::sync::atomic::AtomicUsize>,
++    }
++
++    impl Qa3ClockChain {
++        fn head(&self) -> u64 {
++            1000 + self.start.elapsed().as_millis() as u64 / 5_000
++        }
++
++        fn block(&self, number: u64) -> Block {
++            block_with(number, |header| {
++                header.timestamp =
++                    clock::TEST_SYSTEM_TIME_EPOCH_SECONDS + self.offset_s + 5 * number - 5 * 1000;
++            })
++        }
++    }
++
++    impl tower::Service<alloy::rpc::json_rpc::RequestPacket> for Qa3ClockChain {
++        type Response = alloy::rpc::json_rpc::ResponsePacket;
++        type Error = TransportError;
++        type Future = alloy::transports::TransportFut<'static>;
++
++        fn poll_ready(
++            &mut self,
++            _: &mut std::task::Context<'_>,
++        ) -> std::task::Poll<Result<(), Self::Error>> {
++            std::task::Poll::Ready(Ok(()))
++        }
++
++        fn call(&mut self, request: alloy::rpc::json_rpc::RequestPacket) -> Self::Future {
++            use alloy::rpc::json_rpc::{RequestPacket, Response, ResponsePacket, ResponsePayload};
++            let RequestPacket::Single(request) = request else {
++                panic!("unexpected batch request");
++            };
++            assert_eq!(request.method(), "eth_getBlockByNumber");
++            self.requests
++                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++            let (tag, _): (String, bool) =
++                serde_json::from_str(request.params().unwrap().get()).unwrap();
++            let number = match tag.as_str() {
++                "latest" => self.head(),
++                hex => u64::from_str_radix(hex.trim_start_matches("0x"), 16).unwrap(),
++            };
++            let block = (number <= self.head()).then(|| self.block(number));
++            let response = Response {
++                id: request.id().clone(),
++                payload: ResponsePayload::Success(serde_json::value::to_raw_value(&block).unwrap()),
++            };
++            Box::pin(async move { Ok(ResponsePacket::Single(response)) })
++        }
++    }
++
++    /// Returns, per block, the lag between the block existing and the watcher
++    /// emitting it, and the number of block requests sent.
++    async fn qa3_lag_with_host_clock_behind(offset_s: u64) -> (Vec<(u64, u64)>, usize) {
++        let start = Instant::now();
++        let chain = Qa3ClockChain {
++            start,
++            offset_s,
++            requests: Default::default(),
++        };
++        let provider = Provider::qa3_from_transport(chain.clone(), 100);
++        let mut blocks = BlockWatcher::new(provider, Config::default(), None)
++            .await
++            .unwrap();
++        let _ = blocks.ready();
++        assert_eq!(blocks.timings, Config::default().timings(100).unwrap());
++
++        let mut lags = Vec::new();
++        for k in 1..=6u64 {
++            let update = blocks.next().await.unwrap();
++            assert_eq!(update, new_block_update(&chain.block(1000 + k)));
++            let elapsed = start.elapsed().as_millis() as u64;
++            lags.push((1000 + k, elapsed - 5_000 * k));
++        }
++        let requests = chain.requests.load(std::sync::atomic::Ordering::Relaxed);
++        (lags, requests)
++    }
++
++    #[tokio::test(start_paused = true)]
++    async fn qa3_host_clock_behind_delays_every_block_by_the_offset() {
++        let (synced, synced_requests) = qa3_lag_with_host_clock_behind(0).await;
++        println!("host clock in sync: (block, lag ms) {synced:?}; block requests {synced_requests}");
++        let (behind, behind_requests) = qa3_lag_with_host_clock_behind(10).await;
++        println!("host clock 10 s behind: (block, lag ms) {behind:?}; block requests {behind_requests}");
++        assert!(synced.iter().all(|(_, lag)| *lag == 500));
++        assert!(behind.iter().all(|(_, lag)| *lag == 10_500));
++    }
++
+     fn block_hash(number: u64) -> B256 {
+         let mut bytes = [0; 32];
+         bytes[24..].copy_from_slice(&number.to_be_bytes());
+diff --git a/crates/core/src/provider/mod.rs b/crates/core/src/provider/mod.rs
+index febc353..0f59ad9 100644
+--- a/crates/core/src/provider/mod.rs
++++ b/crates/core/src/provider/mod.rs
+@@ -180,3 +180,19 @@ impl AlloyProvider<AnyNetwork> for Provider {
+         ProviderCall::Ready(Some(Ok(self.chain_id)))
+     }
+ }
++
++/// QA3 PoC support: a provider over an in-process transport, so tests can model
++/// time-dependent node behaviour that the FIFO `Asserter` cannot.
++#[cfg(test)]
++impl Provider {
++    pub fn qa3_from_transport<T>(transport: T, chain_id: u64) -> Self
++    where
++        T: alloy::transports::IntoBoxTransport,
++    {
++        let client = ClientBuilder::default().transport(transport, true);
++        Self {
++            root: RootProvider::new(client),
++            chain_id,
++        }
++    }
++}

@@ -1,0 +1,51 @@
+diff --git a/crates/core/src/tx/config.rs b/crates/core/src/tx/config.rs
+index 61d2b11..09b5f9e 100644
+--- a/crates/core/src/tx/config.rs
++++ b/crates/core/src/tx/config.rs
+@@ -102,6 +102,19 @@ impl TryFrom<RawConfig> for Config {
+     type Error = &'static str;
+ 
+     fn try_from(raw: RawConfig) -> Result<Self, Self::Error> {
++        // QA3 bite check (F3-CORE-061 remediation 1).
++        if raw.max_in_flight_transactions == Some(0) {
++            return Err("`max_in_flight_transactions` must be at least 1");
++        }
++        if raw.blocks_before_resubmit == 0 {
++            return Err("`blocks_before_resubmit` must be at least 1");
++        }
++        if raw
++            .priority_fee_cap_percentage
++            .is_some_and(|cap| !cap.is_finite())
++        {
++            return Err("`priority_fee_cap_percentage` must be a finite number");
++        }
+         let mode = match (
+             raw.max_in_flight_transactions,
+             raw.executor,
+@@ -176,6 +189,26 @@ mod tests {
+         }
+     }
+ 
++    /// QA3 F3-CORE-061: values that silently stop submission or inclusion
++    /// should be rejected like the invalid mode combinations.
++    #[test]
++    fn qa3_rejects_values_that_silently_stop_the_queue() {
++        let mut accepted = Vec::new();
++        for (key, value) in [
++            ("max_in_flight_transactions", "0"),
++            ("priority_fee_cap_percentage", "nan"),
++            ("blocks_before_resubmit", "0"),
++        ] {
++            let document = format!("[transactions]\n{key} = {value}\n");
++            let parsed = toml::from_str::<std::collections::BTreeMap<String, Config>>(&document);
++            println!("{key} = {value} -> {parsed:?}");
++            if parsed.is_ok() {
++                accepted.push(format!("{key} = {value}"));
++            }
++        }
++        assert!(accepted.is_empty(), "accepted: {accepted:?}");
++    }
++
+     #[test]
+     fn rejects_invalid_submission_mode() {
+         let executor = address!("0x0404040404040404040404040404040404040404");

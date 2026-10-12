@@ -323,3 +323,108 @@ The merge shifts `contracts/src/FROSTCoordinator.sol` by two doc-only hunks. Com
 ## Reconciliation (run 2)
 
 **Final combined status: Critical, 97 %, Confirmed — canonical.** Counterpart `F2-VAL-001` (CONFIRMS): an independent E1 reproduction (`poc/F2-VAL-001`, `s_a_recovered == s_a_ref`, 95 %) of the same mechanism. No team disposition yet. See `state/run2/reconciliation/validator.md` (Sections 1, 5).
+
+## Run 3 re-validation (rv-val, 2026-10-08)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Verdict | Fixed |
+| Changed by | `14750ea` "Require a proof of possession for KeyGen encryption keys" (#1027), on top of `010a09f` (#1022, PoK of `c[0]` verified onchain) |
+| Severity, certainty | resolved; was Critical 97 |
+| Evidence | E1: `poc/F-VAL-001/run3/` (original PoC adapted, 8 Rust variants, mutation run), `poc/F2-VAL-001/run3/`, `poc/F-VAL-001-onchain/run3/` (7 Foundry tests, mutation run) |
+
+Re-based anchors (`fe9e84c` to `361aaf3`):
+
+- `crates/validator/src/frost/keygen.rs:79-100` is now `crates/validator/src/frost/keygen.rs:85-107`. `verify_commitment` now verifies a proof of possession for `q` under the committer's identifier before it accepts the commitment:
+
+  ```rust
+  let identifier = participants::identifier(participant);
+  marshal::frost_commitment(commitment)
+      .and_then(|(encryption_package, package)| {
+          let encryption_public_key = encryption_package.verified_public_key(identifier)?;
+          frost_core::keys::dkg::verify_proof_of_knowledge(
+              identifier,
+              package.commitment(),
+              package.proof_of_knowledge(),
+          )?;
+  ```
+
+- The PoP check itself, `crates/validator/src/frost/ecdh.rs:115-126`:
+
+  ```rust
+  pub(super) fn verified_public_key(
+      self,
+      identifier: Identifier,
+  ) -> Result<EncryptionPublicKey, frost_secp256k1::Error> {
+      let public_key = EncryptionPublicKey::from_point(self.public_key_point)?;
+      frost_core::keys::dkg::verify_proof_of_knowledge(
+          identifier,
+          &public_key.as_commitment(),
+          &self.proof_of_possession,
+      )?;
+      Ok(public_key)
+  }
+  ```
+
+  `verified_public_key` is the only constructor of an `EncryptionPublicKey` from onchain data (`grep -rn 'verified_public_key\|Package::new' crates/validator/src`: one call site, `frost/keygen.rs:95`; `Package::new` is called only from `frost/marshal.rs:110` and `ecdh.rs:56`).
+
+- The pad is unchanged and still symmetric: `crates/validator/src/frost/ecdh.rs:110-121` is now `crates/validator/src/frost/ecdh.rs:218-229` (`let shared_secret = (receiver_pubkey.0 * **sender_privkey).to_affine().x();`), and `ecdh_is_commutative` is still at `ecdh.rs:266-275`. Encrypt and decrypt sites: `frost/keygen.rs:196-214` is now `frost/keygen.rs:204-222`, `frost/keygen.rs:375-381` is now `frost/keygen.rs:374-380`.
+- The complaint path is unchanged in the respects the attack used: `state/keygen.rs:661-675` (sharing-round arm, no deadline gate) is now `state/keygen.rs:666-690`; `state/keygen.rs:714-722` (per-accused count) is now `state/keygen.rs:725-735`; `state/keygen.rs:734-745` (plaintext response) is now `state/keygen.rs:747-758`, still unconditional for a timely complaint (`&& requires_response` only drops late ones).
+- Reference contract: `FROSTCoordinator.sol:383-385` (`Secp256k1.requireNonZero(commitment.q)`) is now `contracts/src/FROSTCoordinator.sol:373-375`:
+
+  ```solidity
+  require(commitment.c.length == state.threshold, InvalidGroupCommitment());
+  FROST.verifyProofOfKnowledge(msg.sender, commitment.c[0], commitment.pok);
+  FROST.verifyProofOfKnowledge(msg.sender, commitment.q, commitment.pop);
+  ```
+
+  The identity point is rejected by `Secp256k1.mulmuladd` through `_unpackNonZero` (`contracts/src/libraries/Secp256k1.sol:151-153,256-260`).
+
+What was run (worktree `wt/rv-val` at `361aaf3`, every PoC hunk reverted afterwards):
+
+1. Original PoC, mechanically adapted (`verify_secret_share` now returns `EncryptedSecretShares`, not a tuple; the attack line `.q = stolen_q` is unchanged): `cargo test -p validator --bins frost::poc_f_val_001 -- --test-threads=1`. Result `0 passed; 3 failed`, each at step 2: `verify_commitment rejected 0x976E…0aa9: Participant { cause: InvalidProofOfKnowledge { .. }, culprit: 0x976e…0aa9 }`. Output: `poc/F-VAL-001/run3/RESULT-original-adapted.txt`.
+2. F2-VAL-001's PoC, same mechanical adaptation: `cargo test -p validator --bins frost::poc_f2_val_001_run3`. Result `0 passed; 1 failed` at `verify_commitment(m, &m_commit).unwrap()`, culprit `M`. Output: `poc/F2-VAL-001/run3/RESULT.txt`.
+3. Variants, `poc/F-VAL-001/run3/poc_variants.rs`, `cargo test -p validator --bins frost::poc_f_val_001_run3`: `8 passed`. Each asserts that `M`'s commitment is rejected with `M` as culprit while every honest commitment verifies: (v1) `q := q_A`, own PoP; (v2) `q_A` and `A`'s PoP both copied verbatim; (v3) `2·q_A` with own PoP and with `A`'s PoP; (v4) `q_A + G`; (v5) `-q_A`, which has the same x-coordinate and therefore the same pad, with own PoP and with `A`'s PoP negated (`R -> -R`, `z -> -z`); (v6) a random PoP; (v7) `q` at the identity with the trivial proof `R = z·G` (rejected by `from_point`, `InvalidIdentityElement`); (v8, control) `M` registers a key it owns (`q_M = c_M[0]`, PoK reused as PoP, accepted), harvests one pad per peer by complaining, and the pads open 0 of 10 victim slots. Output: `RESULT-variants.txt`.
+4. Mutation, to prove the variants bite: with the `verify_proof_of_knowledge` call in `verified_public_key` removed, the adapted original PoC passes again (`3 passed`, including the byte-for-byte recovery of `A`'s signing share) and v1 to v6 fail with "impostor commitment ACCEPTED". Restored with `git checkout`. Output: `RESULT-mutation-pop-removed.txt`.
+5. Onchain step, `poc/F-VAL-001-onchain/run3/FVal001OnchainRun3.t.sol` (the run-1 harness no longer compiles: the struct is now `{q, pop, c, pok}`, and its random `c`, `r`, `mu` would fail #1022's PoK check, so honest commitments here carry real proofs): `FOUNDRY_TEST=<scratch> forge test --match-path '*FVal001OnchainRun3*'`. Result `7 passed`: the control commit lands; v1 (copy `q`), v2 (copy `q` and `pop`), v3 (`2·q_A`), v4 (`-q_A`, negated PoP), v6 (`M` commits first with `A`'s key and a guessed proof) revert with `InvalidMulMulAddWitness`; v5 (identity `q`) reverts with `NotOnCurve`. With the PoP line removed from `keyGenCommit`, all six attack variants land (`RESULT-mutation-pop-removed.txt`); restored.
+
+Notes:
+
+- The fix closes step 2 of the Trigger (registering a key whose discrete log `M` does not know) on both sides. Since `keyGenCommit` reverts, `M` cannot enter round 2 at all; this is the same as `M` never committing, which every participant can already do (excluded at the commit deadline). No new liveness lever.
+- The PoP reuses the DKG PoK scheme with no separate domain. A proof is bound to the committer's identifier (address-derived), so it cannot be replayed under another identifier; the only cross-use is a participant proving its own key twice (v8), which is harmless.
+- Everything else the attack composed is unchanged: the raw, symmetric x-coordinate pad (F-VAL-002) and the unconditional plaintext complaint response (F-VAL-003). The mutation run shows they still compose into the full share recovery the moment `q` is not bound. They are no longer exploitable this way, but they stay live under their own rows.
+- Counterpart `F2-VAL-001` is resolved by the same commit.
+
+## Fix verification (CA3-FIX, 2026-10-09)
+
+| Field | Value |
+| --- | --- |
+| Audit commit | `361aaf3` |
+| Result | Fixed confirmed |
+| Fix | `14750ea` (#1027): proof of possession of `q`, checked in `verify_commitment` (`crates/validator/src/frost/keygen.rs:94-95` calling `frost/ecdh.rs:115-126`) and in `keyGenCommit` (`contracts/src/FROSTCoordinator.sol:375`); `010a09f` (#1022): proof of knowledge of `c[0]` onchain (`:374`) |
+| Re-validation re-run | Matches rv-val: original attack 0 of 3 and F2-VAL-001 0 of 1 (both rejected at `verify_commitment`, impostor as culprit, `InvalidProofOfKnowledge`), variants 8 of 8, onchain harness 7 of 7 (run twice) |
+| New variants | 6 Rust (crypto layer and validator transition, Aegis size 5 of threshold 3) and 3 onchain; all reject the impostor; mutations show each one bites |
+| Confidence | 95 |
+| Evidence | E1: `poc/F-VAL-001/ca3-fix/RESULT.txt`, `poc/F-VAL-001-onchain/ca3-fix/RESULT.txt` |
+
+What was run (worktree `wt/rv-xc`, PoC modules wired with `#[cfg(test)] #[path]`, every hunk reverted):
+
+- rv-val's run-3 sources: `cargo test -p validator --bins --locked --offline`, test filters `poc_f_val_001` and `poc_f2_val_001_run3`, with `--nocapture` and `--test-threads=1`. `poc_original_adapted.rs` fails 3 of 3 at `verify_commitment rejected 0x976E…0aa9 … InvalidProofOfKnowledge`; `poc_test_adapted.rs` fails at `verify_commitment(m, ..)` with culprit `0x3c44…93bc` (its impostor); `poc_variants.rs` passes 8 of 8.
+- rv-val's onchain harness: `FOUNDRY_OFFLINE=true FOUNDRY_TEST=<dir> forge test --offline --match-path '*FVal001Onchain*'` in `contracts/`: 7 passed, before and after the mutation runs.
+
+Variants the re-validation did not list (`poc/F-VAL-001/ca3-fix/ca3fix_frost.rs`, `ca3fix_state.rs`, `poc/F-VAL-001-onchain/ca3-fix/FVal001OnchainCa3Fix.t.sol`):
+
+1. w0: the original route (copied `q`, own PoP) at the Aegis size: rejected.
+2. w1: the PoP reuses the PoK scheme with no separate domain, so the victim's PoK of `c_A[0]` is a valid proof for the point `c_A[0]` under the victim's identifier. `q := c_A[0]` with that PoK as PoP, and with M's own PoP: both rejected.
+3. w2: the victim's whole commitment `(q, pop, c, pok)` under M's address (a mempool front-run, or a replay from an earlier ceremony): rejected.
+4. w3: M's own `q` and PoP with the victim's `c` and PoK: rejected.
+5. w4, w5, through `Transition::apply_transition` from the epoch boundary with five members: the impostor's `KeyGenCommitted` carrying the copied `q` (w4) or the copied whole commitment (w5) never enters the honest validator's commitment map (4 of 5 held), so no share is ever encrypted to the copied key; at the commitment deadline the round restarts as a 4-member group without the impostor, victim included. Genesis enters the same `CollectingCommitments` through `start_key_gen` (`state/keygen.rs:41-53`), and every `KeyGenCommitted` goes through `handle_key_gen_committed` (`state/mod.rs:401-403`), the only `verify_commitment` call site (`state/keygen.rs:173`).
+6. Onchain W1 (`q := c_A[0]`, `pop := pok_A`), W2 (the victim's full commitment front-run before the victim; the victim's own commit and M's honest commit still land afterwards), W3 (the victim's `c` and `pok`): all revert with `InvalidMulMulAddWitness`.
+
+Mutations (reverted with `git checkout`):
+
+- Rust, PoP check removed from `verified_public_key`: the original attack passes again (3 of 3, byte-for-byte recovery of the victim's signing share) and F2-VAL-001 passes; rv-val v1 to v6 fail; w0, w1 and w4 fail. w2, w3 and w5 still pass because the PoK check from #1022 rejects any copied polynomial on its own.
+- Onchain, PoP line `FROSTCoordinator.sol:375` removed: W1 and rv-val v1 to v6 fail. PoK line `:374` removed: W3 fails. W2 needs both removed.
+
+Notes: the raw symmetric pad (F-VAL-002) and the unconditional complaint response (F-VAL-003) are unchanged under their own rows; with the PoP they no longer compose into this attack (rv-val's v8 and the mutation run). `EncryptionPublicKey` also deserializes without a PoP check (`frost/ecdh.rs`, `impl Deserialize for EncryptionPublicKey`), but only from the node's own snapshot (A17). The 5 points held back are for paths no test here drives (none found by `grep`).
