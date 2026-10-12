@@ -1,3 +1,0 @@
-[FAIL: KeyGenComplained param mismatch at compromised: expected=true, got=false] test_KeyGenComplain_CompromisedByRespondedComplaints() (gas: 620031)
-Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 3.39ms (2.79ms CPU time)
-[FAIL: KeyGenComplained param mismatch at compromised: expected=true, got=false] test_KeyGenComplain_CompromisedByRespondedComplaints() (gas: 620031)
