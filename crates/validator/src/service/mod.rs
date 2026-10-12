@@ -55,6 +55,7 @@ impl ValidatorService {
             },
         )
         .ok_or(Error::InvalidValidators)?;
+        tracing::info!(genesis_group_id = %genesis.group().id(), "configured genesis group id");
         let consensus = ConsensusDomain::new(chain_id, config.consensus);
 
         Ok(Self {
