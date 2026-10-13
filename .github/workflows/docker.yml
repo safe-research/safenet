@@ -58,8 +58,9 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=ref,event=pr
-            # create aegis tags on new releases
-            type=raw,value=aegis,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # create network tags on new releases
+            type=raw,value=beta,enable=${{ startsWith(github.ref, 'refs/tags/v0.1.') }}
+            type=raw,value=aegis,enable=${{ startsWith(github.ref, 'refs/tags/v0.2.') }}
           flavor: |
             latest=false
 
