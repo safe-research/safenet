@@ -3,7 +3,7 @@
 //!
 //! Function bindings only need their calldata (the `*Call` types), so return
 //! values are transcribed only where a return is actually decoded onchain
-//! (`getValidatorStaker`); the mutating calls omit them.
+//! (such as `getValidatorStaker`); the mutating calls omit them.
 
 // A macro-generated `sol!` constructor trips `too_many_arguments`; it can't be annotated per-item, so
 // the allow sits at module scope (the only hand-written item here is a single-argument `TryFrom`).
@@ -110,6 +110,13 @@ sol! {
     #[sol(rpc)]
     #[derive(Debug)]
     contract Consensus {
+        struct Epochs {
+            uint64 previous;
+            uint64 active;
+            uint64 staged;
+            uint64 rolloverBlock;
+        }
+
         event EpochProposed(
             uint64 indexed activeEpoch,
             uint64 indexed proposedEpoch,
@@ -145,6 +152,8 @@ sol! {
         );
         event ValidatorStakerSet(address indexed validator, address staker);
 
+        function getEpochsState() external view returns (Epochs memory epochs);
+        function getEpochGroupId(uint64 epoch) external view returns (bytes32 groupId);
         function proposeEpoch(uint64 proposedEpoch, uint64 rolloverBlock, bytes32 groupId) external;
         function stageEpoch(
             uint64 proposedEpoch,
@@ -207,6 +216,9 @@ sol! {
         event SignShared(bytes32 indexed sid, bytes32 indexed selectionRoot, address participant, uint256 z);
         event SignCompleted(bytes32 indexed sid, bytes32 indexed selectionRoot, Signature signature);
 
+        error GroupNotReady();
+
+        function groupKey(bytes32 gid) external view returns (Point memory key);
         function keyGenAndCommit(
             bytes32 participants,
             uint16 count,

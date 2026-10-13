@@ -9,7 +9,7 @@ use crate::{
     bindings::{Consensus, Coordinator, Oracle, Point, SafeTransaction},
     config::ValidatorConfig,
     consensus::{
-        epoch::EpochId,
+        epoch::{self, EpochId},
         group::{Group, ParticipantSet},
         hashing::ConsensusDomain,
     },
@@ -23,8 +23,14 @@ use crate::{
     metrics::{self, TransitionKind},
     service::{Action, Effect, Event, Resume},
 };
-use alloy::primitives::{Address, B256, Bytes};
-use safenet_core::state::{Commands, Message, StateTransition};
+use alloy::{
+    primitives::{Address, B256, Bytes},
+    providers::Provider as _,
+};
+use safenet_core::{
+    provider::Provider,
+    state::{Commands, Message, StateInitializer, StateTransition},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -33,7 +39,7 @@ use std::{
 };
 
 /// The complete snapshotted validator state.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct State {
     /// The epoch-rollover / DKG state machine.
     rollover: RolloverState,
@@ -64,10 +70,9 @@ struct Epoch {
 
 /// The epoch-rollover / DKG state machine. Each active variant carries the
 /// group it is generating.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 enum RolloverState {
     /// Idle before the genesis group's DKG has been triggered.
-    #[default]
     WaitingForGenesis,
     /// The rollover has halted in an unrecoverable way.
     ///
@@ -469,6 +474,119 @@ impl StateTransition<State> for Transition {
                 Resume::Nonces { message, nonces } => self.handle_nonces(state, message, nonces),
             },
         }
+    }
+}
+
+/// The validator state initializer.
+///
+/// Reads onchain state to determine whether or not we should start waiting for
+/// genesis or in the middle of an epoch.
+pub struct Initializer {
+    /// The Ethereum RPC provider.
+    pub provider: Provider,
+    /// The consensus address.
+    pub consensus: Address,
+    /// The FROST coordinator address.
+    pub coordinator: Address,
+    /// The configured genesis group ID.
+    pub genesis_group_id: B256,
+    /// The number of blocks per epoch.
+    pub blocks_per_epoch: NonZeroU64,
+}
+
+/// An error initializing the validator state.
+#[derive(Debug, thiserror::Error)]
+pub enum InitializerError {
+    /// An error reading onchain state.
+    #[error(transparent)]
+    Contract(#[from] alloy::contract::Error),
+    /// The configured genesis group does not match the onchain one.
+    #[error("configured genesis group {configured} does not match onchain genesis group {onchain}")]
+    GenesisGroupMismatch {
+        /// The configured genesis group ID.
+        configured: B256,
+        /// The onchain genesis group ID.
+        onchain: B256,
+    },
+}
+
+impl Initializer {
+    /// Returns whether the genesis group's key generation has completed as of
+    /// `block`.
+    async fn genesis_completed(&self, block: u64) -> Result<bool, alloy::contract::Error> {
+        // The coordinator only exposes the group key once the group's key
+        // generation is finalized, and reverts otherwise.
+        match Coordinator::new(self.coordinator, &self.provider)
+            .groupKey(self.genesis_group_id)
+            .block(block.into())
+            .call()
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(err)
+                if err
+                    .as_decoded_error::<Coordinator::GroupNotReady>()
+                    .is_some() =>
+            {
+                Ok(false)
+            }
+            Err(err) => Err(err),
+        }
+    }
+}
+
+impl StateInitializer<State> for Initializer {
+    type Error = InitializerError;
+
+    async fn initial_state(self) -> Result<State, Self::Error> {
+        let block = self
+            .provider
+            .get_block_number()
+            .await
+            .map_err(alloy::contract::Error::from)?;
+        let consensus = Consensus::new(self.consensus, &self.provider);
+
+        let genesis_group_id = consensus
+            .getEpochGroupId(EpochId::Genesis.raw_value())
+            .block(block.into())
+            .call()
+            .await?;
+        if genesis_group_id != self.genesis_group_id {
+            return Err(InitializerError::GenesisGroupMismatch {
+                configured: self.genesis_group_id,
+                onchain: genesis_group_id,
+            });
+        }
+
+        let epochs = consensus
+            .getEpochsState()
+            .block(block.into())
+            .call()
+            .await?;
+        let active_epoch = EpochId::from_raw(epochs.active);
+
+        let rollover = if let Some(next_epoch) = NonZeroU64::new(epochs.staged) {
+            // There is already a staged epoch, wait for it to roll over.
+            RolloverState::EpochStaged { next_epoch }
+        } else if active_epoch == EpochId::Genesis && !self.genesis_completed(block).await? {
+            RolloverState::WaitingForGenesis
+        } else {
+            // Skip the epoch whose key generation is already underway
+            // according to the epoch clock. This is not necessarily the epoch
+            // after the active one, as onchain rollovers may lag behind the
+            // epoch clock when key generations fail.
+            RolloverState::EpochSkipped {
+                next_epoch: epoch::next_number(block, self.blocks_per_epoch),
+            }
+        };
+
+        Ok(State {
+            rollover,
+            active_epoch,
+            epochs: BTreeMap::new(),
+            signing: BTreeMap::new(),
+            signature_id_to_message: BTreeMap::new(),
+        })
     }
 }
 

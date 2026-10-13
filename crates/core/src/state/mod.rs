@@ -10,7 +10,7 @@ use self::storage::SnapshotStore;
 use crate::index::{BlockStatus, BlockUpdate, EventLog, EventUpdate, Update};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx::SqlitePool;
-use std::{mem, range::RangeInclusive};
+use std::{convert::Infallible, fmt::Display, mem, range::RangeInclusive};
 use tokio::sync::Mutex;
 
 /// Error produced by the [`StateMachine`].
@@ -30,6 +30,9 @@ pub enum Error {
     /// transition failed in a non-recoverable way.
     #[error("poisoned state machine")]
     Poisoned,
+    /// An error occurred constructing the initial state.
+    #[error("state initialization failed: {0}")]
+    Init(String),
 }
 
 /// A state transition message.
@@ -97,6 +100,30 @@ where
     ) -> (S, Commands<S, Self>);
 }
 
+/// The state initializer.
+///
+/// This is called to initialize the state on the first run only.
+pub trait StateInitializer<S> {
+    type Error: Display;
+
+    /// Initializes the default state.
+    fn initial_state(self) -> impl Future<Output = Result<S, Self::Error>>;
+}
+
+/// State initializer for [`Default`].
+pub struct DefaultInitializer;
+
+impl<S> StateInitializer<S> for DefaultInitializer
+where
+    S: Default,
+{
+    type Error = Infallible;
+
+    async fn initial_state(self) -> Result<S, Self::Error> {
+        Ok(S::default())
+    }
+}
+
 /// A utility type for a vector of commands for some state and its transition.
 pub type Commands<S, T> =
     Vec<Command<<T as StateTransition<S>>::Action, <T as StateTransition<S>>::Effect>>;
@@ -122,30 +149,22 @@ where
     T: StateTransition<S>,
 {
     /// Creates a new state machine with the given state transition.
-    pub async fn new(transition: T, pool: SqlitePool) -> Result<Self, Error>
-    where
-        S: Default,
-    {
-        Self::with_init(transition, pool, S::default).await
-    }
-
-    /// Creates a new state machine with the given state transition and an
-    /// initial value constructor.
-    pub async fn with_init(
+    pub async fn new(
         transition: T,
         pool: SqlitePool,
-        init: impl FnOnce() -> S,
+        init: impl StateInitializer<S>,
     ) -> Result<Self, Error> {
         let snapshots = SnapshotStore::new(pool).await?;
-        let (state, status) = snapshots
-            .current()
-            .await?
-            .map(|(latest, state)| -> Result<_, Error> {
-                let pending = latest.checked_add(1).ok_or(Error::EndOfChain)?;
-                Ok((state, Status::BlockPending { pending }))
-            })
-            .transpose()?
-            .unwrap_or_else(|| (init(), Status::Initialized));
+        let (state, status) = if let Some((latest, state)) = snapshots.current().await? {
+            let pending = latest.checked_add(1).ok_or(Error::EndOfChain)?;
+            (state, Status::BlockPending { pending })
+        } else {
+            let state = init
+                .initial_state()
+                .await
+                .map_err(|e| Error::Init(e.to_string()))?;
+            (state, Status::Initialized)
+        };
         let inner = Mutex::new(Some((state, status)));
 
         Ok(Self {
@@ -390,7 +409,7 @@ mod tests {
     }
 
     async fn new_machine(pool: &SqlitePool) -> StateMachine<TestState, TestTransition> {
-        StateMachine::new(TestTransition, pool.clone())
+        StateMachine::new(TestTransition, pool.clone(), DefaultInitializer)
             .await
             .unwrap()
     }

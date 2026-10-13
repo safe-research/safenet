@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let staker = config.validator.staker;
 
     let service = ValidatorService::new(
-        chain_id,
+        provider.clone(),
         account,
         pool.clone(),
         coordinator,

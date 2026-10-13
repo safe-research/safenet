@@ -14,7 +14,7 @@ use crate::{
     index::{self, BlockUpdate, Update, Watcher, events::Events},
     metrics::{self, ProcessingStatus},
     provider::Provider,
-    state::{self, StateMachine, StateTransition},
+    state::{self, StateInitializer, StateMachine, StateTransition},
     tx::{self, Signer, Transaction, TransactionQueue},
     utils,
 };
@@ -73,7 +73,7 @@ pub trait ActionEncoder<Action> {
 
 /// A Safenet service definition.
 pub trait Service {
-    type State: Default + DeserializeOwned + Serialize;
+    type State: DeserializeOwned + Serialize;
 
     type Event: Debug + Events;
     type Action;
@@ -87,11 +87,19 @@ pub trait Service {
             Effect = Self::Effect,
             Resume = Self::Resume,
         >;
+    type Initializer: StateInitializer<Self::State>;
     type Effects: EffectHandler<Self::Effect, Self::Resume>;
     type Actions: ActionEncoder<Self::Action>;
 
     /// Constructs the service components used by the driver.
-    fn components(self) -> (Self::Transition, Self::Effects, Self::Actions);
+    fn components(
+        self,
+    ) -> (
+        Self::Transition,
+        Self::Initializer,
+        Self::Effects,
+        Self::Actions,
+    );
 }
 
 /// Drives a [`Service`] by wiring its indexer, state machine and transaction
@@ -127,8 +135,8 @@ where
         addresses: Vec<Address>,
         config: Config,
     ) -> Result<Self, Error> {
-        let (transition, effects, actions) = service.components();
-        let state = StateMachine::new(transition, pool.clone()).await?;
+        let (transition, initializer, effects, actions) = service.components();
+        let state = StateMachine::new(transition, pool.clone(), initializer).await?;
         let effects = EffectManager::new(effects);
         let block_status = state.block_status().await?;
         let watcher = Watcher::new(provider.clone(), config.index, addresses, block_status).await?;
