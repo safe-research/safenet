@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
 			throw new Error(`${key} is not a valid integer: ${env[key]}`);
 		}
 	}
-	const defaultOracles = (env.VITE_DEFAULT_ORACLES || "0x4F61B8832978e83b80D69551AEf07557DBE41d03")
+	const defaultOracles = (env.VITE_DEFAULT_ORACLES || "0xc7E93E88fCA4F4DaB9eD393157afDf4F0Da3b1e7")
 		.split(",")
 		.map((address) => address.trim())
 		.filter(Boolean);
@@ -106,7 +106,7 @@ export default defineConfig(({ mode }) => {
 			__PRIVACY_URL__: JSON.stringify(env.VITE_PRIVACY_URL || "#privacy"),
 			__IMPRINT_URL__: JSON.stringify(env.VITE_IMPRINT_URL || "#imprint"),
 			// Default explorer settings — configurable per deployment, users can still override in the UI
-			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0xc855761D619f6002923507cE68B84d7689C2aa96"),
+			__DEFAULT_CONSENSUS__: JSON.stringify(env.VITE_DEFAULT_CONSENSUS || "0x1Ec44a7cFBdaE3d339F22F50d13B5661AF5D19a8"),
 			__DEFAULT_RPC__: JSON.stringify(env.VITE_DEFAULT_RPC || "https://rpc.gnosischain.com"),
 			__DEFAULT_DECODER__: JSON.stringify(
 				env.VITE_DEFAULT_DECODER || "https://calldata.swiss-knife.xyz/decoder?calldata=",

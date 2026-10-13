@@ -2,20 +2,18 @@
 
 ## Aegis Network
 
-### Genesis Validators
+### Validators
 
-Genesis Group Id: `0x965f661dcdfa091ff92d5f6a81877bb714b87aa17507b3270000000000000000`
+Genesis Group Id: `0x0e758f1c2a12eb5d93f5328ff8b6896ae6e0bbc0f8c6d3320000000000000000`
 
+- Core Contributors (_Genesis_):
+  - `0xCc00DE0eA14c08669b26DcBFE365dBD9890B04D9`
+- Safe Labs (_Genesis_):
+  - `0xF6EA21D702983c443f58A267265912FE03D2FF0b`
 - Gnosis:
   - `0x3D58a5475c1336b0A755c3aBd298CeB9b7BB9CDe`
 - Greenfield:
   - `0x7B0A8EFA45dE81F11F2846EC28259B62155a2b37`
-- Rockaway:
-  - `0xb0E735D4a3b70195420E0ae933689A55750CFcd2`
-- Core Contributors:
-  - `0xCc00DE0eA14c08669b26DcBFE365dBD9890B04D9`
-- Safe Labs:
-  - `0xF6EA21D702983c443f58A267265912FE03D2FF0b`
 
 ### Network Configuration
 
@@ -25,11 +23,11 @@ Genesis Group Id: `0x965f661dcdfa091ff92d5f6a81877bb714b87aa17507b32700000000000
   - `0xC6B34dA4c99C043A093214D58423a8bE39585B78`
   - [Gnosisscan](https://gnosisscan.io/address/0xC6B34dA4c99C043A093214D58423a8bE39585B78)
 - Consensus
-  - `0xc855761D619f6002923507cE68B84d7689C2aa96`
-  - [Gnosisscan](https://gnosisscan.io/address/0xc855761D619f6002923507cE68B84d7689C2aa96)
+  - `0x1Ec44a7cFBdaE3d339F22F50d13B5661AF5D19a8`
+  - [Gnosisscan](https://gnosisscan.io/address/0x1Ec44a7cFBdaE3d339F22F50d13B5661AF5D19a8)
 - Sentinel Oracle
-  - `0x4F61B8832978e83b80D69551AEf07557DBE41d03`
-  - [Gnosisscan](https://gnosisscan.io/address/0x4F61B8832978e83b80D69551AEf07557DBE41d03)
+  - `0xc7E93E88fCA4F4DaB9eD393157afDf4F0Da3b1e7`
+  - [Gnosisscan](https://gnosisscan.io/address/0xc7E93E88fCA4F4DaB9eD393157afDf4F0Da3b1e7)
 - Safenet 7702 Executor
   - `0x4DFe88ADf2D7C3FBd2e334Ce820B9aDFa541215c`
   - [Gnosisscan](https://gnosisscan.io/address/0x4DFe88ADf2D7C3FBd2e334Ce820B9aDFa541215c)
@@ -83,24 +81,23 @@ database = "..."
 
 [validator]
 staker = "..."
-consensus = "0xc855761D619f6002923507cE68B84d7689C2aa96"
-oracles = ["0x4F61B8832978e83b80D69551AEf07557DBE41d03"]
+consensus = "0x1Ec44a7cFBdaE3d339F22F50d13B5661AF5D19a8"
+oracles = ["0xc7E93E88fCA4F4DaB9eD393157afDf4F0Da3b1e7"]
 genesis_salt = "0x0000000000000000000000000000000000000000000000000000000000000000"
-
-[[validator.participants]]
-address = "0x3D58a5475c1336b0A755c3aBd298CeB9b7BB9CDe"
-
-[[validator.participants]]
-address = "0x7B0A8EFA45dE81F11F2846EC28259B62155a2b37"
-
-[[validator.participants]]
-address = "0xb0E735D4a3b70195420E0ae933689A55750CFcd2"
 
 [[validator.participants]]
 address = "0xCc00DE0eA14c08669b26DcBFE365dBD9890B04D9"
 
 [[validator.participants]]
 address = "0xF6EA21D702983c443f58A267265912FE03D2FF0b"
+
+[[validator.participants]]
+address = "0x3D58a5475c1336b0A755c3aBd298CeB9b7BB9CDe"
+active_from = 1
+
+[[validator.participants]]
+address = "0x7B0A8EFA45dE81F11F2846EC28259B62155a2b37"
+active_from = 1
 ```
 
 ### Sentinel Configuration
@@ -111,8 +108,8 @@ The settings for a sentinel's [configuration file](../crates/sentinel/sentinel.s
 rpc = "..."
 signer = "..."
 database = "..."
-oracle = "0x4F61B8832978e83b80D69551AEf07557DBE41d03"
-consensus = "0xc855761D619f6002923507cE68B84d7689C2aa96"
+oracle = "0xc7E93E88fCA4F4DaB9eD393157afDf4F0Da3b1e7"
+consensus = "0x1Ec44a7cFBdaE3d339F22F50d13B5661AF5D19a8"
 
 [sentinel]
 fee_token = "0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0"
