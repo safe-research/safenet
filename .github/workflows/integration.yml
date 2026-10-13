@@ -47,6 +47,11 @@ jobs:
             just-target: test-integration-validator-deep-reorg
             log-artifact: validator-integration-deep-reorg-logs
 
+          - name: validator-rotation
+            just-target: test-integration-validator-rotation
+            just-args: ""
+            log-artifact: validator-integration-rotation-logs
+
           - name: validator-7702
             just-target: test-integration-validator-7702
             just-args: ""

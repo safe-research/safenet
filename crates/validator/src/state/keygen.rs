@@ -628,6 +628,15 @@ impl Transition {
                     Vec::new(),
                 )
             }
+            // This happens when replaying history from before the state was
+            // initialized from onchain data.
+            _ if state.rollover.is_past_staged(event.proposedEpoch) => {
+                tracing::debug!(
+                    epoch = %event.proposedEpoch,
+                    "ignoring staged epoch that the rollover is already past"
+                );
+                (state, Vec::new())
+            }
             _ => {
                 tracing::warn!(
                     epoch = %event.proposedEpoch,
@@ -1385,6 +1394,17 @@ impl RolloverState {
             | RolloverState::CollectingShares { next_epoch, .. }
             | RolloverState::CollectingConfirmations { next_epoch, .. } => Some(*next_epoch),
             RolloverState::Halted => None,
+        }
+    }
+
+    /// Whether the rollover is already past a staged `epoch`, either because
+    /// it is working toward a later epoch or because it already staged it.
+    fn is_past_staged(&self, epoch: u64) -> bool {
+        match self {
+            RolloverState::EpochStaged { next_epoch } => next_epoch.get() >= epoch,
+            _ => self
+                .next_epoch()
+                .is_some_and(|next_epoch| next_epoch.raw_value() > epoch),
         }
     }
 }

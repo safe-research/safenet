@@ -140,6 +140,12 @@ test-integration-validator-nonce-commit-timeout:
 test-integration-validator-deep-reorg:
     ./scripts/run_validator_deep_reorg_test.sh
 
+# Rust validator rotation integration test: validators started after genesis
+# skip the key generations they missed and join a later epoch's group (Anvil +
+# five validator instances, three of which are started late).
+test-integration-validator-rotation:
+    ./scripts/run_validator_rotation_test.sh
+
 # Rust validator EIP-7702 batching integration test (Anvil + two validator
 # instances sending their transactions through a `Safenet7702Executor`).
 test-integration-validator-7702:
