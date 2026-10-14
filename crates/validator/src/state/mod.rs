@@ -553,7 +553,7 @@ impl Initializer {
     /// This requires historical state, which the node may not have (for
     /// example, if it is not an archive node). In that case, the check is
     /// skipped with a warning.
-    async fn check_genesis_replayed(&self, start_block: u64) -> Result<(), InitializerError> {
+    async fn check_can_replay_genesis(&self, start_block: u64) -> Result<(), InitializerError> {
         let Some(before) = start_block.checked_sub(1) else {
             return Ok(());
         };
@@ -638,7 +638,7 @@ impl StateInitializer<State> for Initializer {
             // indexer replays it, which requires a start block before it.
             if self.genesis_started(block).await? {
                 match self.start_block {
-                    Some(start_block) => self.check_genesis_replayed(start_block).await?,
+                    Some(start_block) => self.check_can_replay_genesis(start_block).await?,
                     None => return Err(InitializerError::GenesisInProgress),
                 }
             }
