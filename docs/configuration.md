@@ -12,6 +12,7 @@ Genesis Group Id: `0x965f661dcdfa091ff92d5f6a81877bb714b87aa17507b32700000000000
   - `0x7B0A8EFA45dE81F11F2846EC28259B62155a2b37`
 - Rockaway:
   - `0xb0E735D4a3b70195420E0ae933689A55750CFcd2`
+  - _Only available for genesis, decommissioned from epoch `33960`_
 - Core Contributors:
   - `0xCc00DE0eA14c08669b26DcBFE365dBD9890B04D9`
 - Safe Labs:
@@ -95,6 +96,7 @@ address = "0x7B0A8EFA45dE81F11F2846EC28259B62155a2b37"
 
 [[validator.participants]]
 address = "0xb0E735D4a3b70195420E0ae933689A55750CFcd2"
+active_before = 33960
 
 [[validator.participants]]
 address = "0xCc00DE0eA14c08669b26DcBFE365dBD9890B04D9"
