@@ -219,6 +219,10 @@ sol! {
         error GroupNotReady();
 
         function groupKey(bytes32 gid) external view returns (Point memory key);
+        function groupParameters(bytes32 gid)
+            external
+            view
+            returns (bytes32 participants, uint16 count, uint16 threshold);
         function keyGenAndCommit(
             bytes32 participants,
             uint16 count,

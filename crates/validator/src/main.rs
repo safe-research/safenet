@@ -65,6 +65,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         pool.clone(),
         coordinator,
         config.validator,
+        config.driver.index.blocks.start_block,
     )
     .await?;
 

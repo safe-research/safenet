@@ -36,6 +36,8 @@ pub struct ValidatorService {
     coordinator: Address,
     /// The validator configuration.
     config: ValidatorConfig,
+    /// The block the indexer back-fills from on a fresh start, if configured.
+    start_block: Option<u64>,
 }
 
 impl ValidatorService {
@@ -46,6 +48,7 @@ impl ValidatorService {
         pool: SqlitePool,
         coordinator: Address,
         config: ValidatorConfig,
+        start_block: Option<u64>,
     ) -> Result<Self, Error> {
         let secrets = SecretStore::new(pool).await?;
         let genesis = group::participants_set(
@@ -64,6 +67,7 @@ impl ValidatorService {
             genesis,
             coordinator,
             config,
+            start_block,
         })
     }
 }
@@ -106,6 +110,7 @@ impl Service for ValidatorService {
             secrets,
             coordinator,
             config,
+            start_block,
         } = self;
         let consensus_address = config.consensus;
         let blocks_per_epoch = config.blocks_per_epoch;
@@ -124,6 +129,7 @@ impl Service for ValidatorService {
                 coordinator,
                 genesis_group_id,
                 blocks_per_epoch,
+                start_block,
             },
             effect::Handler::new(account, secrets),
             action::Encoder {
