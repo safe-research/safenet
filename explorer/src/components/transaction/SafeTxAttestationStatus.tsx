@@ -2,7 +2,7 @@ import { AnnotatedAddressList } from "@/components/common/AnnotatedAddressList";
 import { useAttestationStatus } from "@/hooks/useSigningProgress";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
 import type { TransactionProposal } from "@/lib/consensus";
-import { createStatusMapInfo } from "@/lib/validators/info";
+import { activeValidators, createStatusMapInfo } from "@/lib/validators/info";
 import { Skeleton } from "../Skeleton";
 
 export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionProposal }) {
@@ -15,7 +15,7 @@ export function SafeTxAttestationStatus({ proposal }: { proposal: TransactionPro
 		proposal.oracle,
 		proposal.oracleData,
 	);
-	const allValidatorIds = Array.from(validatorInfo.data?.keys() ?? []);
+	const allValidatorIds = activeValidators(validatorInfo.data);
 	const committedIds = status.data?.committed.map((s) => s.address) ?? [];
 	const signedIds = status.data?.signed.map((s) => s.address) ?? [];
 	return (

@@ -161,11 +161,11 @@ export default defineConfig(({ mode }) => {
 			__DEFAULT_DETAILS_MAX_BLOCK_RANGE__: Number(env.VITE_DEFAULT_DETAILS_MAX_BLOCK_RANGE) || 0,
 			__DEFAULT_VALIDATOR_INFO__: JSON.stringify(
 				env.VITE_DEFAULT_VALIDATOR_INFO ||
-					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/testnet/assets/validator-info.json",
+					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/validator-info.json",
 			),
 			__DEFAULT_SENTINEL_INFO__: JSON.stringify(
 				env.VITE_DEFAULT_SENTINEL_INFO ||
-					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/testnet/assets/sentinel-info.json",
+					"https://raw.githubusercontent.com/safe-fndn/safenet-beta-data/refs/heads/main/assets/sentinel-info.json",
 			),
 			__DEFAULT_REFETCH_INTERVAL__: Number(env.VITE_DEFAULT_REFETCH_INTERVAL) || 10000,
 			__DEFAULT_BLOCKS_PER_EPOCH__: Number(env.VITE_DEFAULT_BLOCKS_PER_EPOCH) || 1440,

@@ -57,8 +57,8 @@ describe("SafeTxAttestationStatus", () => {
 	it("marks a validator that has not committed to a pending round as pending, not missed", () => {
 		vi.mocked(useValidatorInfoMap).mockReturnValue({
 			data: new Map([
-				[VALIDATOR_A, { address: VALIDATOR_A, label: "alice" }],
-				[VALIDATOR_B, { address: VALIDATOR_B, label: "bob" }],
+				[VALIDATOR_A, { address: VALIDATOR_A, label: "alice", isActive: true }],
+				[VALIDATOR_B, { address: VALIDATOR_B, label: "bob", isActive: true }],
 			]),
 		} as never);
 		vi.mocked(useAttestationStatus).mockReturnValue({
@@ -75,5 +75,28 @@ describe("SafeTxAttestationStatus", () => {
 		} as never);
 		render(<SafeTxAttestationStatus proposal={proposal} />);
 		expect(rowText("Committed:")).toBe("Committed:alice ✅, bob ⏳");
+	});
+
+	it("only lists an inactive validator once it has taken part", () => {
+		vi.mocked(useValidatorInfoMap).mockReturnValue({
+			data: new Map([
+				[VALIDATOR_A, { address: VALIDATOR_A, label: "alice", isActive: false }],
+				[VALIDATOR_B, { address: VALIDATOR_B, label: "bob", isActive: false }],
+			]),
+		} as never);
+		vi.mocked(useAttestationStatus).mockReturnValue({
+			isFetching: false,
+			data: {
+				status: "pending",
+				sid: `0x${"aa".repeat(32)}`,
+				groupId: `0x${"00".repeat(32)}`,
+				sequence: 0n,
+				lastUpdate: 102n,
+				committed: [{ address: VALIDATOR_A, block: 102n }],
+				signed: [],
+			},
+		} as never);
+		render(<SafeTxAttestationStatus proposal={proposal} />);
+		expect(rowText("Committed:")).toBe("Committed:alice ✅");
 	});
 });

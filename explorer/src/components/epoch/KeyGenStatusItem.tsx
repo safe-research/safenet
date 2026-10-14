@@ -1,9 +1,8 @@
-import type { Address } from "viem";
 import { AnnotatedAddressList } from "@/components/common/AnnotatedAddressList";
 import { Skeleton } from "@/components/Skeleton";
 import { useValidatorInfoMap } from "@/hooks/useValidatorInfo";
 import type { KeyGenStatus } from "@/lib/coordinator/keygen";
-import { createStatusMapInfo } from "@/lib/validators/info";
+import { activeValidators, createStatusMapInfo } from "@/lib/validators/info";
 
 function statusLabel(status: KeyGenStatus): string {
 	if (status.compromised) return "COMPROMISED";
@@ -29,7 +28,7 @@ export function KeyGenStatusItem({ status }: { status: KeyGenStatus | null }) {
 
 	const terminal = status.finalized || status.compromised;
 	const label = statusLabel(status);
-	const allIds: Address[] = Array.from(validatorInfo.data?.keys() ?? []);
+	const allIds = activeValidators(validatorInfo.data);
 	const committedIds = status.committed.map((p) => p.address);
 	const sharedIds = status.shared.map((p) => p.address);
 	const confirmedIds = status.confirmed.map((p) => p.address);
