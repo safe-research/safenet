@@ -1,0 +1,49 @@
+
+Ran 1 test for test/OracleActionGas.t.sol:ClaimGas
+[FAIL: vm.getCode: the path artifacts/SentinelOracle.json is not allowed to be accessed for read operations] setUp() (gas: 0)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 673.79µs (0.00ns CPU time)
+
+Ran 3 tests for test/UsdcApproveGas.t.sol:UsdcApproveGasTest
+[PASS] test_cachedCodeMatchesOnchainCodeHashes() (gas: 40575)
+[PASS] test_directModeApproveFromNonzeroAllowance() (gas: 92413)
+Logs:
+  approve from nonzero allowance succeeded true
+
+[PASS] test_directModeApproveFromZeroAllowance() (gas: 82082)
+Logs:
+  intrinsic gas 21596
+  execution budget in Direct mode 33404
+  approve from zero allowance succeeded false
+  allowance after 0
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 928.00µs (403.04µs CPU time)
+
+Ran 3 tests for test/ApproveGasCheck.t.sol:ApproveGasCheck
+[PASS] test_c_isolationCalibration() (gas: 132136)
+Logs:
+  isolated no-op with 100 gas forwarded succeeded true
+  isolated no-op with 21,100 gas forwarded succeeded true
+
+[PASS] test_d_isolatedApprove() (gas: 279733)
+Logs:
+  calldata intrinsic gas 21596
+  isolated tx, forwarded 34,000 (tx gas limit 55,000 if +21,000) succeeded false
+  isolated: minimum forwarded gas 34819
+  isolated: minimum tx gas limit if +21,000 55819
+
+[PASS] test_e_isolatedBatchedBudget() (gas: 332095)
+Logs:
+  isolated, token called with exactly 55,000 callee gas, succeeded true
+  allowance set true
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.18ms (774.67µs CPU time)
+
+Ran 3 test suites in 2.36ms (2.79ms CPU time): 6 tests passed, 1 failed, 0 skipped (7 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/OracleActionGas.t.sol:ClaimGas
+[FAIL: vm.getCode: the path artifacts/SentinelOracle.json is not allowed to be accessed for read operations] setUp() (gas: 0)
+
+Encountered a total of 1 failing tests, 6 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test

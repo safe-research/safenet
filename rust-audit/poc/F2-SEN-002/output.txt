@@ -1,0 +1,20 @@
+QA2-SEN PoC run for F2-SEN-002, audited commit 3ec8bc5, rustc/cargo 1.98.1.
+Command: cargo test -p sentinel --bins qa2_sen -- --nocapture --test-threads=1
+Verbatim output of this finding's tests (full 12-test log: poc/F2-SEN-001/qa2_sen_all.output.txt):
+
+test service::tests::qa2_sen::f2_sen_002a_early_commit_uncounted_finalize_drops_bonded_entry ... [F2-SEN-002a] local committed_count=2; onchain committedCount=3
+[F2-SEN-002a] after Revealed(OTHER) (local 2/2, onchain 2/3): tracked=false commands=[]
+[F2-SEN-002a] Revealed(self)@124 → []; OracleResult@125 → []; tracked=false
+
+thread 'service::tests::qa2_sen::f2_sen_002a_early_commit_uncounted_finalize_drops_bonded_entry' (2327071) panicked at crates/sentinel/src/service.rs:2478:13:
+F2-SEN-002 outcome 1 reproduced: local tally 2 vs onchain 3, entry dropped at the second reveal with self_revealed=false, later OracleResult ignored, no Claim ever emitted
+FAILED
+
+test service::tests::qa2_sen::f2_sen_002b_premature_finalize_is_never_retried ... [F2-SEN-002b] after Revealed(OTHER) (local 2/2, onchain 2/3, M never reveals): [Action(SentinelAction { kind: Finalize { id: 0xb05637b90481befcd0b253790579ed4b8b3a69532ac034a23507a01bae0cff56 }, expires_at: None })] state=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+[F2-SEN-002b] NewBlock(131) → []; NewBlock(100130) → []; state=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+
+thread 'service::tests::qa2_sen::f2_sen_002b_premature_finalize_is_never_retried' (2327072) panicked at crates/sentinel/src/service.rs:2521:13:
+F2-SEN-002 outcome 2 reproduced: Finalize emitted at block 123 on a local 2/2 tally (onchain 2/3 → FinalizeTooEarly); WaitingForOutcome retained through block 100130 with no second Finalize
+FAILED
+
+Run summary: test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 42 filtered out; finished in 2.87s

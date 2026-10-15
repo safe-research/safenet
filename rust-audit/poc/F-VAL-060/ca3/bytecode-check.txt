@@ -1,0 +1,3 @@
+SentinelOracle runtime bytecode length (bytes): 16812
+Coordinator/Consensus topic0 found in SentinelOracle runtime bytecode: none
+SentinelOracle own topic0 found in its runtime bytecode: 15 of 16

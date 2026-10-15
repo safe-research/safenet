@@ -1,0 +1,72 @@
+# R8: call-path reachability of the cargo audit findings (F3-XC-007)
+# date: 2026-10-08T17:36:08Z; worktree $RUN/wt/base at 361aaf3; cargo audit output: rust-audit/state/run3/logs/05-audit.log
+
+## 1. Which features enable hyper http2 (h2 is only used through it)
+## cargo tree --locked --offline -e features,normal -i hyper -p validator | grep -A1 'hyper feature "http2"'
+├── hyper feature "http2"
+│   └── hyper-util feature "http2" (*)
+└── hyper feature "server"
+    └── metrics-exporter-prometheus v0.18.3 (*)
+## cargo tree --locked --offline -e features,normal -i hyper-util -p validator | grep -A1 'hyper-util feature "http2"'
+│   ├── hyper-util feature "server-auto"
+│   │   └── metrics-exporter-prometheus feature "_hyper-server" (*)
+│   └── metrics-exporter-prometheus feature "_hyper-client" (*)
+├── hyper-util feature "http2"
+│   └── hyper-util feature "server-auto" (*)
+├── hyper-util feature "server"
+
+## 2. Resolved reqwest features (no http2)
+[('reqwest@0.13.4', ['__rustls', '__rustls-aws-lc-rs', '__tls', 'json', 'rustls'])]
+
+## 3. The metrics listener serves HTTP/1 only (metrics-exporter-prometheus-0.18.3/src/exporter/http_listener.rs)
+9:    server::conn::http1::Builder as HyperHttpBuilder,
+77:                HyperHttpBuilder::new().serve_connection(TokioIo::new(stream), service).await
+122:                HyperHttpBuilder::new().serve_connection(TokioIo::new(stream), service).await
+
+## 4. ruint affected functions used by alloy crates on the scope's paths
+alloy-primitives-1.6.0/src/signed/ops.rs:655:    pub fn overflowing_shl(self, rhs: usize) -> (Self, bool) {
+alloy-primitives-1.6.0/src/signed/ops.rs:663:    pub fn checked_shl(self, rhs: usize) -> Option<Self> {
+alloy-primitives-1.6.0/src/signed/ops.rs:664:        match self.overflowing_shl(rhs) {
+alloy-primitives-1.6.0/src/signed/ops.rs:674:    pub fn wrapping_shl(self, rhs: usize) -> Self {
+alloy-primitives-1.6.0/src/signed/ops.rs:675:        self.overflowing_shl(rhs).0
+alloy-primitives-1.6.0/src/signed/ops.rs:685:    pub fn overflowing_shr(self, rhs: usize) -> (Self, bool) {
+alloy-primitives-1.6.0/src/signed/ops.rs:693:    pub fn checked_shr(self, rhs: usize) -> Option<Self> {
+alloy-primitives-1.6.0/src/signed/ops.rs:694:        match self.overflowing_shr(rhs) {
+alloy-primitives-1.6.0/src/signed/ops.rs:704:    pub fn wrapping_shr(self, rhs: usize) -> Self {
+alloy-primitives-1.6.0/src/signed/ops.rs:705:        self.overflowing_shr(rhs).0
+alloy-primitives-1.6.0/src/signed/ops.rs:728:            Sign::Positive => self.wrapping_shr(rhs),
+alloy-primitives-1.6.0/src/signed/ops.rs:738:                (self.wrapping_shr(rhs)) | bitwise_or
+alloy-primitives-1.6.0/src/signed/ops.rs:754:            let result = self.wrapping_shl(rhs);
+alloy-primitives-1.6.0/src/signed/ops.rs:790:                    self.wrapping_shl(rhs as usize)
+alloy-primitives-1.6.0/src/signed/ops.rs:806:                    self.wrapping_shr(rhs as usize)
+nybbles-0.4.8/src/nibbles.rs:38:        masks[i] = if i == 0 { U256::ZERO } else { U256::MAX.wrapping_shl((NIBBLES - i) * 4) };
+nybbles-0.4.8/src/nibbles.rs:51:        masks[i] = U256::ONE.wrapping_shl((NIBBLES - i) * 4);
+## U256 shifts in scope (non-test code has none; line 1122 is in mod tests)
+361aaf3:crates/sentinel/src/service.rs:1122:        let value: U256 = U256::from(chain_id) << 160 | U256::from_be_bytes(safe.into_word().0);
+
+## 5. crossbeam-epoch user formats only Debug (metrics-util-0.20.4/src/storage/bucket.rs:154-167)
+impl<T> std::fmt::Debug for Block<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let guard = &epoch_pin();
+        let has_next = !self.next.load(Ordering::Acquire, guard).is_null();
+        f.debug_struct("Block")
+            .field("type", &std::any::type_name::<T>())
+            .field("block_size", &BLOCK_SIZE)
+            .field("write", &self.write.load(Ordering::Acquire))
+            .field("read", &self.read.load(Ordering::Acquire))
+            .field("len", &self.len())
+            .field("has_next", &has_next)
+            .finish()
+    }
+}
+
+## 6. lru users in alloy-provider (keys)
+alloy-provider-2.0.5/src/blocks.rs:69:    known_blocks: LruCache<BlockNumber, N::BlockResponse>,
+alloy-provider-2.0.5/src/layers/cache.rs:512:    inner: Arc<RwLock<LruCache<B256, String, alloy_primitives::map::FbBuildHasher<32>>>>,
+## 7. event-listener users in sqlx-core (no tags)
+32:    pub(super) on_closed: event_listener::Event,
+61:            on_closed: event_listener::Event::new(),
+
+## 8. Signed integer types (I256 or Solidity intN) in scope, which would route through the signed shift functions above
+## git grep -n -E '\bI256\b|\bSigned<|\bint256\b|\bint(8|16|32|64|96|128)\b' 361aaf3 -- crates/core/src crates/validator/src crates/sentinel/src
+(no matches)

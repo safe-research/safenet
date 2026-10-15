@@ -1,0 +1,35 @@
+# L-crypto: identity verifying share (F3-XC-100), executed 2026-10-08
+# Sources compiled by path from the audit worktree /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/base at 361aaf3b25e12d2e04f296184c326830968f3727 (read-only):
+#   crates/validator/src/{frost/*.rs, merkle.rs, bindings.rs, consensus/group.rs}; contracts/src (FROSTCoordinator and libraries)
+# Scratch proof sources: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/L-crypto/identity-share/src/{lib.rs,poc.rs} and /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/L-crypto/forge-identity/test/IdentityShare.t.sol
+# Pinned versions: copied workspace Cargo.lock (frost-core 3.0.0, frost-secp256k1 3.0.0, k256 0.13.4, alloy 2.0.5); forge 1.5.1, solc 0.8.30
+
+$ cd $RUN/scratch/L-crypto/identity-share && CARGO_TARGET_DIR=$PWD/target cargo test --offline poc -- --nocapture
+   Compiling lcrypto-identity-share v0.0.0 ($RUN/scratch/L-crypto/identity-share)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.04s
+     Running unittests src/lib.rs (target/debug/deps/lcrypto_identity_share-a7556106eb703425)
+running 1 test
+all 5 commitments verify (PoK of c[0] and PoP of q)
+victim 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 share y = (0, 0)
+peers' verify_secret_share accepts all four honest shares, the victim's y = (0,0) included
+share timeout excludes {0x15d34aaf54267db7d7c367839aaf71a00a2c6a65, 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266}: participants_set returns None (rollover_failure, EpochSkipped)
+excluding only the attacker: participants_set returns Some (restart viable)
+test poc::identity_verifying_share_excludes_the_victim ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.07s
+
+$ cd $RUN/scratch/L-crypto/forge-identity && forge test -vv
+No files changed, compilation skipped
+Ran 1 test for test/IdentityShare.t.sol:IdentityShareTest
+[PASS] test_VictimShareWithIdentityKeyReverts() (gas: 3469214)
+Logs:
+  all 5 commitments accepted onchain, attacker last
+  victim keyGenSecretShare reverted with Secp256k1.NotOnCurve
+  group stuck in SHARING (keyGenConfirm reverts GroupNotReady)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 4.34ms (3.97ms CPU time)
+Ran 1 test suite in 4.82ms (4.34ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
+
+# vectors.json (validator-encoded calldata replayed by the forge test), first lines:
+{
+  "attacker": "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+  "commits": [
+    "0x4ba77e212c0c0ab2a00ba699f5d7d95193d71784b75d377e43a7680c2efaba9ad54332280000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000000000000000000000000000000000000300000000c855761d619f6002923507ce68b84d7689c2aa96000000000000000200000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000001400000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000 ...

@@ -1,0 +1,34 @@
+[   10.7s] deployed fee_token=0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80 consensus=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 oracle=0x7148FDa1aBAF76AC28E4803D4791a2790CddFae1
+[   10.7s] sentinel A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8) started, run 1, pid 443671
+[   10.7s] sentinel B (0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC) started, run 1, pid 443672
+[   20.4s] proposal in block 12; commitDeadline=18 revealDeadline=24
+[   20.8s] engine B: request 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b (hold=False)
+[   20.8s] engine B: answered 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b after 0.0s
+[   20.8s] engine A: request 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b (hold=False)
+[   20.8s] engine A: answered 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b after 0.0s
+[   25.7s] both committed: {'commitDeadline': 18, 'revealDeadline': 24, 'state': 'PENDING', 'committed': 2, 'revealed': 0, 'approve': 0, 'deny': 0}; A commitment {'bond': 800000000, 'vote': 'PENDING', 'claimed': False}
+[   25.7s] sentinel A stopped (SIGTERM), exit 0
+[   25.7s] A stopped (clean), exit 0; downtime begins at block 13
+[   60.4s] sentinel A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8) started, run 2, pid 444219
+[   60.4s] A restarted at head 20 after downtime
+[  184.4s] FINAL request: {'commitDeadline': 18, 'revealDeadline': 24, 'state': 'RESOLVED_APPROVED', 'committed': 2, 'revealed': 1, 'approve': 1, 'deny': 0}
+[  184.4s] commitment[A] = {'bond': 800000000, 'vote': 'PENDING', 'claimed': False}
+[  184.4s] commitment[B] = {'bond': 800000000, 'vote': 'APPROVED', 'claimed': True}
+[  184.4s] A balance = 79200000000 (100*bond - stranded)
+[  184.4s] --- A transactions across both runs ---
+[  184.4s]   A: {'block': 13, 'index': 1, 'fn': 'approve', 'status': 1, 'gasUsed': 46915, 'replay': ''}
+[  184.4s]   A: {'block': 13, 'index': 2, 'fn': 'commit', 'status': 1, 'gasUsed': 97998, 'replay': ''}
+[  184.4s] --- A restart log: warp + own commit ignored ---
+    A2| DEBUG initializing block watcher {'latest': 20, 'safe': 15, 'resume': 'Some(BlockStatus { latest: 12, safe: 7 })'}
+    A2| WARN ignoring unexpected commitment {'request_id': '0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b', 'state': 'waiting_for_engine_check'}
+    A2| WARN ignoring unexpected commitment {'request_id': '0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b', 'state': 'waiting_for_engine_check'}
+    A2| DEBUG reusing recorded engine verdict {'request_id': '0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b', 'outcome': 'Approved'}
+=== verdict ===
+request_resolved_without_A = True
+A_vote_still_PENDING = True
+A_never_claimed = True
+A_no_successful_reveal = True
+A_no_claim_tx = True
+A_own_commit_ignored_on_replay = True
+[  184.4s] sentinel A stopped (SIGKILL), exit -9
+[  184.4s] sentinel B stopped (SIGKILL), exit -9

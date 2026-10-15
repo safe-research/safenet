@@ -1,0 +1,420 @@
+diff --git a/crates/core/src/driver.rs b/crates/core/src/driver.rs
+index bb3b717..032d39e 100644
+--- a/crates/core/src/driver.rs
++++ b/crates/core/src/driver.rs
+@@ -235,6 +235,9 @@ where
+     /// Processes a single watcher update or completed effect, advancing the
+     /// state machine and dispatching the commands it returns.
+     async fn update(&mut self, input: Input<S::Event, S::Resume>) -> Result<(), Error> {
++        // QA3 bite check (F3-XC-030 remediation 1): prune only after the
++        // update's actions reached the queue.
++        let mut prune_to = None;
+         let (commands, housekeeping) = match input {
+             Input::Update(update) => {
+                 tracing::trace!(?update, "handling driver update");
+@@ -260,7 +263,7 @@ where
+                 };
+                 let commands = self.state.handle_update(update).await?;
+                 recorder.processed();
+-                self.state.prune(block_status.safe).await?;
++                prune_to = Some(block_status.safe);
+                 (commands, housekeeping)
+             }
+             Input::Resume(resume) => {
+@@ -280,6 +283,12 @@ where
+         }
+ 
+         if !transactions.is_empty() {
++            // QA3 PoC hook: a process crash (kill -9, OOM, host failure) at
++            // this point, after the snapshot commit and before the queue insert.
++            #[cfg(test)]
++            if qa3_crash_hook::CRASH_BEFORE_QUEUE.swap(false, std::sync::atomic::Ordering::SeqCst) {
++                panic!("QA3: simulated crash before the queue insert");
++            }
+             let result = self.transactions.queue(transactions).await;
+             if let Err(err) = tx::lift_intermittent_error(result)? {
+                 tracing::warn!(
+@@ -289,6 +298,10 @@ where
+             }
+         }
+ 
++        if let Some(safe) = prune_to {
++            self.state.prune(safe).await?;
++        }
++
+         if let Some(status) = housekeeping {
+             self.effects.housekeeping(status).await;
+         }
+@@ -326,3 +339,348 @@ impl UpdateRecorder {
+         }
+     }
+ }
++
++#[cfg(test)]
++pub(crate) mod qa3_crash_hook {
++    pub static CRASH_BEFORE_QUEUE: std::sync::atomic::AtomicBool =
++        std::sync::atomic::AtomicBool::new(false);
++}
++
++#[cfg(test)]
++mod qa3_warp_crash_tests {
++    //! QA3 F3-XC-030: the real `Driver` (real time, 1 s blocks, default
++    //! `max_reorg_depth` 5) restarts after downtime, warps over a page holding
++    //! an event whose transition returns an action, and the process crashes
++    //! after the page's snapshot commit and prune, before the action reaches
++    //! the transaction queue (a panic in the driver task stands in for kill -9:
++    //! nothing more reaches SQLite). A restart on the same database then runs.
++    //! Mocked at the RPC transport boundary only.
++    use super::*;
++    use crate::{
++        index::blocks::Timing,
++        state::{Command, Commands, Message, StateTransition},
++    };
++    use alloy::{
++        consensus::constants::KECCAK_EMPTY,
++        primitives::{B256, Bloom, Bytes, Log as PrimitiveLog, U256, keccak256},
++        rpc::{
++            json_rpc::{RequestPacket, Response, ResponsePacket, ResponsePayload},
++            types::{Block, EIP1186AccountProofResponse, Filter, Header, Log},
++        },
++        sol_types::SolEvent,
++        transports::{TransportError, TransportFut},
++    };
++    use sqlx::sqlite::SqliteConnectOptions;
++    use std::{
++        str::FromStr,
++        sync::{Arc, Mutex},
++        task::{Context, Poll},
++        time::Instant,
++    };
++
++    alloy::sol! {
++        #[derive(Debug)]
++        contract Watched {
++            event Ping(uint256 value);
++        }
++    }
++    crate::watcher_events!(Watched::WatchedEvents);
++
++    const WATCHED: Address = Address::repeat_byte(0x11);
++    const EPOCH: u64 = 1_337_420;
++    const BASE: u64 = 990;
++
++    #[derive(Default, Serialize, Deserialize)]
++    struct QaState {
++        events: Vec<u64>,
++    }
++
++    struct QaTransition;
++
++    impl StateTransition<QaState> for QaTransition {
++        type Event = Watched::WatchedEvents;
++        type Action = u64;
++        type Effect = ();
++        type Resume = ();
++
++        fn apply_transition(
++            &self,
++            mut state: QaState,
++            message: Message<Self::Event, Self::Resume>,
++        ) -> (QaState, Commands<QaState, Self>) {
++            match message {
++                // Like a validator's last `KeyGenCommitted` returning its
++                // `KeyGenSecretShare`: an event whose transition returns an
++                // action.
++                Message::Event(log) => {
++                    state.events.push(log.block.number);
++                    (state, vec![Command::Action(log.block.number)])
++                }
++                _ => (state, vec![]),
++            }
++        }
++    }
++
++    struct QaEffects;
++
++    impl EffectHandler<(), ()> for QaEffects {
++        async fn perform_effect(&self, _effect: ()) {}
++    }
++
++    struct QaActions;
++
++    impl ActionEncoder<u64> for QaActions {
++        fn encode_action(&self, block: u64) -> (Transaction, Option<u64>) {
++            (
++                Transaction {
++                    to: Address::repeat_byte(0xac),
++                    data: Bytes::from(block.to_be_bytes().to_vec()),
++                    ..Default::default()
++                },
++                None,
++            )
++        }
++    }
++
++    struct QaService;
++
++    impl Service for QaService {
++        type State = QaState;
++        type Event = Watched::WatchedEvents;
++        type Action = u64;
++        type Effect = ();
++        type Resume = ();
++        type Transition = QaTransition;
++        type Effects = QaEffects;
++        type Actions = QaActions;
++
++        fn components(self) -> (QaTransition, QaEffects, QaActions) {
++            (QaTransition, QaEffects, QaActions)
++        }
++    }
++
++    struct ChainState {
++        start: Instant,
++        downtime_s: u64,
++        event_block: u64,
++        /// The test clock restarts at `EPOCH` with every watcher, so header
++        /// timestamps are shifted per run to keep the head at the watcher's
++        /// "now" (a synchronised host clock).
++        ts_offset: u64,
++    }
++
++    impl ChainState {
++        fn head(&self) -> u64 {
++            BASE + self.start.elapsed().as_secs() + self.downtime_s
++        }
++
++        fn hash(number: u64) -> B256 {
++            keccak256(number.to_be_bytes())
++        }
++
++        fn logs(&self, number: u64) -> Vec<Log> {
++            if number != self.event_block {
++                return vec![];
++            }
++            vec![Log {
++                inner: PrimitiveLog {
++                    address: WATCHED,
++                    data: Watched::Ping {
++                        value: U256::from(number),
++                    }
++                    .encode_log_data(),
++                },
++                block_hash: Some(Self::hash(number)),
++                block_number: Some(number),
++                block_timestamp: Some(EPOCH + number - BASE - self.ts_offset),
++                transaction_hash: Some(B256::repeat_byte(0x77)),
++                transaction_index: Some(0),
++                log_index: Some(0),
++                removed: false,
++            }]
++        }
++
++        fn block(&self, number: u64) -> Block {
++            let mut bloom = Bloom::default();
++            for log in self.logs(number) {
++                bloom.accrue_log(&log.inner);
++            }
++            Block::empty(Header {
++                hash: Self::hash(number),
++                inner: alloy::consensus::Header {
++                    parent_hash: Self::hash(number - 1),
++                    number,
++                    timestamp: EPOCH + number - BASE - self.ts_offset,
++                    logs_bloom: bloom,
++                    ..Default::default()
++                },
++                ..Default::default()
++            })
++        }
++    }
++
++    #[derive(Clone)]
++    struct Chain(Arc<Mutex<ChainState>>);
++
++    impl tower::Service<RequestPacket> for Chain {
++        type Response = ResponsePacket;
++        type Error = TransportError;
++        type Future = TransportFut<'static>;
++
++        fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
++            Poll::Ready(Ok(()))
++        }
++
++        fn call(&mut self, request: RequestPacket) -> Self::Future {
++            let RequestPacket::Single(request) = request else {
++                panic!("unexpected batch request");
++            };
++            let c = self.0.lock().unwrap();
++            let head = c.head();
++            let payload = match request.method() {
++                "eth_getBlockByNumber" => {
++                    let (tag, _): (String, bool) =
++                        serde_json::from_str(request.params().unwrap().get()).unwrap();
++                    let number = match tag.as_str() {
++                        "latest" => head,
++                        hex => u64::from_str_radix(hex.trim_start_matches("0x"), 16).unwrap(),
++                    };
++                    serde_json::value::to_raw_value(&(number <= head).then(|| c.block(number)))
++                        .unwrap()
++                }
++                "eth_getLogs" => {
++                    let (filter,): (Filter,) =
++                        serde_json::from_str(request.params().unwrap().get()).unwrap();
++                    let numbers = match filter.get_block_hash() {
++                        Some(hash) => (900..=head).filter(|n| ChainState::hash(*n) == hash).collect::<Vec<_>>(),
++                        None => (filter.get_from_block().unwrap()..=filter.get_to_block().unwrap())
++                            .collect(),
++                    };
++                    let logs = numbers
++                        .into_iter()
++                        .flat_map(|n| c.logs(n))
++                        .filter(|log| filter.matches(&log.inner))
++                        .collect::<Vec<_>>();
++                    serde_json::value::to_raw_value(&logs).unwrap()
++                }
++                // The queue reads the signer account each block while rows
++                // are outstanding.
++                "eth_getProof" => serde_json::value::to_raw_value(&EIP1186AccountProofResponse {
++                    code_hash: KECCAK_EMPTY,
++                    ..Default::default()
++                })
++                .unwrap(),
++                method => panic!("unexpected method {method}"),
++            };
++            let response = Response {
++                id: request.id().clone(),
++                payload: ResponsePayload::Success(payload),
++            };
++            Box::pin(async move { Ok(ResponsePacket::Single(response)) })
++        }
++    }
++
++    fn config() -> Config {
++        let mut config = Config::default();
++        config.index.blocks.block_time = Timing::Millis(1_000);
++        config.index.blocks.block_propagation_delay = Timing::Millis(0);
++        config.index.blocks.block_retry_delays = Timing::Millis(vec![]);
++        // Keep queued rows in the `transactions` table, so they can be
++        // counted, instead of submitting them.
++        config.transactions = serde_json::from_str(r#"{ "max_in_flight_transactions": 0 }"#).unwrap();
++        config
++    }
++
++    async fn run_driver(chain: &Chain, pool: &sqlx::SqlitePool, seconds: u64) -> &'static str {
++        let signer = Signer::from_str(
++            "0x0000000000000000000000000000000000000000000000000000000000000001",
++        )
++        .unwrap();
++        {
++            let mut c = chain.0.lock().unwrap();
++            c.ts_offset = c.head() - BASE;
++        }
++        let driver = Driver::new(
++            QaService,
++            Provider::qa3_from_transport(chain.clone(), 0x5afe),
++            signer,
++            pool.clone(),
++            vec![WATCHED],
++            config(),
++        )
++        .await
++        .unwrap();
++        let mut task = tokio::spawn(driver.run());
++        match tokio::time::timeout(Duration::from_secs(seconds), &mut task).await {
++            Ok(Err(err)) if err.is_panic() => "crashed",
++            Ok(_) => "exited",
++            Err(_) => {
++                // Stop it like a process kill: the task is dropped where it is.
++                task.abort();
++                let _ = task.await;
++                "stopped after the time limit"
++            }
++        }
++    }
++
++    async fn snapshots(pool: &sqlx::SqlitePool) -> Vec<i64> {
++        sqlx::query_as::<_, (i64,)>("SELECT block_number FROM snapshots ORDER BY 1")
++            .fetch_all(pool)
++            .await
++            .unwrap()
++            .into_iter()
++            .map(|(n,)| n)
++            .collect()
++    }
++
++    async fn queued(pool: &sqlx::SqlitePool) -> Vec<String> {
++        sqlx::query_as::<_, (String,)>("SELECT request FROM transactions ORDER BY id")
++            .fetch_all(pool)
++            .await
++            .unwrap()
++            .into_iter()
++            .map(|(request,)| request)
++            .collect()
++    }
++
++    /// Run 0 follows the chain live; after `downtime_s` of downtime, run 1
++    /// restarts (warping when the downtime exceeds the reorg window), crashing
++    /// before the queue insert if `crash`; run 2 restarts again.
++    async fn scenario(name: &str, event_block: u64, downtime_s: u64, crash: bool) -> usize {
++        let chain = Chain(Arc::new(Mutex::new(ChainState {
++            start: Instant::now(),
++            downtime_s: 0,
++            event_block,
++            ts_offset: 0,
++        })));
++        let pool = utils::connect_sqlite(SqliteConnectOptions::from_str("sqlite::memory:").unwrap())
++            .await
++            .unwrap();
++        let run0 = run_driver(&chain, &pool, 4).await;
++        println!("[{name}] run 0 {run0}; snapshots {:?}", snapshots(&pool).await);
++        chain.0.lock().unwrap().downtime_s = downtime_s;
++        qa3_crash_hook::CRASH_BEFORE_QUEUE.store(crash, std::sync::atomic::Ordering::SeqCst);
++        println!("[{name}] downtime {downtime_s} s, head now {}; event in block {event_block}", chain.0.lock().unwrap().head());
++        let run1 = run_driver(&chain, &pool, 6).await;
++        qa3_crash_hook::CRASH_BEFORE_QUEUE.store(false, std::sync::atomic::Ordering::SeqCst);
++        println!("[{name}] run 1 {run1}; snapshots {:?}; queued rows {}", snapshots(&pool).await, queued(&pool).await.len());
++        let run2 = run_driver(&chain, &pool, 4).await;
++        let rows = queued(&pool).await;
++        println!("[{name}] run 2 {run2}; snapshots {:?}; queued rows {rows:?}", snapshots(&pool).await);
++        rows.len()
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
++    async fn qa3_crash_after_a_warp_page_prune_loses_its_actions() {
++        // Control: no crash, the page's action is queued once.
++        let control = scenario("control: warp, no crash", 997, 15, false).await;
++        // Control: crash on a live block, two or more snapshots remain and
++        // the restart's uncle replays the block.
++        let live = scenario("control: live block, crash", 996, 0, true).await;
++        // The finding: crash after a warp page's prune.
++        let warp = scenario("warp page, crash", 997, 15, true).await;
++        assert_eq!(control, 1);
++        assert_eq!(live, 1);
++        assert_eq!(warp, 0);
++    }
++}
+diff --git a/crates/core/src/provider/mod.rs b/crates/core/src/provider/mod.rs
+index febc353..0f59ad9 100644
+--- a/crates/core/src/provider/mod.rs
++++ b/crates/core/src/provider/mod.rs
+@@ -180,3 +180,19 @@ impl AlloyProvider<AnyNetwork> for Provider {
+         ProviderCall::Ready(Some(Ok(self.chain_id)))
+     }
+ }
++
++/// QA3 PoC support: a provider over an in-process transport, so tests can model
++/// time-dependent node behaviour that the FIFO `Asserter` cannot.
++#[cfg(test)]
++impl Provider {
++    pub fn qa3_from_transport<T>(transport: T, chain_id: u64) -> Self
++    where
++        T: alloy::transports::IntoBoxTransport,
++    {
++        let client = ClientBuilder::default().transport(transport, true);
++        Self {
++            root: RootProvider::new(client),
++            chain_id,
++        }
++    }
++}

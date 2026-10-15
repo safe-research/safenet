@@ -1,0 +1,5 @@
+{"timestamp":"2026-10-08T19:14:59.230894Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:31706"},"target":"safenet_core::observability"}
+{"timestamp":"2026-10-08T19:14:59.230963Z","level":"DEBUG","fields":{"message":"sentinel configuration loaded","config_file":"/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/QA3-2B/runs/core030-repro-1791486769/A/sentinel.toml"},"target":"sentinel"}
+{"timestamp":"2026-10-08T19:14:59.274244Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":12,"safe":7,"resume":"Some(BlockStatus { latest: 32, safe: 27 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:14:59.277997Z","level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"timestamp":"2026-10-08T19:15:00.294955Z","level":"ERROR","fields":{"message":"unrecoverable driver error; exiting","err":"State(BadUpdate)"},"target":"safenet_core::driver"}

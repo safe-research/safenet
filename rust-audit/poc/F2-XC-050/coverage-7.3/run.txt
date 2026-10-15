@@ -1,0 +1,39 @@
+# QA2-XC (resume) coverage.md section 7 item 3 (housekeeping vs reconciliation on restart, R5 O1) on the current tree; HEAD fe9e84cc59b65367b31d5a3121774383cc422234; crates/validator identical to 3ec8bc5
+# PoC source: poc/F2-XC-050/coverage-7.3/qa2_cov_7_3_effect_test.rs, appended to crates/validator/src/service/effect.rs as a new #[cfg(test)] module, reverted afterwards
+# command: QA2_XC_DIR=<scratch> cargo test --offline --locked -p validator --bins service::effect::qa2_cov_7_3 -- --nocapture --test-threads=1
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 2 tests
+test service::effect::qa2_cov_7_3::the_drivers_spawn_then_housekeeping_order_leaves_the_outcome_to_the_scheduler ... round  0: keygen_secrets row = None -> LOST (prune won)
+round  1: keygen_secrets row = None -> LOST (prune won)
+round  2: keygen_secrets row = None -> LOST (prune won)
+round  3: keygen_secrets row = None -> LOST (prune won)
+round  4: keygen_secrets row = None -> LOST (prune won)
+round  5: keygen_secrets row = None -> LOST (prune won)
+round  6: keygen_secrets row = None -> LOST (prune won)
+round  7: keygen_secrets row = None -> LOST (prune won)
+round  8: keygen_secrets row = None -> LOST (prune won)
+round  9: keygen_secrets row = None -> LOST (prune won)
+round 10: keygen_secrets row = None -> LOST (prune won)
+round 11: keygen_secrets row = None -> LOST (prune won)
+round 12: keygen_secrets row = None -> LOST (prune won)
+round 13: keygen_secrets row = None -> LOST (prune won)
+round 14: keygen_secrets row = None -> LOST (prune won)
+round 15: keygen_secrets row = None -> LOST (prune won)
+round 16: keygen_secrets row = Some(None) -> retained (reconcile won)
+round 17: keygen_secrets row = None -> LOST (prune won)
+round 18: keygen_secrets row = None -> LOST (prune won)
+round 19: keygen_secrets row = None -> LOST (prune won)
+driver order (spawn reconcile, then inline housekeeping), 20 rounds on a 2-worker runtime: secret lost in 19, retained in 1
+ok
+test service::effect::qa2_cov_7_3::the_secret_survives_or_is_lost_depending_only_on_the_order_of_the_two_writes ... order A (reconcile, then housekeeping): keygen_secrets row for GROUP = Some(None)
+order B (housekeeping, then reconcile): keygen_secrets row for GROUP = None
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 45 filtered out; finished in 0.11s
+
+# exit=0

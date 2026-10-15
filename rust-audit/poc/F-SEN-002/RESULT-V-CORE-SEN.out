@@ -1,0 +1,25 @@
+running 2 tests
+test service::tests::poc_f_sen_002_peer_commit_before_engine_verdict_loses_the_claim ... FAILED
+test service::tests::poc_f_sen_002_undercount_finalizes_before_the_request_is_finalisable ... FAILED
+
+failures:
+
+---- service::tests::poc_f_sen_002_peer_commit_before_engine_verdict_loses_the_claim stdout ----
+
+thread 'service::tests::poc_f_sen_002_peer_commit_before_engine_verdict_loses_the_claim' (81234) panicked at crates/sentinel/src/service.rs:2294:5:
+the request was silently dropped at service.rs:631-633 while this sentinel had 500 bonded onchain and an already-queued Reveal — nothing re-creates the entry, so claim() is never called and bondTarget stays locked in the oracle
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- service::tests::poc_f_sen_002_undercount_finalizes_before_the_request_is_finalisable stdout ----
+
+thread 'service::tests::poc_f_sen_002_undercount_finalizes_before_the_request_is_finalisable' (81235) panicked at crates/sentinel/src/service.rs:2388:5:
+Finalize/Claim were emitted at block 22 while the oracle still has one unrevealed commitment: finalize() reverts FinalizeTooEarly and claim() reverts RequestNotResolved, and the entry is deleted anyway — commands = [Action(SentinelAction { kind: Finalize { id: 0x8df0724032b7d3502f9e881db992fff56de1637e824ad0c92dd398e62b67d278 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0x8df0724032b7d3502f9e881db992fff56de1637e824ad0c92dd398e62b67d278 }, expires_at: None })]
+
+
+failures:
+    service::tests::poc_f_sen_002_peer_commit_before_engine_verdict_loses_the_claim
+    service::tests::poc_f_sen_002_undercount_finalizes_before_the_request_is_finalisable
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p sentinel --bin sentinel`

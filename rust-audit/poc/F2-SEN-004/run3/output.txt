@@ -1,0 +1,19 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins qa2_sen::f2_sen_004 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::qa2_sen::f2_sen_004_waiting_states_never_expire ... [F2-SEN-004] after NewBlock(u64::MAX-1): any_action=true id1=None id2=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+ok
+test service::tests::qa2_sen::f2_sen_004_run3_waiting_for_outcome_never_expires ... [F2-SEN-004 run3] dispute: NewBlock(1200) → []; NewBlock(1201) → [Action(SentinelAction { kind: TimeoutArbitration { id: 0xd1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0xd1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1 }, expires_at: None })]; id1 tracked=false
+[F2-SEN-004 run3] WaitingForOutcome after NewBlock(u64::MAX-1): actions=[] id2=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+
+thread 'service::tests::qa2_sen::f2_sen_004_run3_waiting_for_outcome_never_expires' (219091) panicked at crates/sentinel/src/service.rs:3697:13:
+F2-SEN-004 / F-SEN-005 WaitingForOutcome half reproduced at 361aaf3: retained through block u64::MAX-1 with no Finalize retry and no deadline
+FAILED
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3::f_sen_005 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::rv_sen_run3::f_sen_005_run3_dispute_times_out_live_and_in_a_warp ... [F-SEN-005 run3] in_warp=false arbitration_deadline=158 actions=[Action(SentinelAction { kind: TimeoutArbitration { id: 0x0839adafbc69d23200ea9260c3b490645074d5cf60629fcfa042e0bfe245057f }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0x0839adafbc69d23200ea9260c3b490645074d5cf60629fcfa042e0bfe245057f }, expires_at: None })]
+[F-SEN-005 run3] in_warp=true arbitration_deadline=158 actions=[Action(SentinelAction { kind: TimeoutArbitration { id: 0xace4566b506def0b5fb2daa63ba718eb495acc4761f28f17badb5aab93306caa }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0xace4566b506def0b5fb2daa63ba718eb495acc4761f28f17badb5aab93306caa }, expires_at: None })]
+ok

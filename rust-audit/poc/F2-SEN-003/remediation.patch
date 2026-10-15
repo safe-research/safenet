@@ -1,0 +1,36 @@
+diff --git a/crates/sentinel/src/service.rs b/crates/sentinel/src/service.rs
+index 1db378e..2c9d0dc 100644
+--- a/crates/sentinel/src/service.rs
++++ b/crates/sentinel/src/service.rs
+@@ -544,10 +544,10 @@ impl SentinelTransition {
+     ) -> (State, Commands<State, Self>) {
+         match state.0.remove(&request_id) {
+             Some(RequestState::WaitingForDisputeResolution { .. }) => {}
+-            // Still claim: the oracle is authoritative that this request
+-            // timed out, and having any tracked entry at all means we most
+-            // likely posted a bond for it, even though our own local FSM
+-            // hadn't (yet) caught up to `WaitingForDisputeResolution`.
++            // QA2-SEN scratch remediation (F2-SEN-007 option 3): no bond, nothing to claim.
++            Some(entry) if entry.approve_and_slash_amount().is_none() => {
++                return (state, Vec::new());
++            }
+             Some(entry) => {
+                 tracing::warn!(
+                     request_id = %request_id,
+@@ -633,7 +633,15 @@ impl SentinelTransition {
+         // If this sentinel did not participate and it was not a timeout
+         // then no actions should be taken and the request should be dropped
+         if !*self_revealed && !timed_out {
+-            return (None, Vec::new());
++            // QA2-SEN scratch remediation (F2-SEN-003 option 1): keep the bonded
++            // entry so the terminal-event handlers still claim; no Finalize.
++            return (
++                Some(RequestState::WaitingForOutcome {
++                    approve,
++                    slash_amount,
++                }),
++                Vec::new(),
++            );
+         }
+ 
+         let actions = vec![

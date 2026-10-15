@@ -1,0 +1,25 @@
+# rv-core-a run 3, audit commit 361aaf3 (worktree wt/rv-core-a), 2026-10-08
+# command: integ bash rust-audit/poc/F2-VAL-066/run3/rv-core-a-deep_reorg_exit_status.sh OUTDIR (private network namespace, loopback only)
+# excerpt: build and forge deployment output dropped; the script's own lines and the full validator log follow
+
+coordinator: contract FROSTCoordinator 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+consensus: contract Consensus 0x706f3533B199078F30BE5520b183d130a5cbb17F
+    coordinator: 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+    consensus:   0x706f3533B199078F30BE5520b183d130a5cbb17F
+    oracle:      0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+1:rpc = "http://127.0.0.1:8549"
+18:metrics_address = "127.0.0.1:9464"
+25:max_reorg_depth = 2
+validator pid 175444
+health while indexing: OK
+reorging 5 blocks, deeper than max_reorg_depth (2)
+health while the validator processes the reorg: OK
+validator exit status: 0
+ExceededMaxReorgDepth lines in the log: 1
+"message":"unrecoverable watcher error; exiting"
+REPRODUCED: the validator logged ExceededMaxReorgDepth and exited with status 0
+
+--- validator_logs.txt (complete, 3 lines)
+{"timestamp":"2026-10-08T17:23:54.916786Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:9464"},"target":"safenet_core::observability"}
+{"timestamp":"2026-10-08T17:23:54.969319Z","level":"INFO","fields":{"message":"starting validator service"},"target":"validator"}
+{"timestamp":"2026-10-08T17:23:59.011669Z","level":"ERROR","fields":{"message":"unrecoverable watcher error; exiting","err":"Blocks(ExceededMaxReorgDepth(2))"},"target":"safenet_core::driver"}

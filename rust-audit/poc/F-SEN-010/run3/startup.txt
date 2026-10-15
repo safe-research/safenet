@@ -1,0 +1,17 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3: target-rv-sen/debug/sentinel --config-file <cfg>
+# <cfg> = crates/sentinel/sentinel.sample.toml with only `rpc` -> http://127.0.0.1:31500 (Anvil,
+# chain id 100, loopback), `database` -> a scratch file and log_filter -> debug. The shipped zero
+# `oracle`, `consensus`, `fee_token` and the placeholder `signer` are unchanged; window0 also sets
+# voting_window = 0. Script: f010_run.sh (starts and stops its own Anvil).
+
+--- sample.toml: 159 log lines in 12 s, then SIGINT (timeout -s INT 12)
+{"timestamp":"2026-10-08T17:24:32.704965Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:43417"},"target":"safenet_core::observability"}
+{"timestamp":"2026-10-08T17:24:32.762925Z","level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"timestamp":"2026-10-08T17:24:44.773655Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}
+RPC calls: {'eth_chainId': 1, 'eth_getBlockByNumber': 9, 'eth_getLogs': 8}; snapshot writes: 8; WARN/ERROR lines: 0
+
+--- window0.toml: 245 log lines in 12 s, then SIGINT (timeout -s INT 12)
+{"timestamp":"2026-10-08T17:24:44.792362Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:35099"},"target":"safenet_core::observability"}
+{"timestamp":"2026-10-08T17:24:44.860146Z","level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"timestamp":"2026-10-08T17:24:56.877861Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}
+RPC calls: {'eth_chainId': 1, 'eth_getBlockByNumber': 14, 'eth_getLogs': 13}; snapshot writes: 13; WARN/ERROR lines: 0

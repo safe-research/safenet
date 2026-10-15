@@ -1,0 +1,36 @@
+# rv-sen, 2026-10-08: bash f008_run.sh <scratch> 31501 ~/.foundry/cache/rpc/xdai/48635154 [hardfork]
+# Loopback Anvil (chain id 100); USDC.e proxy + FiatTokenV2_2 code and the proxy's cached slots come
+# from the Foundry fork cache written by run 2026-10-07-aegis-env-review (Gnosis block 48,635,154).
+# No live RPC was contacted.
+
+--- default hardfork (latest)
+anvil pid 190935, hardfork: 
+fork cache meta: {"number": "0x2e61d12", "beneficiary": "0x30db0d10d3774e78f8cb214b9e8b72d4b402488a", "timestamp": "0x6ac640ca", "gas_limit": 17000000, "basefee": 12, "difficulty": "0x1990814e1792954e299e80605d41241b7
+0x2a22f9c3b484c3629090feed35f17ff8f88f76f0 code bytes 1852
+0x107cf7fb73ea48d1d200989b156ce1894d7afec7 code bytes 23464
+proxy slots loaded: 14
+impl slot: 0x000000000000000000000000107cf7fb73ea48d1d200989b156ce1894d7afec7
+admin slot: 0x0000000000000000000000007a48dac683da91e4faa5ab13d91ab5fd170875bd
+symbol: ""
+decimals: 0
+paused: false
+approve calldata: 0x095ea7b30000000000000000000000004f61b8832978e83b80d69551aef07557dbe41d03000000000000000000000000000000000000000000000000000000002faf0800
+[F-SEN-008 run3] approve 0 -> 800000000 with gas limit 55000: status=0 gasUsed=54629
+allowance after: 0
+[F-SEN-008 run3] approve 0 -> 800000000 with gas limit 200000: status=1 gasUsed=55437
+[F-SEN-008 run3] approve 800000000 -> 800000000 (non-zero slot) with gas limit 55000: status=1 gasUsed=35537
+anvil stopped
+
+--- prague and cancun
+hardfork: prague
+anvil pid 196576, hardfork: 
+[F-SEN-008 run3] approve 0 -> 800000000 with gas limit 55000: status=0 gasUsed=54629
+[F-SEN-008 run3] approve 0 -> 800000000 with gas limit 200000: status=1 gasUsed=55437
+[F-SEN-008 run3] approve 800000000 -> 800000000 (non-zero slot) with gas limit 55000: status=1 gasUsed=35537
+anvil stopped
+hardfork: cancun
+anvil pid 196812, hardfork: 
+[F-SEN-008 run3] approve 0 -> 800000000 with gas limit 55000: status=0 gasUsed=54629
+[F-SEN-008 run3] approve 0 -> 800000000 with gas limit 200000: status=1 gasUsed=55437
+[F-SEN-008 run3] approve 800000000 -> 800000000 (non-zero slot) with gas limit 55000: status=1 gasUsed=35537
+anvil stopped

@@ -1,0 +1,8 @@
+$ cargo test -p validator --bins state::keygen:: -- --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3, PoC modules wired into crates/validator/src/state/keygen.rs, reverted afterwards)
+test state::keygen::poc_f_val_003_run3::confirmation_round_answers_until_complain_deadline ... confirmation round: timely complaint answered, late complaint counted and not answered
+ok
+test state::keygen::poc_f_val_003_run3::sharing_round_answers_unshared_plaintiff_and_counts_per_accused ... complaint 1 (PEER1 -> ME): 1 plaintext response(s)
+after 2 complaints from one plaintiff: totals ME=1 PEER2=1, threshold 2 not reached, no restart
+ok
+
+(full run) test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.28s

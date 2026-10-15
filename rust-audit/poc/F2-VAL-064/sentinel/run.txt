@@ -1,0 +1,29 @@
+# QA2-XC (coverage.md section 7 item 7): the sentinel binary rejects the documented '--config-file=<path>' spelling; commit 3ec8bc5
+# sentinel-loopback.toml is a copy of crates/sentinel/sentinel.sample.toml with rpc = http://127.0.0.1:9 (loopback; never contacted, the flag is rejected before any file is read)
+# binary: $CARGO_TARGET_DIR/debug/sentinel (debug build of 3ec8bc5)
+
+=================== sentinel --config-file=sentinel-loopback.toml   (the spelling in sentinel.sample.toml:4, Dockerfile:36, docs/sentinel-handbook.md:76)
+Unrecognized argument: --config-file=/home/shebin.guest/safe/safenet/rust-audit/poc/F2-VAL-064/sentinel/sentinel-loopback.toml
+
+Run sentinel --help for more information.
+--- exit=1
+
+=================== sentinel --config-file /nonexistent/sentinel.toml   (space-separated spelling is parsed: fails later, on the missing file)
+Error: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+--- exit=1
+
+=================== sentinel --help
+Usage: sentinel [--config-file <config-file>] [--version]
+
+Safenet sentinel.
+
+Options:
+  --config-file     path to the sentinel TOML configuration file.
+  --version         print version information.
+  --help, help      display usage information
+
+--- exit=0
+
+=================== argh version (Cargo.lock)
+811:name = "argh"
+812-version = "0.1.19"

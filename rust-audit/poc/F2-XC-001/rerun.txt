@@ -1,0 +1,18 @@
+# QA2-XC (resume) re-run of F2-XC-001 on the current tree; HEAD fe9e84cc59b65367b31d5a3121774383cc422234; debug binaries built from this tree
+# configs: the saved poc/F2-XC-001/{validator-typo-table,sentinel-typo-key}.toml (copies of the samples with rpc rewritten to loopback and one misspelt key each); effective rpc lines:
+F2-XC-001/validator-typo-table.toml:10:rpc = "http://127.0.0.1:9"
+F2-XC-001/sentinel-typo-key.toml:10:rpc = "http://127.0.0.1:9"
+# signer is the sample placeholder 0x...01. stderr only is captured (2>&1 1>/dev/null); Config::load fails before any RPC is contacted.
+
+=================== validator --config-file validator-typo-table.toml   (stderr only)
+Error: Parse(Error { message: "unknown field `transaction`", input: Some("# Sample configuration for the `validator` binary.\n#\n# Copy this file, fill in the deployment-specific values below, and pass it\n# with `--config-file=/path/to/your/validator.toml` (t …[truncated to 260 chars; the full config text follows in the real output]
+--- exit=1
+--- does stderr contain the signer line?
+1
+
+=================== sentinel --config-file sentinel-typo-key.toml   (stderr only)
+Error: Parse(Error { message: "unknown field `engin`, expected one of `fee_token`, `voting_window`, `engine`", input: Some("# Sample configuration for the `sentinel` binary.\n#\n# Copy this file, fill in the deployment-specific values below, and pass it\n# wit …[truncated to 260 chars; the full config text follows in the real output]
+--- exit=1
+--- does stderr contain the signer line?
+1
+

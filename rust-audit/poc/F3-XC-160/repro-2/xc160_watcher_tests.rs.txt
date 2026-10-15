@@ -1,0 +1,104 @@
+// F3-XC-160 second reproduction (QA3-2B). Temporary hunk added to the tests module of
+// crates/core/src/index/mod.rs (after `recovers_from_an_uncled_block_with_unavailable_logs`),
+// run, then reverted. Drives the real combined `Watcher` with a mocked Asserter.
+//
+// Run:  cargo test --package safenet-core --lib index::tests::qa3_2b_xc160
+//
+// At 361aaf3 both tests pass: a `null` revalidation answer (a lagging load-balanced backend that
+// has not imported the block) makes the watcher report an Uncle for a block that is still
+// canonical, while a same-hash answer correctly does not uncle.
+
+#[tokio::test]
+async fn qa3_2b_xc160_null_revalidation_reports_false_uncle() {
+    let asserter = Asserter::new();
+    asserter.push_success(&block(1000));
+    asserter.push_success(&block(999));
+
+    let mut watcher = watcher(
+        &asserter,
+        {
+            let mut config = config();
+            config.blocks.max_reorg_depth = 1;
+            config
+        },
+        None,
+    )
+    .await;
+
+    assert_eq!(
+        watcher.next().await.unwrap(),
+        Update::Block(BlockUpdate::New {
+            number: 1000,
+            hash: block_hash(1000),
+            timestamp: block_timestamp(1000),
+            logs_bloom: block_bloom(1000),
+        })
+    );
+
+    // A backend that has not imported block 1000 cannot serve its logs...
+    asserter.push_failure(ErrorPayload {
+        code: -32001,
+        message: "resource not found".into(),
+        data: None,
+    });
+    // ...and the revalidation reaches a backend one block behind: it returns `null`.
+    asserter.push_success(&Option::<Block>::None);
+
+    // The watcher reports an uncle for a block that is still canonical.
+    assert_eq!(
+        watcher.next().await.unwrap(),
+        Update::Block(BlockUpdate::Uncle { number: 1000 })
+    );
+}
+
+#[tokio::test]
+async fn qa3_2b_xc160_control_canonical_revalidation_does_not_uncle() {
+    let asserter = Asserter::new();
+    asserter.push_success(&block(1000));
+    asserter.push_success(&block(999));
+
+    let mut watcher = watcher(
+        &asserter,
+        {
+            let mut config = config();
+            config.blocks.max_reorg_depth = 1;
+            config
+        },
+        None,
+    )
+    .await;
+
+    assert_eq!(
+        watcher.next().await.unwrap(),
+        Update::Block(BlockUpdate::New {
+            number: 1000,
+            hash: block_hash(1000),
+            timestamp: block_timestamp(1000),
+            logs_bloom: block_bloom(1000),
+        })
+    );
+
+    asserter.push_failure(ErrorPayload {
+        code: -32001,
+        message: "resource not found".into(),
+        data: None,
+    });
+    // A backend that still has the canonical block answers with the same hash.
+    asserter.push_success(&block(1000));
+
+    // The block is still canonical, so no uncle: the logs error is surfaced for a retry.
+    assert!(watcher.next().await.is_err());
+}
+
+// BITE FIX (remediation option 1) applied to crates/core/src/index/blocks.rs `revalidate_last_block`,
+// replacing `if current.map(|block| block.hash) == Some(last.hash) { return Ok(None); }` with:
+//
+//     match current {
+//         None => return Ok(None),
+//         Some(block) if block.hash == last.hash => return Ok(None),
+//         Some(_) => {}
+//     }
+//
+// After the fix, `qa3_2b_xc160_null_revalidation_reports_false_uncle` FAILS at the Uncle assert
+// because watcher.next() now returns Err(Rpc(-32001)) (the logs query is retried) instead of a
+// false uncle; the control test still passes. A genuine reorg (different hash) still uncles.

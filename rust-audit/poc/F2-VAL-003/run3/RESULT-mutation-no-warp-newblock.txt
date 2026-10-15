@@ -1,0 +1,14 @@
+test state::keygen::poc_f2_val_003_run3::restart_warp_after_boundary_keeps_peer_commitments ... FAILED
+test state::keygen::poc_f2_val_003_run3::stale_state_still_drops_commitment ... ok
+test state::keygen::poc_f2_val_003_run3::warp_over_boundary_keeps_peer_commitments ... FAILED
+test state::keygen::poc_f2_val_003_run3::warp_over_deadline_restarts_at_the_deadline_block ... FAILED
+thread 'state::keygen::poc_f2_val_003_run3::restart_warp_after_boundary_keeps_peer_commitments' (176867) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F2-VAL-003/run3/warp_boundary.rs:243:5:
+assertion `left == right` failed: both peer commitments kept after restart
+  left: None
+ right: Some(2)
+thread 'state::keygen::poc_f2_val_003_run3::warp_over_boundary_keeps_peer_commitments' (176872) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F2-VAL-003/run3/warp_boundary.rs:187:5:
+assertion `left == right` failed: both peer commitments kept
+  left: None
+ right: Some(2)
+thread 'state::keygen::poc_f2_val_003_run3::warp_over_deadline_restarts_at_the_deadline_block' (176875) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F2-VAL-003/run3/warp_boundary.rs:315:18:
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.03s

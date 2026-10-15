@@ -1,0 +1,37 @@
+# rv-xc run 3 re-run of F2-XC-002 at 361aaf3; binaries built in worktree wt/rv-xc (cargo build -p validator -p sentinel --bins --locked --offline); run.sh in this folder; stub ../stub.py on the rv-xc port 31602 (loopback), started and killed by run.sh; no real chain contacted
+# command: REPO=$WT bash run.sh $CARGO_TARGET_DIR/debug <scratch> 31602
+# stub pid 166895 on 127.0.0.1:31602 (answers every call with 0x64); listener:
+#   LISTEN 0      5          127.0.0.1:31602      0.0.0.0:*    users:(("python3",pid=166895,fd=3))         
+# sample database lines: database = "sqlite:/var/lib/safenet/validator/data/storage.db" database = "sqlite:/var/lib/safenet/sentinel/data/storage.db" 
+=================== validator-bare (validator)
+--- database line: database = "sqlite:<scratch>/vol-validator-bare/storage.db"
+--- ls vol before: 
+Error: Database(SqliteError { code: 14, message: "unable to open database file" })
+--- exit=1
+--- ls vol after: 
+=================== validator-rwc (validator)
+--- database line: database = "sqlite:<scratch>/vol-validator-rwc/storage.db?mode=rwc"
+--- ls vol before: 
+Error: AbiError(SolTypes(Overrun))
+--- exit=1
+--- ls vol after: storage.db
+=================== sentinel-bare (sentinel)
+--- database line: database = "sqlite:<scratch>/vol-sentinel-bare/storage.db"
+--- ls vol before: 
+Error: Database(SqliteError { code: 14, message: "unable to open database file" })
+--- exit=1
+--- ls vol after: 
+=================== sentinel-rwc (sentinel)
+--- database line: database = "sqlite:<scratch>/vol-sentinel-rwc/storage.db?mode=rwc"
+--- ls vol before: 
+Error: Index(Blocks(Rpc(DeserError { err: Error("invalid type: string \"0x64\", expected struct WithOtherFieldsHelper", line: 1, column: 6), text: "\"0x64\"" })))
+--- exit=1
+--- ls vol after: storage.db
+=================== validator-env-bare (validator)
+--- database line: database = "${RV_XC_DB}"
+--- environment: RV_XC_DB=sqlite:<scratch>/vol-validator-env-bare/storage.db
+--- ls vol before: 
+Error: Database(SqliteError { code: 14, message: "unable to open database file" })
+--- exit=1
+--- ls vol after: 
+# done

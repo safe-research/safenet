@@ -1,0 +1,31 @@
+# rv-core-a run 3 re-run, audit commit 361aaf3 (worktree wt/rv-core-a), 2026-10-08
+# command: cargo test -p safenet-core --lib -- --nocapture --test-threads=1 poc_f_core_001 qa_f2_core_001 qa_f2_core_011 qa_f2_core_030 qa_f2_core_005 rv3_ revalidate_invalidates_a_block_missing_from_rpc supports_no_reorg_protection safe_block_without_reorg_protection_is_the_last_indexed_block skips_panicked_tasks_without_losing_successful_resumes kdf::tests
+# sources: the rv-core-a-*.rs files in the run3 folders of this batch, injected into the mod tests of crates/core/src/index/{blocks,mod}.rs and crates/core/src/state/{mod,storage}.rs; reverted afterwards with git checkout
+# excerpt: only this finding's tests are shown; the batch ran 25 tests (22 passed, 3 failed by design: the run-1 F-CORE-001 PoC tests fail at their key assertion when the defect is present). Lines over 500 characters are truncated.
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.45s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/safenet_core-1a555efd99e0fbb6)
+running 25 tests
+test index::blocks::tests::qa_f2_core_030_watcher_restart_discards_resume_of_effect_in_anchor_block ... shutdown: store Some(BlockStatus { latest: 1002, safe: 1000 }), tip 1002 = QaState { blocks: [999, 1000, 1001, 1002], events: [10], resumes: [777] }
+restart updates: [Uncle { number: 1001 }, New { number: 1001, hash: 0x00000000000000000000000000000000000000000000000000000000000003e9, timestamp: 1, logs_bloom: 0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 ...[line truncated by rv-core-a: long logs_bloom hex]
+after restart replay: commands []; tip 1002 = QaState { blocks: [999, 1000, 1001, 1002], events: [10], resumes: [] }
+ok
+test state::tests::qa_f2_core_030_replayed_followup_event_is_applied_before_the_respawned_effect_resumes ... replayed block 2 -> [Action(Event(10)), Effect(10), Action(Block(3))] (the driver spawns the effect only now)
+replayed block 3 committed at 3: TestState { blocks: [1, 2, 3], events: [10, 11], resumes: [] }
+ok
+test state::tests::qa_f2_core_030_restart_discards_resume_of_effect_from_anchor_block ... at shutdown: tip snapshot 6 = TestState { blocks: [1, 2, 3, 4, 5, 6], events: [50], resumes: [555] }
+restart Uncle{6} -> []
+replayed block 6 -> [Action(Block(6))] [Action(Block(7))]
+after restart replay: tip snapshot 6 = TestState { blocks: [1, 2, 3, 4, 5, 6], events: [50], resumes: [] }
+ok
+test state::tests::qa_f2_core_030_uncle_discards_applied_resume_and_never_reissues_effect ... block 1 logs -> [Action(Event(10)), Effect(10), Action(Block(2))]
+resume 777 -> [Action(Resume(777))]
+committed after block 2: block 2, TestState { blocks: [1, 2], events: [10], resumes: [777] }
+Uncle{2} -> []
+replayed block 2 -> [Action(Block(2))] [Action(Block(3))]
+committed after rollback + replay: block 2, TestState { blocks: [1, 2], events: [10], resumes: [] }
+ok
+
+failures:
+failures:
+test result: FAILED. 22 passed; 3 failed; 0 ignored; 0 measured; 143 filtered out; finished in 0.04s

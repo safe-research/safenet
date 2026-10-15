@@ -1,0 +1,36 @@
+QA2-SEN-Δ re-run for F2-SEN-007 at audited commit fe9e84c (previous run: 3ec8bc5, poc/F2-SEN-007/output.txt), rustc/cargo 1.98.1.
+Command: cargo test -p sentinel --bins qa2_sen -- --nocapture --test-threads=1
+Source: poc/F2-SEN-001/qa2_sen_all.rs pasted verbatim into `mod tests` of crates/sentinel/src/service.rs, reverted afterwards.
+Verbatim output of this finding's tests (full 12-test log: poc/F2-SEN-001/qa2_sen_all.rerun-fe9e84c.txt):
+
+test service::tests::qa2_sen::f2_sen_007a_arbitration_timeout_claims_without_a_bond ... [F2-SEN-007a] from WaitingForRequest: ArbitrationTimedOut → [Action(SentinelAction { kind: Claim { id: 0xf1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1 }, expires_at: None })]; RequestTimedOut → []; OracleResult → []
+
+thread 'service::tests::qa2_sen::f2_sen_007a_arbitration_timeout_claims_without_a_bond' (7120) panicked at crates/sentinel/src/service.rs:3131:13:
+F2-SEN-007 reproduced: ArbitrationTimedOut from WaitingForRequest emits Claim (reverts NothingToClaim, Commitments.sol:42) while the sibling handlers emit nothing
+FAILED
+
+test service::tests::qa2_sen::f2_sen_007b_depth1_reorg_replays_reveal ... 
+thread 'service::tests::qa2_sen::f2_sen_007b_depth1_reorg_replays_reveal' (7121) panicked at crates/sentinel/src/service.rs:3157:13:
+assertion failed: has(&c1, is_reveal)
+FAILED
+
+Run summary: test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 44 filtered out; finished in 2.73s
+
+--- Supplementary adapted re-run (qa2_sen_all.rerun-fe9e84c.adapted.rs): the setup precondition `assert!(has(&c, is_reveal))`
+--- that blocked the verbatim run above was moved from block 121 to 120, where PR #914 now emits the Reveal; the finding
+--- assertion is unchanged (diff: poc/F2-SEN-001/qa2_sen_all.rerun-fe9e84c.adapted.diff). Full log: qa2_sen_all.rerun-fe9e84c.adapted.txt
+
+test service::tests::qa2_sen::f2_sen_007a_arbitration_timeout_claims_without_a_bond ... [F2-SEN-007a] from WaitingForRequest: ArbitrationTimedOut → [Action(SentinelAction { kind: Claim { id: 0xf1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1 }, expires_at: None })]; RequestTimedOut → []; OracleResult → []
+
+thread 'service::tests::qa2_sen::f2_sen_007a_arbitration_timeout_claims_without_a_bond' (7803) panicked at crates/sentinel/src/service.rs:3137:13:
+F2-SEN-007 reproduced: ArbitrationTimedOut from WaitingForRequest emits Claim (reverts NothingToClaim, Commitments.sol:42) while the sibling handlers emit nothing
+FAILED
+
+test service::tests::qa2_sen::f2_sen_007b_depth1_reorg_replays_reveal ... [F2-SEN-007b] first block 120 → [Action(SentinelAction { kind: Reveal { id: 0xde6dd5467b1a7f644539f250db8b834d5823842dcc8dd40d4ca88e3a25112ebe, approve: true, salt: 0x3d5afd417882fb0d34cd286b5ab6bd7277f3061b8bb2aa9a9ea471e1af285f1c, reason: "" }, expires_at: Some(130) })]
+[F2-SEN-007b] replacement block 120 → [Action(SentinelAction { kind: Reveal { id: 0xde6dd5467b1a7f644539f250db8b834d5823842dcc8dd40d4ca88e3a25112ebe, approve: true, salt: 0x3d5afd417882fb0d34cd286b5ab6bd7277f3061b8bb2aa9a9ea471e1af285f1c, reason: "" }, expires_at: Some(130) })]
+
+thread 'service::tests::qa2_sen::f2_sen_007b_depth1_reorg_replays_reveal' (7804) panicked at crates/sentinel/src/service.rs:3170:13:
+F2-SEN-007 reproduced: a second Reveal row is emitted for the replacement block 120; the first is still queued or in flight, so the second reverts AlreadyRevealed (Commitments.sol:117)
+FAILED
+
+Run summary: test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 44 filtered out; finished in 2.74s

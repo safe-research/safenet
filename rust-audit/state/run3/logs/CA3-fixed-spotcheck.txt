@@ -1,0 +1,22 @@
+[review-cargo] 1 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-sen; rebuilding them
+   Compiling safenet-core v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/crates/core)
+   Compiling sentinel v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/crates/sentinel)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.32s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-sen/debug/deps/sentinel-702b20590452b382)
+
+running 3 tests
+test service::tests::ca3fix_sen::ca3fix_sen_f2_sen_010_warp_ends_at_the_commit_deadline ... [CA3-FIX F2-SEN-010 split_at_deadline=false] reveal=Some("") finalize=false entry at 107=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[CA3-FIX F2-SEN-010 split] page 102..=106 → entry Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 106, reveal_deadline: 112, committed_count: 2, self_committed: true })
+[CA3-FIX F2-SEN-010 split_at_deadline=true] reveal=Some("") finalize=false entry at 109=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+ok
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_003_own_reveal_mined_before_the_outage ... [CA3-FIX F-SEN-003] page 102..=107 commands=[Action(SentinelAction { kind: Reveal { id: 0xc7eb2c2c992b3c075e158e582af4fefb3711b17461124cde0053a337d8de6371, approve: true, salt: 0xc48373faefd98eb161dd13390e923c96e23b370208510860bd27ffed63acc95d, reason: "" }, expires_at: Some(112) })]; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 3, revealed_count: 2, approve_count: 2, deny_count: 0, self_revealed: true })
+[CA3-FIX F-SEN-003] page 108 commands=[Action(SentinelAction { kind: Finalize { id: 0xc7eb2c2c992b3c075e158e582af4fefb3711b17461124cde0053a337d8de6371 }, expires_at: None })]; page 109..=121 commands=[]; entry=Some(WaitingForDisputeResolution { approve: true, slash_amount: 500, arbitration_deadline: 483949 })
+[CA3-FIX F-SEN-003] DisputeResolved@122 → [Action(SentinelAction { kind: Claim { id: 0xc7eb2c2c992b3c075e158e582af4fefb3711b17461124cde0053a337d8de6371 }, expires_at: None })]
+ok
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_003_terminal_events_inside_the_warp ... [CA3-FIX F-SEN-003 v2 ruling_in_warp=true] page commands=[Action(SentinelAction { kind: Reveal { id: 0x003831fd3ad098dcdb9acf6c9fc560d342215e71b58b4c89ae9e857884269232, approve: true, salt: 0xeaa610c9731f0e04b42bac115b6b4dc37ada854b2a179430789c4808c4c748f4, reason: "" }, expires_at: Some(112) }), Action(SentinelAction { kind: Finalize { id: 0x003831fd3ad098dcdb9acf6c9fc560d342215e71b58b4c89ae9e857884269232 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0x003831fd3ad098dcdb9acf6c9fc560d342215e71b58b4c89ae9e857884269232 }, expires_at: None })]; entry after page=None
+[CA3-FIX F-SEN-003 v2 ruling_in_warp=false] page commands=[Action(SentinelAction { kind: Reveal { id: 0xf6313719eb143e92f6c178d2d2fb9436ee641c82fd7e4953cfc3f6a1f7b5d925, approve: true, salt: 0x52623ba9ff75de222e2e8201aeffe9cf146d23ef9ba9b3fe4fac649817b5f3c3, reason: "" }, expires_at: Some(112) }), Action(SentinelAction { kind: Finalize { id: 0xf6313719eb143e92f6c178d2d2fb9436ee641c82fd7e4953cfc3f6a1f7b5d925 }, expires_at: None })]; entry after page=Some(WaitingForOutcome { approve: true, slash_amount: 500 })
+[CA3-FIX F-SEN-003 v2] OracleResult@123 → [Action(SentinelAction { kind: Claim { id: 0xf6313719eb143e92f6c178d2d2fb9436ee641c82fd7e4953cfc3f6a1f7b5d925 }, expires_at: None })]
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 0.03s
+

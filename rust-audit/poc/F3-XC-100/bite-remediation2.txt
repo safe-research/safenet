@@ -1,0 +1,13 @@
+F3-XC-100 bite check (remediation 2 applied in the worktree):
+In handle_key_gen_timeouts' CollectingShares arm, exclude only participants
+whose verifying share is NOT the identity (a GroupCommitments helper computes
+it). Re-running the same test then panics:
+
+  expected EpochSkipped, got CollectingCommitments { next_epoch: Number { number: 2 },
+    group: Group { ... participants: {0x1..1,0x2..2,0x3..3,0x4..4}, excluded: {0x5..5},
+    count: 4, threshold: 3 ... }, secrets: Participating { secrets: None }, ... }
+
+i.e. only the attacker (0x5000...0005) is excluded, the restart is viable (4 >= 4),
+and the rollover is NOT skipped. The test therefore bites. (Remediation 2 keeps the
+victim in the group, so it still cannot sign for the epoch; remediation 1 is the
+sound fix, but either removes the EpochSkipped effect the test asserts.)

@@ -1,0 +1,20 @@
+header timestamps ahead of the host clock by about 10 s
+block 1: header ts - wall mined time = +10 s; seen by the sentinel  0.94 s after Anvil mined it
+block 2: header ts - wall mined time = +10 s; seen by the sentinel  0.04 s after Anvil mined it
+block 3: header ts - wall mined time = +10 s; seen by the sentinel  0.58 s after Anvil mined it
+block 4: header ts - wall mined time = +10 s; seen by the sentinel  0.24 s after Anvil mined it
+block 5: header ts - wall mined time = +10 s; seen by the sentinel  0.88 s after Anvil mined it
+block 6: header ts - wall mined time = +10 s; seen by the sentinel  0.43 s after Anvil mined it
+block 7: header ts - wall mined time = +10 s; seen by the sentinel  0.12 s after Anvil mined it
+block 8: header ts - wall mined time = +10 s; seen by the sentinel  0.72 s after Anvil mined it
+block 9: header ts - wall mined time = +10 s; seen by the sentinel  0.30 s after Anvil mined it
+mean lag over 9 blocks: 0.47 s
+
+header timestamps ahead of the host clock by about 0 s
+block 1: header ts - wall mined time = +0 s; seen by the sentinel  0.25 s after Anvil mined it
+block 2: header ts - wall mined time = +0 s; seen by the sentinel  0.27 s after Anvil mined it
+block 3: header ts - wall mined time = +0 s; seen by the sentinel  0.25 s after Anvil mined it
+block 4: header ts - wall mined time = +0 s; seen by the sentinel  0.20 s after Anvil mined it
+block 5: header ts - wall mined time = +0 s; seen by the sentinel  0.24 s after Anvil mined it
+block 6: header ts - wall mined time = +0 s; seen by the sentinel  0.26 s after Anvil mined it
+mean lag over 6 blocks: 0.24 s

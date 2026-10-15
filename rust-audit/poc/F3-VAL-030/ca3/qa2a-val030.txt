@@ -1,0 +1,9 @@
+
+running 1 test
+test state::sign::qa2a_val030_no_finality_wait::qa2a_approval_emits_attestation_share_without_reorg_safety ... block 1000: oracle approved -> GenerateNonces now; signing deadline 1006 (no +max_reorg_depth)
+block 1001: threshold committed -> UseNonces (burn and share)
+SignShare broadcast with attestTransaction callback, expires_at 1007 (approval at 1000, max_reorg_depth 5): a reorg removing the approval still carries this attestation onto the canonical chain
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 47 filtered out; finished in 0.25s
+

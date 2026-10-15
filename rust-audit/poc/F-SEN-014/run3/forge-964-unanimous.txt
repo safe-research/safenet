@@ -1,0 +1,37 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, contracts/ in wt/rv-sen
+# forge test --offline --out <scratch> --cache-path <scratch> --match-path test/SentinelOracle.t.sol \
+#   --match-test test_UnanimousApprove_FeeDistributedAndBondsReturned -vv
+# The test (contracts/test/SentinelOracle.t.sol:711-725, from #964) expects RequestNotPending from a
+# finalize sent after the last reveal auto-finalized. forge's submodule auto-install attempt failed
+# locally (paths already exist); nothing was fetched.
+
+forge Version: 1.5.1-v1.5.1
+Commit SHA: b0a9dd9ceda36f63e2326ce530c10e6916f4b8a2
+exit=0
+fatal: destination path '/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/lib/openzeppelin-contracts' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/OpenZeppelin/openzeppelin-contracts' into submodule path '/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/lib/openzeppelin-contracts' failed
+Failed to clone 'contracts/lib/openzeppelin-contracts'. Retry scheduled
+fatal: destination path '/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/lib/safe-smart-account' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/safe-fndn/safe-smart-account' into submodule path '/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/lib/safe-smart-account' failed
+Failed to clone 'contracts/lib/safe-smart-account'. Retry scheduled
+fatal: destination path '/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/lib/forge-std' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/foundry-rs/forge-std' into submodule path '/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/lib/forge-std' failed
+Failed to clone 'contracts/lib/forge-std' a second time, aborting
+Warning: Your project has missing dependencies that could not be installed.
+Compiling 74 files with Solc 0.8.30
+Compiling 46 files with Solc 0.8.30
+Solc 0.8.30 finished in 89.56ms
+Solc 0.8.30 finished in 9.74s
+Compiler run successful!
+
+Ran 1 test for test/SentinelOracle.t.sol:SentinelOracleTest
+[PASS] test_UnanimousApprove_FeeDistributedAndBondsReturned() (gas: 317628)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.69ms (1.71ms CPU time)
+
+Ran 1 test suite in 4.59ms (3.69ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
+
+real	0m10.619s
+user	0m10.689s
+sys	0m0.690s
+
+[exited with code 0]

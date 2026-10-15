@@ -1,0 +1,294 @@
+diff --git a/crates/sentinel/src/effect.rs b/crates/sentinel/src/effect.rs
+index 3a060b2..d282db6 100644
+--- a/crates/sentinel/src/effect.rs
++++ b/crates/sentinel/src/effect.rs
+@@ -33,6 +33,11 @@ pub enum Effect {
+         proposal_timestamp: u64,
+         block: u64,
+     },
++    /// QA3 bite check (F3-CORE-032 remediation 2): resume a request that is
++    /// waiting for its engine check from the verdict recorded for it, if any.
++    /// Re-emitted on every block, because a rollback or restart can restore a
++    /// request whose check is no longer running.
++    ReplayVerdict { request_id: B256 },
+ }
+ 
+ /// The result of performing an [`Effect`], resumed into the state machine.
+@@ -43,6 +48,11 @@ pub enum Resume {
+         request_id: B256,
+         outcome: CheckOutcome,
+     },
++    /// QA3 bite check: the verdict recorded for `request_id`, if any.
++    RecordedVerdict {
++        request_id: B256,
++        outcome: Option<CheckOutcome>,
++    },
+ }
+ 
+ /// Performs the sentinel's [`Effect`]s by asking the configured sentinel
+@@ -133,6 +143,10 @@ impl EffectHandler<Effect, Resume> for Handler {
+                     .engine_check(request_id, transaction, proposal_timestamp, block)
+                     .await,
+             },
++            Effect::ReplayVerdict { request_id } => Resume::RecordedVerdict {
++                request_id,
++                outcome: self.verdicts.get(request_id, 0).await.ok().flatten(),
++            },
+         }
+     }
+ 
+@@ -225,7 +239,10 @@ mod tests {
+                 proposal_timestamp: 1_700_000_000,
+                 block: 1,
+             })
+-            .await;
++            .await
++        else {
++            panic!("unexpected resume");
++        };
+         assert_eq!(request_id, REQUEST_ID);
+         outcome
+     }
+diff --git a/crates/sentinel/src/service.rs b/crates/sentinel/src/service.rs
+index adc6d73..5c83a41 100644
+--- a/crates/sentinel/src/service.rs
++++ b/crates/sentinel/src/service.rs
+@@ -400,6 +400,14 @@ impl SentinelTransition {
+     fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Commands<State, Self>) {
+         let mut actions = Vec::new();
+ 
++        // QA3 bite check (F3-CORE-032 remediation 2): a rollback or restart can
++        // restore a request whose engine check is no longer running.
++        for (id, entry) in &state.0 {
++            if matches!(entry, RequestState::WaitingForEngineCheck { .. }) {
++                actions.push(Command::Effect(effect::Effect::ReplayVerdict { request_id: *id }));
++            }
++        }
++
+         state.0.retain(|id, entry| match entry {
+             RequestState::WaitingForEngineCheck { deadline, request } => {
+                 block
+@@ -997,6 +1005,13 @@ impl StateTransition<State> for SentinelTransition {
+                 request_id,
+                 outcome,
+             }) => self.handle_engine_check_result(state, request_id, outcome),
++            Message::Resume(effect::Resume::RecordedVerdict {
++                request_id,
++                outcome: Some(outcome),
++            }) => self.handle_engine_check_result(state, request_id, outcome),
++            Message::Resume(effect::Resume::RecordedVerdict { outcome: None, .. }) => {
++                (state, Vec::new())
++            }
+         }
+     }
+ }
+@@ -1303,6 +1318,209 @@ mod tests {
+         }
+     }
+ 
++    /// QA3 F3-CORE-032: drives the real core `StateMachine` (snapshots and
++    /// rollback) with the real `SentinelTransition`. The proposal and its
++    /// `NewRequest` land in block S; the engine verdict resumes after S's
++    /// snapshot, as `Driver::update` spawns effects only after
++    /// `handle_update`; our own commit lands in S + 2. With `rollback`, a
++    /// one-block uncle (or a restart whose restore point is S) restores S and
++    /// the chain is replayed. Returns every command produced after the verdict
++    /// and the request's state in the newest snapshot.
++    async fn qa3_run(rollback: bool) -> (Vec<Command<SentinelAction, effect::Effect>>, Option<RequestState>) {
++        use safenet_core::{
++            index::{BlockUpdate, EventUpdate, Update},
++            state::StateMachine,
++            utils,
++        };
++        use sqlx::sqlite::SqliteConnectOptions;
++        use std::str::FromStr;
++
++        const S: u64 = 100;
++        let safe_tx_hash = B256::repeat_byte(0x01);
++        let id = request_id(safe_tx_hash, 7, ORACLE);
++        let bond = U96::from(800_000_000u64);
++        let pool = utils::connect_sqlite(SqliteConnectOptions::from_str("sqlite::memory:").unwrap())
++            .await
++            .unwrap();
++        let mut machine = StateMachine::<State, SentinelTransition>::new(transition(), pool.clone())
++            .await
++            .unwrap();
++        let logs_for = |n: u64| -> Vec<EventLog<SentinelEvents>> {
++            let events = match n {
++                S => vec![
++                    proposed_event(ORACLE, safe_tx_hash, TO),
++                    new_request_event(
++                        id,
++                        U256::from(400_000u64),
++                        U256::from(bond),
++                        U256::from(400_000u64),
++                        S + 6,
++                        S + 12,
++                    ),
++                ],
++                n if n == S + 2 => vec![committed_event(id, self_address(), 800_000_000u64)],
++                _ => vec![],
++            };
++            events
++                .into_iter()
++                .enumerate()
++                .map(|(index, data)| EventLog {
++                    index: index as u64,
++                    ..log(n, data)
++                })
++                .collect()
++        };
++        let apply = async |machine: &mut StateMachine<State, SentinelTransition>, n: u64| {
++            let mut commands = machine
++                .handle_update(Update::Block(BlockUpdate::New {
++                    number: n,
++                    hash: keccak256(n.to_be_bytes()),
++                    timestamp: block_timestamp(n),
++                    logs_bloom: Default::default(),
++                }))
++                .await
++                .unwrap();
++            commands.extend(
++                machine
++                    .handle_update(Update::Logs(EventUpdate {
++                        blocks: (n..=n).into(),
++                        logs: logs_for(n),
++                    }))
++                    .await
++                    .unwrap(),
++            );
++            commands
++        };
++
++        let at_s = apply(&mut machine, S).await;
++        assert!(at_s.contains(&engine_check_effect(id, TO, S)));
++        let mut after = machine
++            .handle_resume(effect::Resume::EngineCheckResult {
++                request_id: id,
++                outcome: CheckOutcome::Approved,
++            })
++            .await
++            .unwrap();
++        after.extend(apply(&mut machine, S + 1).await);
++        after.extend(apply(&mut machine, S + 2).await);
++        if rollback {
++            after.extend(
++                machine
++                    .handle_update(Update::Block(BlockUpdate::Uncle { number: S + 1 }))
++                    .await
++                    .unwrap(),
++            );
++        }
++        let replay_from = if rollback { S + 1 } else { S + 3 };
++        for n in replay_from..=S + 7 {
++            after.extend(apply(&mut machine, n).await);
++        }
++        let (state,) = sqlx::query_as::<_, (String,)>(
++            "SELECT state FROM snapshots ORDER BY block_number DESC LIMIT 1",
++        )
++        .fetch_one(&pool)
++        .await
++        .unwrap();
++        let state: State = serde_json::from_str(&state).unwrap();
++        (after, state.0.get(&id).cloned())
++    }
++
++    /// QA3 bite check: the rollback run again, with the driver's effect
++    /// handling emulated for `ReplayVerdict` (the recorded verdict is the
++    /// approval). `defer` holds the replayed verdict until after S + 2's logs,
++    /// as a fast replay or warp page applies them before the effect resumes.
++    async fn qa3_run_with_replayed_verdict(defer: bool) -> bool {
++        use safenet_core::{
++            index::{BlockUpdate, EventUpdate, Update},
++            state::StateMachine,
++            utils,
++        };
++        use sqlx::sqlite::SqliteConnectOptions;
++        use std::str::FromStr;
++
++        const S: u64 = 100;
++        let safe_tx_hash = B256::repeat_byte(0x01);
++        let id = request_id(safe_tx_hash, 7, ORACLE);
++        let bond = U96::from(800_000_000u64);
++        let pool = utils::connect_sqlite(SqliteConnectOptions::from_str("sqlite::memory:").unwrap())
++            .await
++            .unwrap();
++        let mut machine = StateMachine::<State, SentinelTransition>::new(transition(), pool.clone())
++            .await
++            .unwrap();
++        let logs_for = |n: u64| -> Vec<EventLog<SentinelEvents>> {
++            let events = match n {
++                S => vec![
++                    proposed_event(ORACLE, safe_tx_hash, TO),
++                    new_request_event(id, U256::from(400_000u64), U256::from(bond), U256::from(400_000u64), S + 6, S + 12),
++                ],
++                n if n == S + 2 => vec![committed_event(id, self_address(), 800_000_000u64)],
++                _ => vec![],
++            };
++            events.into_iter().enumerate().map(|(index, data)| EventLog { index: index as u64, ..log(n, data) }).collect()
++        };
++        let mut reveals = 0;
++        let mut pending = 0;
++        for step in 0..=10u64 {
++            let n = match step {
++                0..=2 => S + step,
++                3 => {
++                    // The verdict resumed after S's snapshot (live run).
++                    machine.handle_update(Update::Block(BlockUpdate::Uncle { number: S + 1 })).await.unwrap();
++                    continue;
++                }
++                _ => S + step - 3,
++            };
++            let mut commands = machine
++                .handle_update(Update::Block(BlockUpdate::New { number: n, hash: keccak256(n.to_be_bytes()), timestamp: block_timestamp(n), logs_bloom: Default::default() }))
++                .await
++                .unwrap();
++            commands.extend(machine.handle_update(Update::Logs(EventUpdate { blocks: (n..=n).into(), logs: logs_for(n) })).await.unwrap());
++            if step == 0 {
++                commands.extend(machine.handle_resume(effect::Resume::EngineCheckResult { request_id: id, outcome: CheckOutcome::Approved }).await.unwrap());
++            }
++            for command in &commands {
++                match command {
++                    Command::Effect(effect::Effect::ReplayVerdict { .. }) if step > 3 => pending += 1,
++                    Command::Action(action) if matches!(action.kind, SentinelActionKind::Reveal { .. }) => reveals += 1,
++                    _ => {}
++                }
++            }
++            if pending > 0 && (!defer || n >= S + 2) {
++                for _ in 0..pending {
++                    let commands = machine.handle_resume(effect::Resume::RecordedVerdict { request_id: id, outcome: Some(CheckOutcome::Approved) }).await.unwrap();
++                    reveals += commands.iter().filter(|command| matches!(command, Command::Action(action) if matches!(action.kind, SentinelActionKind::Reveal { .. }))).count();
++                }
++                pending = 0;
++            }
++        }
++        reveals > 0
++    }
++
++    #[tokio::test]
++    async fn qa3_rollback_with_replayed_verdict() {
++        let prompt = qa3_run_with_replayed_verdict(false).await;
++        let deferred = qa3_run_with_replayed_verdict(true).await;
++        println!("replayed verdict resumes before the own commit is replayed: reveal = {prompt}");
++        println!("replayed verdict resumes after the own commit is replayed: reveal = {deferred}");
++    }
++
++    #[tokio::test]
++    async fn qa3_rollback_to_the_proposal_block_loses_the_verdict_and_the_reveal() {
++        let is_reveal = |command: &Command<SentinelAction, effect::Effect>| {
++            matches!(command, Command::Action(action) if matches!(action.kind, SentinelActionKind::Reveal { .. }))
++        };
++        let (live, live_state) = qa3_run(false).await;
++        println!("no rollback: commands after the verdict: {live:?}");
++        println!("no rollback: request state in the newest snapshot: {live_state:?}");
++        let (replayed, replayed_state) = qa3_run(true).await;
++        println!("rollback to S: commands after the verdict: {replayed:?}");
++        println!("rollback to S: request state in the newest snapshot: {replayed_state:?}");
++        assert!(live.iter().any(is_reveal));
++        assert!(!replayed.iter().any(is_reveal));
++        assert_eq!(replayed_state, None);
++    }
++
+     fn assert_new_request_before_engine_check(
+         safe_tx_hash: B256,
+         outcome: CheckOutcome,

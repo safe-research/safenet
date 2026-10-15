@@ -1,0 +1,20 @@
+# PC3 2026-10-09: opcode census and foreign-topic search on the SentinelOracle runtime bytecode built at 361aaf3 (wt/rv-core-a)
+# opcode counts from: cast disassemble <deployedBytecode>
+DELEGATECALL 0
+CALLCODE 0
+SELFDESTRUCT 0
+CREATE 0
+CREATE2 0
+CALL 1
+STATICCALL 0
+LOG0 0
+LOG1 1
+LOG2 7
+LOG3 5
+LOG4 0
+# topic search: python3 -I rust-audit/poc/F-VAL-060/pc3/bytecode_check.py $WT/contracts/build/out
+SentinelOracle runtime bytecode length (bytes): 16812
+Coordinator/Consensus topic0 found in SentinelOracle runtime bytecode: none
+SentinelOracle own topic0 found in its runtime bytecode: 15 of 16
+leading-zero-trimmed search, Coordinator/Consensus topic0 in SentinelOracle bytecode: none
+# note: the one own topic not found literally is Claimed(bytes32,address,uint96,uint96) = 0x006f1d9d..., whose leading zero byte the compiler drops (PUSH31); the trimmed search above covers that case for the foreign topics

@@ -1,0 +1,10 @@
+$ cargo test -p validator --bins poc_consult -- --test-threads=1 --nocapture   (consult from the head: discarded GenerateNonces/UseNonces resumes; worktree wt/rv-val at 361aaf3, modules wired into service/effect.rs and state/sign.rs, reverted)
+test service::effect::poc_consult_handler::replayed_effects_reuse_the_stored_pair_and_never_reuse_a_taken_one ... GenerateNonces twice for one signature id: same commitments = true
+UseNonces twice: first = Nonces, second = Noop
+GenerateNonces after the pair was taken: Noop
+test state::sign::poc_consult_state::discarded_nonce_resumes_lose_at_most_one_ceremony_and_never_reuse_a_nonce ... GenerateNonces resume: state unchanged by the resume, CommitNonces queued (durable queue)
+replayed GenerateNonces after a rollback returns the first stored pair: true
+UseNonces resume: state unchanged by the resume, SignShare queued (durable queue)
+replayed UseNonces after a rollback: Noop
+share-round timeout without this validator's share: session kept = false
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.13s

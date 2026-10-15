@@ -1,0 +1,61 @@
+# R7: sentinel sample database URL on a fresh node (scratch copy, no tracked file touched)
+# Date: 2026-10-08T17:32:37Z
+# Workspace: git archive 361aaf3 into $RUN/scratch/R7/ws; the module below appended to crates/sentinel/src/config.rs of that copy only.
+# Command: CARGO_TARGET_DIR=$RUN/scratch/R7/target cargo test -p sentinel --bins --offline r7_poc_config -- --nocapture
+
+[review-cargo] 1 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R7/target; rebuilding them
+   Compiling sentinel v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R7/ws/crates/sentinel)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.45s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R7/target/debug/deps/sentinel-702b20590452b382)
+
+running 1 test
+sample database filename: /var/lib/safenet/sentinel/data/storage.db
+connect with the sample URL form: Err("error returned from database: (code: 14) unable to open database file")
+connect with ?mode=rwc: Ok("ok")
+test config::r7_poc_config::sample_database_url_cannot_create_a_fresh_database ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 57 filtered out; finished in 0.00s
+
+
+# ---- appended test module ----
+
+/// R7 (run 3): the sample `database` URL form on a fresh node. Appended to a scratch copy of
+/// `config.rs` only.
+#[cfg(test)]
+mod r7_poc_config {
+    use super::*;
+
+    #[tokio::test]
+    async fn sample_database_url_cannot_create_a_fresh_database() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("sentinel.sample.toml");
+        let sample = std::fs::read_to_string(path).unwrap();
+        let config = toml::from_str::<Config>(&sample).unwrap();
+        println!("sample database filename: {}", config.database.get_filename().display());
+
+        // Same URL form as the sample (`sqlite:<absolute path>`), in a fresh, empty, writable
+        // directory, as on a new volume.
+        let dir = std::env::temp_dir().join(format!("r7-sqlite-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("storage.db");
+        let sample_form = sample.replace(
+            "sqlite:/var/lib/safenet/sentinel/data/storage.db",
+            &format!("sqlite:{}", db.display()),
+        );
+        assert_ne!(sample_form, sample, "sample database line not found");
+        let config = toml::from_str::<Config>(&sample_form).unwrap();
+        let result = safenet_core::utils::connect_sqlite(config.database).await;
+        println!("connect with the sample URL form: {:?}", result.as_ref().map(|_| "ok").map_err(|err| err.to_string()));
+        assert!(result.is_err());
+        assert!(!db.exists());
+
+        let with_mode = sample.replace(
+            "sqlite:/var/lib/safenet/sentinel/data/storage.db",
+            &format!("sqlite:{}?mode=rwc", db.display()),
+        );
+        let config = toml::from_str::<Config>(&with_mode).unwrap();
+        let result = safenet_core::utils::connect_sqlite(config.database).await;
+        println!("connect with ?mode=rwc: {:?}", result.as_ref().map(|_| "ok").map_err(|err| err.to_string()));
+        assert!(result.is_ok());
+        assert!(db.exists());
+    }
+}

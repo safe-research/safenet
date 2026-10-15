@@ -1,0 +1,17 @@
+QA2-SEN-Δ re-run for F2-SEN-005 at audited commit fe9e84c (previous run: 3ec8bc5, poc/F2-SEN-005/output.txt), rustc/cargo 1.98.1.
+Command: cargo test -p sentinel --bins qa2_sen -- --nocapture --test-threads=1
+Source: poc/F2-SEN-001/qa2_sen_all.rs pasted verbatim into `mod tests` of crates/sentinel/src/service.rs, reverted afterwards.
+Verbatim output of this finding's tests (full 12-test log: poc/F2-SEN-001/qa2_sen_all.rerun-fe9e84c.txt):
+
+test service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood ... [F2-SEN-005] rate=5/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=150 commits submitted=150 commits dropped=0 reveals submitted=150 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005] rate=8/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=240 commits submitted=240 commits dropped=0 reveals submitted=224 reveals DROPPED after a submitted commit (slashable)=16 first slashable proposal block=Some(19)
+[F2-SEN-005] rate=10/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=300 commits submitted=276 commits dropped=24 reveals submitted=172 reveals DROPPED after a submitted commit (slashable)=124 first slashable proposal block=Some(8)
+[F2-SEN-005] rate=12/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=360 commits submitted=294 commits dropped=66 reveals submitted=156 reveals DROPPED after a submitted commit (slashable)=178 first slashable proposal block=Some(4)
+
+thread 'service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood' (7108) panicked at crates/sentinel/src/service.rs:3062:13:
+assertion `left == right` failed: F2-SEN-005 (ii) reproduced: 318 commitments across the modelled rates were submitted while their Reveal expired unsubmitted behind the FIFO backlog
+  left: 318
+ right: 0
+FAILED
+
+Run summary: test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 44 filtered out; finished in 2.73s

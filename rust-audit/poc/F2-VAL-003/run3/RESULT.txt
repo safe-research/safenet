@@ -1,0 +1,10 @@
+$ cargo test -p validator --bins state::keygen:: -- --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3, PoC modules wired into crates/validator/src/state/keygen.rs, reverted afterwards)
+test state::keygen::poc_f2_val_003_run3::restart_warp_after_boundary_keeps_peer_commitments ... restart from snapshot 97, warp 98..=110: snapshot at 110, epoch-2 commitments held = Some(2)
+ok
+test state::keygen::poc_f2_val_003_run3::stale_state_still_drops_commitment ... ok
+test state::keygen::poc_f2_val_003_run3::warp_over_boundary_keeps_peer_commitments ... warp 96..=110: snapshot at 110, epoch-2 commitments held = Some(2), KeyGenSetup for gid2 emitted 1x
+ok
+test state::keygen::poc_f2_val_003_run3::warp_over_deadline_restarts_at_the_deadline_block ... after warp 96..=130: restarted group excludes PEER3 = true, new deadline = Some(140) (expected Some(140))
+ok
+
+(full run) test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.28s

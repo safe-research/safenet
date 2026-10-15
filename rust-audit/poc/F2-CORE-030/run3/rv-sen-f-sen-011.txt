@@ -1,0 +1,9 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3::f_sen_011 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::rv_sen_run3::f_sen_011_run3_restart_strands_in_flight_check_from_anchor_block ... [F-SEN-011 run3] after restart: checks re-issued=[]; tracked after commit deadline=false
+
+thread 'service::tests::rv_sen_run3::f_sen_011_run3_restart_strands_in_flight_check_from_anchor_block' (219303) panicked at crates/sentinel/src/service.rs:4606:13:
+F-SEN-011 reproduced at 361aaf3: the in-flight check died with the process, the anchor snapshot holds WaitingForEngineCheck without the transaction, no check was re-issued and the request expired at the commit deadline without a vote
+FAILED

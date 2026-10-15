@@ -1,0 +1,31 @@
+# QA2-XC PoC run for F2-XC-006; commit 3ec8bc5 (second run; the first attempt, run-1-first-attempt-raced-automine.txt, submitted the same request but its final nonce read raced Anvil's asynchronous automine)
+# PoC source: poc/F2-XC-050/qa2_xc_state_tests.rs (module qa2_xc_006), pasted into crates/core/src/state/mod.rs 'mod tests', reverted afterwards
+# local Anvil nodes (started and killed by QA2-XC): chain A = http://127.0.0.1:8745 (anvil --chain-id 100, 10 blocks pre-mined),
+#   chain B = http://127.0.0.1:8746 (anvil --chain-id 11155111 --timestamp 1600000000, 20 blocks pre-mined; block 21 holds the first attempt's transaction). No other RPC is contacted.
+# signer: Anvil default account 0 (public test key), funded on both local chains.
+# command: QA2_XC_DIR=<scratch> QA2_XC_RPC_A=http://127.0.0.1:8745 QA2_XC_RPC_B=http://127.0.0.1:8746 cargo test --offline --locked -p safenet-core --lib state::tests::qa2_xc_006 -- --nocapture
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.71s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+running 1 test
+run 1: rpc http://127.0.0.1:8745 -> chain_id 100
+run 1: indexed chain 100 block 9 hash 0x56fcfa935038ab9812ced90068c08ef59a8fc86753d97340f61e9ad9d696832c
+run 1: indexed chain 100 block 10 hash 0x3bdc9e4942f03f6bac0ba944f3771d0b01cce06dd0ddcfe16f24677842139371
+run 1: store BlockStatus { latest: 10, safe: 9 }; snapshot 10 state TestState { blocks: [9, 10], events: [9, 10], resumes: [] }
+run 1: queued request Transaction { to: 0x000000000000000000000000000000000000c0de, value: 0, data: 0x5afe000000000000000a, gas: 50000 }
+run 2: rpc http://127.0.0.1:8746 -> chain_id 11155111
+run 2: block 10 hash on chain 100 = 0x3bdc9e4942f03f6bac0ba944f3771d0b01cce06dd0ddcfe16f24677842139371, on chain 11155111 = 0xe4152d9ae939c17d7183721c7249c079b23b6595ff39822b11afb974b25d202c
+run 2: watcher queued [Uncle { number: 10 }, Warp { from: 10, to: 19 }, New { number: 20, hash: 0xf4db6ae7c24a8cb821cf6454c7722af66e610613c0940f4abfb2f7aa6f8fb41f, logs_bloom: 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 }, New { number: 21, hash: 0x648e9fc6f3d05a71caffd4b733b5a54ac34f5d8481217effa464766fe55ea8dd, logs_bloom: 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 }]
+run 2: snapshot 21 state TestState { blocks: [9, 20, 21], events: [9], resumes: [] } (events derived from chain 100 blocks, now applied on chain 11155111)
+run 2: transactions rows [(Some(1), "{\"to\":\"0x000000000000000000000000000000000000c0de\",\"value\":\"0x0\",\"data\":\"0x5afe000000000000000a\",\"gas\":50000,\"maxFeePerGas\":\"0x8401575\",\"maxPriorityFeePerGas\":\"0x1\"}", Some(21), None)]; signer nonce on chain 11155111 went 1 -> 2
+test state::tests::qa2_xc_006::a_store_written_on_one_chain_is_resumed_on_another_and_its_queued_request_is_broadcast_there ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 104 filtered out; finished in 0.16s
+# exit=0
+
+=================== chain B (8746) after the test: block-number 22; signer nonce 2
+=================== the signer's transactions on chain B (eth_getBlockByNumber, full): block / chainId / nonce / to / input
+{"block":"21","chainId":"0xaa36a7","nonce":"0x0","from":"0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266","to":"0x000000000000000000000000000000000000c0de","input":"0x5afe000000000000000a"}
+{"block":"22","chainId":"0xaa36a7","nonce":"0x1","from":"0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266","to":"0x000000000000000000000000000000000000c0de","input":"0x5afe000000000000000a"}
+=================== chain A (8745): block-number 10; signer nonce 0 (the request was never broadcast on the chain it was queued for)

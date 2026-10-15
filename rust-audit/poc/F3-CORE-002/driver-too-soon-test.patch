@@ -1,0 +1,313 @@
+diff --git a/crates/core/src/driver.rs b/crates/core/src/driver.rs
+index bb3b717..18e7713 100644
+--- a/crates/core/src/driver.rs
++++ b/crates/core/src/driver.rs
+@@ -326,3 +326,284 @@ impl UpdateRecorder {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod qa3_too_soon_tests {
++    //! QA3 F3-CORE-002: the real `Driver` with `use_client_filtering` against a
++    //! node that answers `eth_getLogs` with `[]` until `window` after it first
++    //! served the block (the handbooks' "too soon" behaviour), real time and
++    //! the real `STEP_RETRY_DELAY`. Mocked at the transport boundary only.
++    use super::*;
++    use crate::{
++        index::blocks::Timing,
++        state::{Commands, Message, StateTransition},
++    };
++    use alloy::{
++        primitives::{B256, Bloom, Log as PrimitiveLog, U256, keccak256},
++        rpc::{
++            json_rpc::{RequestPacket, Response, ResponsePacket, ResponsePayload},
++            types::{Block, Filter, Header, Log},
++        },
++        sol_types::SolEvent,
++        transports::{TransportError, TransportFut},
++    };
++    use sqlx::sqlite::SqliteConnectOptions;
++    use std::{
++        collections::BTreeMap,
++        str::FromStr,
++        sync::{Arc, Mutex},
++        task::{Context, Poll},
++        time::Instant,
++    };
++
++    alloy::sol! {
++        #[derive(Debug)]
++        contract Watched {
++            event Ping(uint256 value);
++            event Pong(uint256 value);
++        }
++    }
++    crate::watcher_events!(Watched::WatchedEvents);
++
++    const WATCHED: Address = Address::repeat_byte(0x11);
++    const EPOCH: u64 = 1_337_420;
++    const EVENT_BLOCK: u64 = 1003;
++
++    #[derive(Default, Serialize, Deserialize)]
++    struct QaState {
++        events: Vec<u64>,
++    }
++
++    struct QaTransition;
++
++    impl StateTransition<QaState> for QaTransition {
++        type Event = Watched::WatchedEvents;
++        type Action = ();
++        type Effect = ();
++        type Resume = ();
++
++        fn apply_transition(
++            &self,
++            mut state: QaState,
++            message: Message<Self::Event, Self::Resume>,
++        ) -> (QaState, Commands<QaState, Self>) {
++            if let Message::Event(log) = message {
++                state.events.push(log.block.number);
++            }
++            (state, vec![])
++        }
++    }
++
++    struct QaEffects;
++
++    impl EffectHandler<(), ()> for QaEffects {
++        async fn perform_effect(&self, _effect: ()) {}
++    }
++
++    struct QaActions;
++
++    impl ActionEncoder<()> for QaActions {
++        fn encode_action(&self, _action: ()) -> (Transaction, Option<u64>) {
++            (Transaction::default(), None)
++        }
++    }
++
++    struct QaService;
++
++    impl Service for QaService {
++        type State = QaState;
++        type Event = Watched::WatchedEvents;
++        type Action = ();
++        type Effect = ();
++        type Resume = ();
++        type Transition = QaTransition;
++        type Effects = QaEffects;
++        type Actions = QaActions;
++
++        fn components(self) -> (QaTransition, QaEffects, QaActions) {
++            (QaTransition, QaEffects, QaActions)
++        }
++    }
++
++    fn block_hash(number: u64) -> B256 {
++        keccak256(number.to_be_bytes())
++    }
++
++    fn ping_log(number: u64) -> Log {
++        Log {
++            inner: PrimitiveLog {
++                address: WATCHED,
++                data: Watched::Ping {
++                    value: U256::from(number),
++                }
++                .encode_log_data(),
++            },
++            block_hash: Some(block_hash(number)),
++            block_number: Some(number),
++            block_timestamp: Some(EPOCH + number - 1000),
++            transaction_hash: Some(B256::repeat_byte(0x77)),
++            transaction_index: Some(0),
++            log_index: Some(0),
++            removed: false,
++        }
++    }
++
++    fn block_logs(number: u64) -> Vec<Log> {
++        if number == EVENT_BLOCK {
++            vec![ping_log(number)]
++        } else {
++            vec![]
++        }
++    }
++
++    fn block(number: u64) -> Block {
++        let mut bloom = Bloom::default();
++        for log in block_logs(number) {
++            bloom.accrue_log(&log.inner);
++        }
++        Block::empty(Header {
++            hash: block_hash(number),
++            inner: alloy::consensus::Header {
++                parent_hash: block_hash(number - 1),
++                number,
++                timestamp: EPOCH + number - 1000,
++                logs_bloom: bloom,
++                ..Default::default()
++            },
++            ..Default::default()
++        })
++    }
++
++    struct ChainState {
++        start: Instant,
++        window: Duration,
++        first_served: BTreeMap<u64, Instant>,
++        log_queries: Vec<String>,
++    }
++
++    #[derive(Clone)]
++    struct TooSoonChain(Arc<Mutex<ChainState>>);
++
++    impl tower::Service<RequestPacket> for TooSoonChain {
++        type Response = ResponsePacket;
++        type Error = TransportError;
++        type Future = TransportFut<'static>;
++
++        fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
++            Poll::Ready(Ok(()))
++        }
++
++        fn call(&mut self, request: RequestPacket) -> Self::Future {
++            let RequestPacket::Single(request) = request else {
++                panic!("unexpected batch request");
++            };
++            let mut s = self.0.lock().unwrap();
++            let elapsed = s.start.elapsed();
++            let head = 1000 + elapsed.as_secs();
++            let payload = match request.method() {
++                "eth_getBlockByNumber" => {
++                    let (tag, _): (String, bool) =
++                        serde_json::from_str(request.params().unwrap().get()).unwrap();
++                    let number = match tag.as_str() {
++                        "latest" => head,
++                        hex => u64::from_str_radix(hex.trim_start_matches("0x"), 16).unwrap(),
++                    };
++                    let found = (number <= head).then(|| block(number));
++                    if found.is_some() {
++                        s.first_served.entry(number).or_insert_with(Instant::now);
++                    }
++                    serde_json::value::to_raw_value(&found).unwrap()
++                }
++                "eth_getLogs" => {
++                    let (filter,): (Filter,) =
++                        serde_json::from_str(request.params().unwrap().get()).unwrap();
++                    let hash = filter.get_block_hash().expect("new blocks are queried by hash");
++                    let number = (900..=head)
++                        .find(|number| block_hash(*number) == hash)
++                        .unwrap();
++                    let age = s.first_served[&number].elapsed();
++                    let too_soon = age < s.window;
++                    let logs = if too_soon {
++                        vec![]
++                    } else {
++                        block_logs(number)
++                            .into_iter()
++                            .filter(|log| filter.matches(&log.inner))
++                            .collect()
++                    };
++                    if number == EVENT_BLOCK {
++                        let kind = if filter.topics[0].is_empty() { "all logs" } else { "one event" };
++                        s.log_queries.push(format!(
++                            "{} ms after the header: logs of block {number} ({kind}) -> {} log(s)",
++                            age.as_millis(),
++                            logs.len()
++                        ));
++                    }
++                    serde_json::value::to_raw_value(&logs).unwrap()
++                }
++                method => panic!("unexpected method {method}"),
++            };
++            let response = Response {
++                id: request.id().clone(),
++                payload: ResponsePayload::Success(payload),
++            };
++            Box::pin(async move {
++                tokio::time::sleep(Duration::from_millis(20)).await;
++                Ok(ResponsePacket::Single(response))
++            })
++        }
++    }
++
++    async fn run(window_ms: u64) -> (Vec<u64>, Vec<String>) {
++        let chain = TooSoonChain(Arc::new(Mutex::new(ChainState {
++            start: Instant::now(),
++            window: Duration::from_millis(window_ms),
++            first_served: BTreeMap::new(),
++            log_queries: Vec::new(),
++        })));
++        let provider = Provider::qa3_from_transport(chain.clone(), 0x5afe);
++        let pool = utils::connect_sqlite(SqliteConnectOptions::from_str("sqlite::memory:").unwrap())
++            .await
++            .unwrap();
++        let signer = Signer::from_str(
++            "0x0000000000000000000000000000000000000000000000000000000000000001",
++        )
++        .unwrap();
++        let mut config = Config::default();
++        config.index.blocks.block_time = Timing::Millis(1_000);
++        config.index.blocks.block_propagation_delay = Timing::Millis(0);
++        config.index.blocks.block_retry_delays = Timing::Millis(vec![]);
++        config.index.events.use_client_filtering = true;
++        let driver = Driver::new(QaService, provider, signer, pool.clone(), vec![WATCHED], config)
++            .await
++            .unwrap();
++        let _ = tokio::time::timeout(Duration::from_secs(EVENT_BLOCK - 1000 + 6), driver.run()).await;
++        let (state,) = sqlx::query_as::<_, (String,)>(
++            "SELECT state FROM snapshots ORDER BY block_number DESC LIMIT 1",
++        )
++        .fetch_one(&pool)
++        .await
++        .unwrap();
++        let state: QaState = serde_json::from_str(&state).unwrap();
++        let queries = chain.0.lock().unwrap().log_queries.clone();
++        (state.events, queries)
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn qa3_client_filtering_loses_events_inside_a_short_too_soon_window() {
++        let windows = [200, 500, 1_000, 2_000];
++        let results = futures::future::join_all(windows.map(run)).await;
++        for (window, (events, queries)) in windows.iter().zip(&results) {
++            println!("too-soon window {window} ms: events applied from blocks {events:?}");
++            for query in queries {
++                println!("    {query}");
++            }
++        }
++        // A window shorter than the three client-filtered attempts is caught...
++        assert_eq!(results[0].0, vec![EVENT_BLOCK]);
++        // ...a longer one loses the event: the block is committed without it.
++        for (events, _) in &results[2..] {
++            assert!(events.is_empty());
++        }
++    }
++}
+diff --git a/crates/core/src/provider/mod.rs b/crates/core/src/provider/mod.rs
+index febc353..0f59ad9 100644
+--- a/crates/core/src/provider/mod.rs
++++ b/crates/core/src/provider/mod.rs
+@@ -180,3 +180,19 @@ impl AlloyProvider<AnyNetwork> for Provider {
+         ProviderCall::Ready(Some(Ok(self.chain_id)))
+     }
+ }
++
++/// QA3 PoC support: a provider over an in-process transport, so tests can model
++/// time-dependent node behaviour that the FIFO `Asserter` cannot.
++#[cfg(test)]
++impl Provider {
++    pub fn qa3_from_transport<T>(transport: T, chain_id: u64) -> Self
++    where
++        T: alloy::transports::IntoBoxTransport,
++    {
++        let client = ClientBuilder::default().transport(transport, true);
++        Self {
++            root: RootProvider::new(client),
++            chain_id,
++        }
++    }
++}

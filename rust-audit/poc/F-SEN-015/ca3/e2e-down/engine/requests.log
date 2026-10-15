@@ -1,0 +1,40 @@
+{"t": 1791496063.032622, "request_id": "0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b", "mode": "gated", "event": "arrived"}
+{"t": 1791496064.0753274, "request_id": "0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496065.1934566, "request_id": "0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b", "mode": "down", "event": "arrived"}
+{"t": 1791496065.1934958, "request_id": "0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b", "mode": "down", "event": "answered", "status": 503, "body": "starting"}
+{"t": 1791496075.0429282, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "gated", "event": "arrived"}
+{"t": 1791496076.0997202, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496077.1286004, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "down", "event": "arrived"}
+{"t": 1791496077.128636, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "down", "event": "answered", "status": 503, "body": "starting"}
+{"t": 1791496087.0372703, "request_id": "0x06ee96f22571ed9996998d94516e0fd760801ceb4c6ea018dd9d10173087381a", "mode": "gated", "event": "arrived"}
+{"t": 1791496088.102092, "request_id": "0x06ee96f22571ed9996998d94516e0fd760801ceb4c6ea018dd9d10173087381a", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496090.1399179, "request_id": "0x06ee96f22571ed9996998d94516e0fd760801ceb4c6ea018dd9d10173087381a", "mode": "down", "event": "arrived"}
+{"t": 1791496090.1399515, "request_id": "0x06ee96f22571ed9996998d94516e0fd760801ceb4c6ea018dd9d10173087381a", "mode": "down", "event": "answered", "status": 503, "body": "starting"}
+{"t": 1791496100.0322201, "request_id": "0x28ba7546129aadadfdc2109adbad4628881f9b4ed3daca0bac1f5d49615d5588", "mode": "gated", "event": "arrived"}
+{"t": 1791496101.1059031, "request_id": "0x28ba7546129aadadfdc2109adbad4628881f9b4ed3daca0bac1f5d49615d5588", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496102.165537, "request_id": "0x28ba7546129aadadfdc2109adbad4628881f9b4ed3daca0bac1f5d49615d5588", "mode": "down", "event": "arrived"}
+{"t": 1791496102.1655746, "request_id": "0x28ba7546129aadadfdc2109adbad4628881f9b4ed3daca0bac1f5d49615d5588", "mode": "down", "event": "answered", "status": 503, "body": "starting"}
+{"t": 1791496112.0295131, "request_id": "0x9033695e11afba3fec10dce1cf9d07f7adc88d1ede5bda7ca104ab045cbc7771", "mode": "gated", "event": "arrived"}
+{"t": 1791496113.1012475, "request_id": "0x9033695e11afba3fec10dce1cf9d07f7adc88d1ede5bda7ca104ab045cbc7771", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496114.166754, "request_id": "0x9033695e11afba3fec10dce1cf9d07f7adc88d1ede5bda7ca104ab045cbc7771", "mode": "down", "event": "arrived"}
+{"t": 1791496114.1667871, "request_id": "0x9033695e11afba3fec10dce1cf9d07f7adc88d1ede5bda7ca104ab045cbc7771", "mode": "down", "event": "answered", "status": 503, "body": "starting"}
+{"t": 1791496124.0416715, "request_id": "0x1a4ec544b57b8e76efc0fa025a9bd24a32e7aae2b4feb9d6e4be34d8a777a1f8", "mode": "gated", "event": "arrived"}
+{"t": 1791496125.0874581, "request_id": "0x1a4ec544b57b8e76efc0fa025a9bd24a32e7aae2b4feb9d6e4be34d8a777a1f8", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496126.158225, "request_id": "0x1a4ec544b57b8e76efc0fa025a9bd24a32e7aae2b4feb9d6e4be34d8a777a1f8", "mode": "down", "event": "arrived"}
+{"t": 1791496126.158264, "request_id": "0x1a4ec544b57b8e76efc0fa025a9bd24a32e7aae2b4feb9d6e4be34d8a777a1f8", "mode": "down", "event": "answered", "status": 503, "body": "starting"}
+{"t": 1791496136.0312932, "request_id": "0x906b0643fe8ae47ff802316d02c10cf8c6e063452e1f53bbc4f132f28b120738", "mode": "gated", "event": "arrived"}
+{"t": 1791496137.0599303, "request_id": "0x906b0643fe8ae47ff802316d02c10cf8c6e063452e1f53bbc4f132f28b120738", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496138.1407337, "request_id": "0x906b0643fe8ae47ff802316d02c10cf8c6e063452e1f53bbc4f132f28b120738", "mode": "down", "event": "arrived"}
+{"t": 1791496138.1407673, "request_id": "0x906b0643fe8ae47ff802316d02c10cf8c6e063452e1f53bbc4f132f28b120738", "mode": "down", "event": "answered", "status": 503, "body": "starting"}
+{"t": 1791496148.0362713, "request_id": "0x0411de15edcd131a152d64301628718cb7c09403e35c2ea1146ee88396b86b11", "mode": "gated", "event": "arrived"}
+{"t": 1791496149.0883615, "request_id": "0x0411de15edcd131a152d64301628718cb7c09403e35c2ea1146ee88396b86b11", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496150.1702576, "request_id": "0x0411de15edcd131a152d64301628718cb7c09403e35c2ea1146ee88396b86b11", "mode": "down", "event": "arrived"}
+{"t": 1791496150.1703322, "request_id": "0x0411de15edcd131a152d64301628718cb7c09403e35c2ea1146ee88396b86b11", "mode": "down", "event": "answered", "status": 503, "body": "starting"}
+{"t": 1791496160.0413916, "request_id": "0x90e8fa056a5a17368920671c0048daad81e85316a6ab04b8afcd176a788db497", "mode": "gated", "event": "arrived"}
+{"t": 1791496161.0404234, "request_id": "0x90e8fa056a5a17368920671c0048daad81e85316a6ab04b8afcd176a788db497", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496162.144422, "request_id": "0x90e8fa056a5a17368920671c0048daad81e85316a6ab04b8afcd176a788db497", "mode": "down", "event": "arrived"}
+{"t": 1791496162.1444588, "request_id": "0x90e8fa056a5a17368920671c0048daad81e85316a6ab04b8afcd176a788db497", "mode": "down", "event": "answered", "status": 503, "body": "starting"}
+{"t": 1791496172.037311, "request_id": "0x3293dca6dabde32ef1e67037a9876e6a676e0c6f987768c64fd684e57a10b2de", "mode": "gated", "event": "arrived"}
+{"t": 1791496173.0807273, "request_id": "0x3293dca6dabde32ef1e67037a9876e6a676e0c6f987768c64fd684e57a10b2de", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791496174.1628036, "request_id": "0x3293dca6dabde32ef1e67037a9876e6a676e0c6f987768c64fd684e57a10b2de", "mode": "down", "event": "arrived"}
+{"t": 1791496174.162845, "request_id": "0x3293dca6dabde32ef1e67037a9876e6a676e0c6f987768c64fd684e57a10b2de", "mode": "down", "event": "answered", "status": 503, "body": "starting"}

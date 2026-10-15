@@ -1,0 +1,26 @@
+# QA2-XC (resume) re-run of the F2-XC-050 PoC on the current tree; HEAD fe9e84cc59b65367b31d5a3121774383cc422234; crates/core identical to 3ec8bc5
+# PoC source: poc/F2-XC-050/qa2_xc_state_tests.rs (module qa2_xc_050), pasted into crates/core/src/state/mod.rs 'mod tests' with paste.py, reverted with git checkout afterwards
+# command: QA2_XC_DIR=<scratch> cargo test --offline --locked -p safenet-core --lib state::tests::qa2_xc_050 -- --nocapture --test-threads=1
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.89s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 3 tests
+test state::tests::qa2_xc_050::control_two_retained_snapshots_replay_the_page_and_recover_the_action ... enqueue error at driver.rs:283: Storage(Database(Database(SqliteError { code: 5, message: "database is locked" })))
+restart: persisted BlockStatus { latest: 7, safe: 5 }; watcher queued [Uncle { number: 6 }, Warp { from: 6, to: 998 }, New { number: 999, hash: 0x775c182f3f8f99644712f503981be81be28bc15eeb033c0395779e3faa012ad2, logs_bloom: 0x00…00 }, New { number: 1000, hash: 0xf479a7bd3819aa63bbe476777c509fd59e626fac3d37221509ba4fd41b1459b6, logs_bloom: 0x00…00 }]
+control after restart: transactions rows = [(None, "{\"to\":\"0x000000000000000000000000000000000000c0de\",\"value\":\"0x0\",\"data\":\"0x5afe0000000000000046\",\"gas\":50000}", None, None)]
+ok
+test state::tests::qa2_xc_050::depth_zero_block_actions_are_lost_when_enqueue_fails_after_the_commit ... enqueue error at driver.rs:283: Storage(Database(Database(SqliteError { code: 5, message: "database is locked" })))
+restart: persisted BlockStatus { latest: 3, safe: 3 }; watcher queued [Warp { from: 4, to: 1000 }]
+after restart: state events [30]; transactions rows = []
+ok
+test state::tests::qa2_xc_050::warp_page_actions_are_lost_when_enqueue_fails_after_the_commit ... enqueue error at driver.rs:283: Storage(Database(Database(SqliteError { code: 5, message: "database is locked" })))
+restart: persisted BlockStatus { latest: 3, safe: 3 }; watcher queued [Warp { from: 4, to: 998 }, New { number: 999, hash: 0x775c182f3f8f99644712f503981be81be28bc15eeb033c0395779e3faa012ad2, logs_bloom: 0x00…00 }, New { number: 1000, hash: 0xf479a7bd3819aa63bbe476777c509fd59e626fac3d37221509ba4fd41b1459b6, logs_bloom: 0x00…00 }]
+after restart: snapshot 998 says events [10] were handled; transactions rows = []
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 101 filtered out; finished in 0.87s
+
+# exit=0

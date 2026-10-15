@@ -1,0 +1,4 @@
+      1 CALL
+      1 LOG1
+      7 LOG2
+      5 LOG3

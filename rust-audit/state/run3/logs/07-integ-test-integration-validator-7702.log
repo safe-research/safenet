@@ -1,0 +1,244 @@
+# command: integ just test-integration-validator-7702
+# cwd: $RUN/wt/base
+# head: 361aaf3b25e12d2e04f296184c326830968f3727
+# start: 2026-10-08T14:27:13Z
+./scripts/run_validator_7702_integration_test.sh
+==> Using temporary directory /var/tmp/tmp.h8Bo3ZU08m
+==> Building Rust services...
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
+==> Building Solidity contracts...
+Missing dependencies found. Installing now...
+
+fatal: destination path '$RUN/wt/base/contracts/lib/forge-std' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/foundry-rs/forge-std' into submodule path '$RUN/wt/base/contracts/lib/forge-std' failed
+Failed to clone 'contracts/lib/forge-std'. Retry scheduled
+fatal: destination path '$RUN/wt/base/contracts/lib/openzeppelin-contracts' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/OpenZeppelin/openzeppelin-contracts' into submodule path '$RUN/wt/base/contracts/lib/openzeppelin-contracts' failed
+Failed to clone 'contracts/lib/openzeppelin-contracts'. Retry scheduled
+fatal: destination path '$RUN/wt/base/contracts/lib/safe-smart-account' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/safe-fndn/safe-smart-account' into submodule path '$RUN/wt/base/contracts/lib/safe-smart-account' failed
+Failed to clone 'contracts/lib/safe-smart-account'. Retry scheduled
+fatal: destination path '$RUN/wt/base/contracts/lib/forge-std' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/foundry-rs/forge-std' into submodule path '$RUN/wt/base/contracts/lib/forge-std' failed
+Failed to clone 'contracts/lib/forge-std' a second time, aborting
+Warning: Your project has missing dependencies that could not be installed.
+Solc 0.8.30 finished in 999.97ms
+Solc 0.8.30 finished in 15.94s
+Compiler run successful!
+==> Starting Anvil...
+==> Deploying contracts...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+coordinator: contract FROSTCoordinator 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+consensus: contract Consensus 0x706f3533B199078F30BE5520b183d130a5cbb17F
+groupId: FROSTGroupId.T 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000
+
+== Logs ==
+  Genesis Group ID: 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000
+  Genesis Group Participants Root: 0x43c8bee048e0480d644b3fe14e67fe0bf976d6ec2c649e37c28719ce63f6a1c8
+  Genesis Group Count: 2
+  Genesis Group Threshold: 2
+  Genesis Group Context: 0x0000000000000000000000000000000000000000000000000000000000000000
+  FROSTCoordinator: 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+  Consensus: 0x706f3533B199078F30BE5520b183d130a5cbb17F
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 7240248
+
+Estimated amount required: 0.014480496007240248 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeployConsensus.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeployConsensus.s.sol/31337/run-latest.json
+
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+alwaysApproveOracle: contract AlwaysApproveOracle 0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+
+== Logs ==
+  AlwaysApproveOracle: 0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 297742
+
+Estimated amount required: 0.000595484000297742 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeployAlwaysApproveOracle.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeployAlwaysApproveOracle.s.sol/31337/run-latest.json
+
+    coordinator: 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+    consensus:   0x706f3533B199078F30BE5520b183d130a5cbb17F
+    oracle:      0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+==> Deploying the 7702 executor...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+account: address 0xa39C8952827e16264Bd94F3904f7693A5050af61
+
+== Logs ==
+  Safenet7702Executor deployed at: 0xa39C8952827e16264Bd94F3904f7693A5050af61
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 1.832509969 gwei
+
+Estimated total gas used for script: 591566
+
+Estimated amount required: 0.001084050592321454 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeploySafenet7702Executor.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeploySafenet7702Executor.s.sol/31337/run-latest.json
+
+    executor:    0xa39C8952827e16264Bd94F3904f7693A5050af61
+==> Starting validator A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8)...
+    pid 38223
+==> Starting validator B (0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC)...
+    pid 38224
+==> Triggering genesis KeyGen...
+No files changed, compilation skipped
+Script ran successfully.
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 1.606555153 gwei
+
+Estimated total gas used for script: 102984
+
+Estimated amount required: 0.000165449475876552 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/Genesis.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/Genesis.s.sol/31337/run-latest.json
+
+==> Waiting for genesis to complete and both validators to delegate to the executor (timeout: 120s)...
+    genesis completed: no; validators delegated: 0/2
+    genesis completed: no; validators delegated: 2/2
+    genesis completed: no; validators delegated: 2/2
+    genesis completed: yes; validators delegated: 2/2
+==> Proposing three transactions in one batched self-call...
+==> Waiting for 3 attestation(s) (timeout: 120s)...
+    attested: 0/3
+    attested: 0/3
+    attested: 0/3
+    attested: 0/3
+    attested: 3/3
+==> Checking every validator transaction up to block 12 is a self-call to execute with no failed calls...
+    block 5: 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc type 4, 1 call(s), gas limit 325905, gas used 148545
+    block 5: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 type 4, 1 call(s), gas limit 325905, gas used 116304
+    block 6: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 type 2, 1 call(s), gas limit 318622, gas used 87253
+    block 6: 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc type 2, 1 call(s), gas limit 318622, gas used 87286
+    block 7: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 type 2, 1 call(s), gas limit 239359, gas used 42050
+    block 7: 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc type 2, 1 call(s), gas limit 239359, gas used 42071
+    block 8: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 type 2, 1 call(s), gas limit 300905, gas used 177519
+    block 8: 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc type 2, 1 call(s), gas limit 300905, gas used 104053
+    block 9: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 type 2, 1 call(s), gas limit 318622, gas used 87241
+    block 9: 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc type 2, 1 call(s), gas limit 318622, gas used 87298
+    block 10: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 type 2, 3 call(s), gas limit 365284, gas used 60788
+    block 10: 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc type 2, 3 call(s), gas limit 365284, gas used 60728
+    block 11: 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc type 2, 1 call(s), gas limit 344018, gas used 43299
+    block 11: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 type 2, 1 call(s), gas limit 344018, gas used 93005
+    block 12: 0x70997970c51812dc3a010c7d01b50e0d17dc79c8 type 2, 3 call(s), gas limit 1307218, gas used 378223
+    block 12: 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc type 2, 3 call(s), gas limit 1307218, gas used 419092
+    16 batch(es) checked
+==> Restarting validator A without the executor...
+==> Starting validator A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8)...
+    pid 39983
+==> Proposing a fourth transaction...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+safeTxHash: bytes32 0xd68dd49cda79701809c24aa58ac974a1407009fa5d73483a8b080e8839747e09
+
+== Logs ==
+  Safe Transaction Hash: 0xd68dd49cda79701809c24aa58ac974a1407009fa5d73483a8b080e8839747e09
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 0.491891353 gwei
+
+Estimated total gas used for script: 112880
+
+Estimated amount required: 0.00005552469592664 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/ProposeTransaction.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/ProposeTransaction.s.sol/31337/run-latest.json
+
+==> Waiting for 1 attestation(s) (timeout: 120s)...
+    attested: 0/1
+    attested: 0/1
+    attested: 0/1
+    attested: 1/1
+SUCCESS: the validators batched every transaction through the executor, attested three transactions proposed in one block, and validator A undelegated after restarting without the executor.
+# end: 2026-10-08T14:27:46Z
+# duration_s: 33
+# exit: 0

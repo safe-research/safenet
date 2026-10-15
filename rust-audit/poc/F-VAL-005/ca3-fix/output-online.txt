@@ -1,0 +1,19 @@
+CA3-FIX (2026-10-09): integ bash ca3fix_keygen_reorg_online.sh <wt> 3 (both validators online, reorg back to before the final genesis confirmation).
+
+--- from r3-CA3FIX-keygen-online.log (filters: run )
+run 1: genesis 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000 final confirmation at 6; epoch-1 group 0xc7cda51f24570bf15016a2369365585a2f3d0336fa3fd0bf0000000000000000 has 2 commitments; head 7; reorg depth 2
+run 1: after the reorg, genesis confirm@0x9/0x0 confirm@0x9/0x1; epoch-1 commit(70997970)@0x9/0x3 commit(3c44cddd)@0x9/0x4
+run 1: validator 0 timed-out/skip lines: 0
+run 1: validator 1 timed-out/skip lines: 0
+run 1: epoch-1 group confirmed after the reorg = 1
+run 2: genesis 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000 final confirmation at 6; epoch-1 group 0xc7cda51f24570bf15016a2369365585a2f3d0336fa3fd0bf0000000000000000 has 2 commitments; head 7; reorg depth 2
+run 2: after the reorg, genesis confirm@0x8/0x0 confirm@0x8/0x1; epoch-1 commit(3c44cddd)@0x9/0x1 commit(70997970)@0x9/0x2
+run 2: validator 0 timed-out/skip lines: 0
+run 2: validator 1 timed-out/skip lines: 0
+run 2: epoch-1 group confirmed after the reorg = 1
+run 3: genesis 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000 final confirmation at 6; epoch-1 group 0xc7cda51f24570bf15016a2369365585a2f3d0336fa3fd0bf0000000000000000 has 2 commitments; head 7; reorg depth 2
+run 3: after the reorg, genesis confirm@0x8/0x0 confirm@0x8/0x1; epoch-1 commit(70997970)@0x9/0x1 commit(3c44cddd)@0x9/0x2
+run 3: validator 0 timed-out/skip lines: 0
+run 3: validator 1 timed-out/skip lines: 0
+run 3: epoch-1 group confirmed after the reorg = 1
+

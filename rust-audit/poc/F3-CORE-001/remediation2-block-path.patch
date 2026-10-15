@@ -1,0 +1,16 @@
+diff --git a/crates/core/src/index/events.rs b/crates/core/src/index/events.rs
+index 8209fdb..746eb58 100644
+--- a/crates/core/src/index/events.rs
++++ b/crates/core/src/index/events.rs
+@@ -450,7 +450,10 @@ where
+         logs_bloom: Bloom,
+         retries: u64,
+     ) -> Result<EventUpdate<E>, Error> {
+-        let fetch = if retries < self.config.block_single_query_retry_count.get() {
++        // QA3 bite check (F3-CORE-001 remediation 2, new-block path only): go
++        // back to the single query after a failed per-event attempt.
++        let single_attempts = self.config.block_single_query_retry_count.get();
++        let fetch = if retries % (single_attempts + 1) < single_attempts {
+             if self.config.use_client_filtering {
+                 Fetch::ClientFiltered {
+                     block_hash,

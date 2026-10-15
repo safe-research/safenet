@@ -1,0 +1,24 @@
+
+running 4 tests
+test service::tests::qa3_sen_poc::f3_sen_002_foreign_commit_before_verdict_strands_the_claim ... REPRO F3-SEN-002: local committed_count=1 (onchain committedCount=2)
+REPRO F3-SEN-002: after foreign reveal -> tracked=false, commands=0
+REPRO F3-SEN-002: Claim queued after OracleResult = false
+ok
+test service::tests::qa3_sen_poc::f3_sen_002_silent_committer_leaves_request_unfinalized ... REPRO F3-SEN-002b: at revealDeadline+30 state = waiting_for_outcome
+ok
+test service::tests::qa3_sen_poc::f3_sen_003_missed_own_reveal_drops_without_claim ... REPRO F3-SEN-003: at revealDeadline+1 -> tracked=false, commands=0
+REPRO F3-SEN-003: Claim after OracleResult = false (RevealMissed recovery never runs)
+ok
+test service::tests::qa3_sen_poc::f3_sen_fix_recovers_the_claim ... 
+thread 'service::tests::qa3_sen_poc::f3_sen_fix_recovers_the_claim' (416027) panicked at crates/sentinel/src/service.rs:2429:9:
+FIX: bonded request kept, not dropped
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    service::tests::qa3_sen_poc::f3_sen_fix_recovers_the_claim
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 79 filtered out; finished in 0.01s
+

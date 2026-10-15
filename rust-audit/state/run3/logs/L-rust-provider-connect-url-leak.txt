@@ -1,0 +1,79 @@
+# L-rust: Provider::connect error leaks the RPC URL (run 3, 2026-10-08)
+# Binary: $CARGO_TARGET_DIR/debug/validator built by 'cargo build -p validator -p sentinel --bins' in wt/base at 361aaf3 (git status clean)
+# Command: holdtarget bash -c 'timeout 20 $BIN --config-file <cfg>' for each config below; no network (htps:// never resolves, control uses 127.0.0.1:1)
+
+## typo-scheme.toml
+rpc = "htps://gnosis-mainnet.example.invalid/v2/LRUST-FAKE-API-KEY-0123456789"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+genesis_salt = "0x0000000000000000000000000000000000000000000000000000000000000000"
+[[validator.participants]]
+address = "0x0000000000000000000000000000000000000001"
+[[validator.participants]]
+address = "0x0000000000000000000000000000000000000002"
+[observability]
+log_filter = "info"
+
+## good-scheme.toml
+rpc = "https://127.0.0.1:1/v2/LRUST-FAKE-API-KEY-0123456789"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+genesis_salt = "0x0000000000000000000000000000000000000000000000000000000000000000"
+[[validator.participants]]
+address = "0x0000000000000000000000000000000000000001"
+[[validator.participants]]
+address = "0x0000000000000000000000000000000000000002"
+[observability]
+log_filter = "info"
+
+## env-scheme.toml
+rpc = "${LRUST_RPC_URL}"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+genesis_salt = "0x0000000000000000000000000000000000000000000000000000000000000000"
+[[validator.participants]]
+address = "0x0000000000000000000000000000000000000001"
+[[validator.participants]]
+address = "0x0000000000000000000000000000000000000002"
+[observability]
+log_filter = "info"
+
+## Output (stdout+stderr), exit codes
+== typo-scheme.toml: rpc = "htps://gnosis-mainnet.example.invalid/v2/LRUST-FAKE-API-KEY-0123456789"
+{"timestamp":"2026-10-08T17:11:07.869135Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:45215"},"target":"safenet_core::observability"}
+Error: Transport(Custom("failed to read IPC path htps://gnosis-mainnet.example.invalid/v2/LRUST-FAKE-API-KEY-0123456789: No such file or directory (os error 2)"))
+exit=1
+== good-scheme.toml: rpc = "https://127.0.0.1:1/v2/LRUST-FAKE-API-KEY-0123456789"
+{"timestamp":"2026-10-08T17:11:07.955142Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:36317"},"target":"safenet_core::observability"}
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:1, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+exit=1
+== env-scheme.toml with LRUST_RPC_URL=htps://gnosis-mainnet.example.invalid/v2/LRUST-ENV-SECRET-KEY-9876
+{"timestamp":"2026-10-08T17:11:08.061225Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:45675"},"target":"safenet_core::observability"}
+Error: Transport(Custom("failed to read IPC path htps://gnosis-mainnet.example.invalid/v2/LRUST-ENV-SECRET-KEY-9876: No such file or directory (os error 2)"))
+exit=1
+
+## Malformed URLs (url crate errors): configs differ from typo-scheme.toml only in the rpc line shown
+== bad-port.toml: rpc = "https://gnosis-mainnet.example.invalid:99999/v2/LRUST-FAKE-API-KEY-0123456789"
+Error: Parse(ParseError { position: Some((1, 7)), inner: Error { message: "invalid port number", input: None, keys: ["rpc"], span: Some(6..85) } })
+exit=1
+== no-scheme.toml: rpc = "gnosis-mainnet.example.invalid/v2/LRUST-FAKE-API-KEY-0123456789"
+Error: Parse(ParseError { position: Some((1, 7)), inner: Error { message: "relative URL without a base", input: None, keys: ["rpc"], span: Some(6..71) } })
+exit=1
+== bad-host.toml: rpc = "https://gnosis mainnet.example.invalid/v2/LRUST-FAKE-API-KEY-0123456789"
+Error: Parse(ParseError { position: Some((1, 7)), inner: Error { message: "invalid international domain name", input: None, keys: ["rpc"], span: Some(6..79) } })
+exit=1
+
+## cargo tree --offline -p safenet-core -e features -i alloy-rpc-client | grep 'alloy-rpc-client feature' | sort -u (in wt/base at 361aaf3)
+alloy-rpc-client feature "alloy-transport-http"
+alloy-rpc-client feature "alloy-transport-ws"
+alloy-rpc-client feature "ipc"
+alloy-rpc-client feature "pubsub"
+alloy-rpc-client feature "reqwest"
+alloy-rpc-client feature "ws"
+alloy-rpc-client feature "ws-base"

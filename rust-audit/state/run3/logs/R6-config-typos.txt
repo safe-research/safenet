@@ -1,0 +1,50 @@
+# R6: misspelled validator config keys at 361aaf3 (2026-10-08); rpc = closed loopback port, so a config that parses fails at the RPC connect instead
+
+baseline_no_typo             exit=1  Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:1, Os { code: 111, kind: ConnectionRefused, message: "Connection refu
+top_databse                  exit=1  Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `databse`", input: None, keys: [], span: Some(0..0) } }) 
+validator_oracle             exit=1  Error: Parse(ParseError { position: Some((29, 1)), inner: Error { message: "unknown field `oracle`, expected one of `consensus`, `staker`, `participants`, `oracles`, `genesis_salt`, `blocks_per_epoch`, `key_gen_timeout`,
+index_use_client_filter      exit=1  Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `use_client_filter`", input: None, keys: [], span: Some(0..0) } }) 
+index_max_reorg_dept         exit=1  Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `max_reorg_dept`", input: None, keys: [], span: Some(0..0) } }) 
+tx_max_in_flight             exit=1  Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `max_in_flight`, expected one of `max_in_flight_transactions`, `executor`, `max_batch_gas`, `blocks_before_resubmit`, `priority_fee
+obs_metric_address           exit=1  Error: Parse(ParseError { position: Some((63, 1)), inner: Error { message: "unknown field `metric_address`, expected `log_filter` or `metrics_address`", input: None, keys: ["observability"], span: Some(2911..2925) } }) 
+participant_active_form      exit=1  Error: Parse(ParseError { position: Some((57, 1)), inner: Error { message: "unknown field `active_form`, expected one of `address`, `active_from`, `active_before`", input: None, keys: ["validator", "participants"], span:
+== done (/tmp/claude-501/-home-sj-guest-safe-safenet/9b829ae4-50e9-4b8f-ad1b-0d612c4ee797/scratchpad/r6/run-typos-1791479277)
+
+## run_typos.sh
+#!/usr/bin/env bash
+# R6 check: does a misspelled key in the validator config fail at load time?
+# rpc points at a closed loopback port, so a config that parses fails later at
+# the RPC connect with a transport error instead of a parse error.
+set -u
+S="$(cd "$(dirname "$0")" && pwd)"
+REPO=/home/sj.guest/safe/safenet
+BIN=/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-base/debug/validator
+RUN="$S/run-typos-$(date +%s)"
+mkdir -p "$RUN"
+git -C "$REPO" show 361aaf3:crates/validator/validator.sample.toml \
+  | sed -e 's#^rpc = .*#rpc = "http://127.0.0.1:1"#' > "$RUN/base.toml"
+grep -q '^rpc = "http://127.0.0.1:1"' "$RUN/base.toml" || { echo "rpc edit failed"; exit 2; }
+
+case_run() {
+  # $1 = name, $2 = table header regex (or TOP), $3 = line to insert
+  local cfg="$RUN/$1.toml"
+  if [ "$2" = TOP ]; then
+    { echo "$3"; cat "$RUN/base.toml"; } > "$cfg"
+  else
+    sed -e "/^$2\$/a $3" "$RUN/base.toml" > "$cfg"
+  fi
+  grep -qF "$3" "$cfg" || { echo "insert failed for $1"; exit 2; }
+  timeout 15 "$BIN" --config-file "$cfg" > "$RUN/$1.out" 2>&1
+  local rc=$?
+  printf '%-28s exit=%s  %s\n' "$1" "$rc" "$(grep -v 'serving prometheus' "$RUN/$1.out" | tr '\n' ' ' | cut -c1-220)"
+}
+
+case_run baseline_no_typo        '\[index\]' '# no change'
+case_run top_databse             TOP 'databse = "sqlite::memory:"'
+case_run validator_oracle        '\[validator\]' 'oracle = "0x4F61B8832978e83b80D69551AEf07557DBE41d03"'
+case_run index_use_client_filter '\[index\]' 'use_client_filter = true'
+case_run index_max_reorg_dept    '\[index\]' 'max_reorg_dept = 3'
+case_run tx_max_in_flight        '\[transactions\]' 'max_in_flight = 4'
+case_run obs_metric_address      '\[observability\]' 'metric_address = "0.0.0.0:3555"'
+case_run participant_active_form '\[\[validator.participants\]\]' 'active_form = 3'
+echo "== done ($RUN)"

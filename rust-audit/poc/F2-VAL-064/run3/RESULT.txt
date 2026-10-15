@@ -1,0 +1,13 @@
+$ validator --config-file=/nonexistent/validator.toml
+Unrecognized argument: --config-file=/nonexistent/validator.toml
+
+Run validator --help for more information.
+exit=1
+
+$ validator --config-file /nonexistent/validator.toml
+Error: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+exit=1
+
+$ validator --version
+0.2.0
+exit=0

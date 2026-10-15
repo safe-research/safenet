@@ -1,0 +1,12 @@
+$ cargo test -p validator --bins -- poc_f_val_032_run3 poc_f_val_034_run3 poc_f_val_040_run3 poc_f_val_030_run3 poc_f_val_061_run3 --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3; modules wired into state/sign.rs and service/effect.rs, reverted afterwards)
+test service::effect::poc_f_val_061_run3::debug_output_of_secret_bearing_effects_and_resumes ... Debug(GenerateNonces) = 670 bytes; contains SigningShare("<redacted>"): true; contains the scalar hex: false
+Debug(Resume::Setup) redacts coefficients: true; EncryptionKey redacted: true
+Debug(Resume::Nonces) = Nonces { message: 0x0000000000000000000000000000000000000000000000000000000000000000, nonces: SigningNonces("<redacted>") }
+ok
+test service::effect::poc_f_val_061_run3::every_failed_effect_resumes_as_noop ... KeyGenSetup: closed pool -> Noop
+GenerateNonces: closed pool -> Noop
+UseNonces: closed pool -> Noop
+ReconcileGroupSecrets: closed pool -> Noop
+ok
+
+(full run) test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 0.53s

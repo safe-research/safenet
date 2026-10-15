@@ -1,0 +1,98 @@
+# R8 PoC: engine URL in error log (F3-XC-004) and sample database URL on a fresh node (F3-XC-005)
+# date: 2026-10-08T17:25:11Z
+# tree: git archive 361aaf3 Cargo.toml Cargo.lock crates | tar -x -C $RUN/scratch/R8/ws (scratch copy, outside the repository)
+# change 1: test appended inside 'mod tests' of crates/sentinel/src/engine.rs in that copy
+# change 2: a '#[cfg(test)] mod tests' with one test appended to crates/core/src/utils.rs in that copy (the file has no tests at 361aaf3)
+
+# command: cargo test --locked --offline -p sentinel --bins r8_poc_engine -- --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running unittests src/main.rs ($RUN/scratch/R8/target/debug/deps/sentinel-702b20590452b382)
+
+running 1 test
+R8 value logged at engine.rs:192-195: error sending request for url (http://127.0.0.1:36537/engine-token-abc/v1/security-check?apikey=query-token-xyz)
+test engine::tests::r8_poc_engine_error_text_contains_url_token ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 0.03s
+
+
+# command: cargo test --locked --offline -p safenet-core --lib r8_poc_sample -- --nocapture
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running unittests src/lib.rs ($RUN/scratch/R8/target/debug/deps/safenet_core-1a555efd99e0fbb6)
+
+running 1 test
+R8 sample-style URL on a fresh node: error returned from database: (code: 14) unable to open database file
+R8 same path with ?mode=rwc (as scripts/lib/shared_test_scripts.sh:177): ok
+test utils::tests::r8_poc_sample_style_database_url_fails_on_fresh_node ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+
+
+# ---- test source 1 (engine.rs) ----
+
+    // ---- R8 PoC test (scratch copy only, never in the checkout) ----
+
+    /// The engine client logs a failed request with `%err` (engine.rs:192-195).
+    /// `reqwest::Error`'s `Display` appends ` for url (<url>)`, so a token in
+    /// the configured engine URL's path or query reaches the ERROR log on every
+    /// failed or timed-out check. The core RPC provider strips URLs for this
+    /// reason (crates/core/src/provider/mod.rs:120-134); the engine client does
+    /// not.
+    #[tokio::test]
+    async fn r8_poc_engine_error_text_contains_url_token() {
+        // A closed localhost port: bind, read the address, close the listener.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+        let base = Url::parse(&format!(
+            "http://operator:basic-auth-pw@{addr}/engine-token-abc/?apikey=query-token-xyz"
+        ))
+        .unwrap();
+        let engine = EngineClient::new(base).unwrap();
+        let check = engine
+            .security_check(BlockNumberOrTag::Latest, &SafeTransaction::default())
+            .request_id(B256::repeat_byte(0x42))
+            .timeout(Duration::from_secs(2));
+        // The same expression `SecurityCheck::execute` evaluates (engine.rs:177-178).
+        let request = check.request;
+        let result: Result<Response, reqwest::Error> =
+            async { request.send().await?.error_for_status()?.json().await }.await;
+        let err = result.err().expect("connection refused");
+        let logged = format!("{err}");
+        println!("R8 value logged at engine.rs:192-195: {logged}");
+        assert!(logged.contains("engine-token-abc"));
+        assert!(logged.contains("query-token-xyz"));
+        // reqwest moves userinfo into the Authorization header, so it is not in
+        // the URL it reports.
+        assert!(!logged.contains("basic-auth-pw"));
+    }
+
+# ---- test source 2 (utils.rs, inside a new mod tests with 'use super::*;') ----
+
+    // ---- R8 PoC test (scratch copy only, never in the checkout) ----
+
+    /// The sample configs use `database = "sqlite:/var/lib/safenet/<svc>/data/storage.db"`
+    /// (no `?mode=rwc`). sqlx-sqlite 0.9.0 defaults to `create_if_missing: false`
+    /// and `connect_sqlite` does not change it, so on a fresh node (existing
+    /// directory, no database file yet) startup fails.
+    #[tokio::test]
+    async fn r8_poc_sample_style_database_url_fails_on_fresh_node() {
+        use std::str::FromStr as _;
+        let dir = std::env::temp_dir().join(format!("r8-sqlite-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("storage.db");
+        assert!(!path.exists());
+
+        let sample_style = SqliteConnectOptions::from_str(&format!("sqlite:{}", path.display())).unwrap();
+        let err = connect_sqlite(sample_style).await.err().expect("missing file is not created");
+        println!("R8 sample-style URL on a fresh node: {err}");
+        assert!(!path.exists());
+
+        let script_style =
+            SqliteConnectOptions::from_str(&format!("sqlite:{}?mode=rwc", path.display())).unwrap();
+        let pool = connect_sqlite(script_style).await.expect("mode=rwc creates the file");
+        pool.close().await;
+        assert!(path.exists());
+        println!("R8 same path with ?mode=rwc (as scripts/lib/shared_test_scripts.sh:177): ok");
+        std::fs::remove_file(&path).ok();
+        std::fs::remove_dir(&dir).ok();
+    }

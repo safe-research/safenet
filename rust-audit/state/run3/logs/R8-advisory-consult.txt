@@ -1,0 +1,216 @@
+# R8 consult (dependency-auditor), 2026-10-08: runtime reachability of RUSTSEC-2026-0258 (h2) and RUSTSEC-2026-0220 (ruint)
+# Executed by the consultee in this session against $RUN/wt/base/target/debug/{validator,sentinel} at 361aaf3,
+# with loopback-only fake listeners (a never-answering HTTP RPC and a TLS listener that records the ClientHello ALPN), no chain, no Anvil.
+# Its probe files were in the session scratchpad (tmpfs); copied below.
+
+## Consultee's reported results (verbatim key lines)
+h2: compiled but not reachable. Neither binary can establish or accept an HTTP/2 connection.
+- cargo tree --locked --offline -e normal -f '{p} [{f}]' -p validator: reqwest v0.13.4 [__rustls,__rustls-aws-lc-rs,__tls,json,rustls]; hyper-rustls v0.27.9 [aws-lc-rs,http1,rustls-native-certs,tls12]
+- Listener: hyper::server::conn::http1::Builder (metrics-exporter-prometheus-0.18.3/src/exporter/http_listener.rs:9, :77); hyper-1.10.1/src/proto/h1/conn.rs:29, :208, :812 turn an h2 preface into Parse(VersionH2).
+- Clients: reqwest-0.13.4/src/async_impl/client.rs adds ALPN "h2" only under cfg(feature = "http2") (:835-839); http2_only (:941-944) and http2_prior_knowledge (:1561-1563) have the same gate; rustls-0.23.40/src/client/hs.rs:598-601 rejects a server ALPN the client did not offer.
+- Executed: curl --http1.1 /health -> OK [1.1 200]; curl --http2-prior-knowledge -> curl: (16) Error in the HTTP2 framing layer, service log "error":"hyper::Error(Parse(VersionH2))"; curl --http2 (h2c Upgrade) -> OK [1.1 200]; with rpc = https://127.0.0.1:<port>, ClientHello "ALPN offered: ['http/1.1']" for both binaries.
+- Symbols (nm -C --defined-only, both binaries): hyper::proto::h2::client 81, hyper::proto::h2::server 0, hyper::server::conn::http2 0, hyper_util::server::conn::auto 0.
+- Verdict: theoretical, confidence 90.
+ruint: not reachable; the affected functions are not linked into either binary.
+- ruint 1.18.0 contains only the overflow-flag half of the advisory (bits.rs:329-345, :412-428); wrapping_shl/wrapping_shr are overflowing_sh*(rhs).0 on a full usize (bits.rs:374-376, :460-462); the rhs-as-u32 truncation arrived with ruint PR #574 in 1.19.0.
+- Callers across all 325 registry crates in both graphs: ruint internals (from.rs:1158 TryFrom<f64>, pow.rs:170 approx_pow2, root.rs:81 root, base_convert.rs:301 under cfg(not(feature = "alloc")), not built since ruint resolves to [alloc,alloy-rlp,serde,std]); alloy-primitives I256 (signed/ops.rs:655-706, own rhs >= 256 flag); nybbles const tables. No alloy crate calls root, approx_pow2 or TryFrom<f64> on Uint.
+- Symbols: neither binary has overflowing_shl or overflowing_shr (every affected function calls one of them); controls is_zero, bit_len, from_be_slice present; no alloy_primitives::signed symbol.
+- Verdict: theoretical, confidence 90.
+Upgrade advice: h2 to 0.4.20 (hyper needs ^0.4.14; the fix is in 0.4.16); ruint to 1.20.1 (alloy-primitives needs ^1.16.0). Do not stop at ruint 1.19.x, which introduces the truncation bug that 1.20.0 fixes.
+
+## Probe script (run.sh)
+#!/usr/bin/env bash
+# Probe: does the real validator/sentinel metrics listener speak HTTP/2, and
+# which ALPN protocols does the binary's RPC client (alloy + reqwest) offer?
+set -u
+P=<session scratchpad>/probe
+BIN=$RUN/wt/base/target/debug
+KEY=0x0000000000000000000000000000000000000000000000000000000000000001
+ZERO=0x0000000000000000000000000000000000000000
+
+free_port() { python3 -I -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])'; }
+
+write_cfg() { # svc rpc metrics_port file
+  if [ "$1" = validator ]; then
+    printf 'rpc = "%s"\nsigner = "%s"\ndatabase = "sqlite::memory:"\n\n[validator]\nconsensus = "%s"\n\n[observability]\nlog_filter = "warn"\nmetrics_address = "127.0.0.1:%s"\n' "$2" "$KEY" "$ZERO" "$3" > "$4"
+  else
+    printf 'rpc = "%s"\nsigner = "%s"\ndatabase = "sqlite::memory:"\noracle = "%s"\nconsensus = "%s"\n\n[sentinel]\nfee_token = "%s"\nvoting_window = 6\nengine = "http://127.0.0.1:1"\n\n[observability]\nlog_filter = "warn"\nmetrics_address = "127.0.0.1:%s"\n' "$2" "$KEY" "$ZERO" "$ZERO" "$ZERO" "$3" > "$4"
+  fi
+}
+
+for svc in validator sentinel; do
+  echo "=================== $svc: metrics listener vs HTTP/2"
+  exec 3< <(python3 -I "$P/listeners.py" blackhole 25)
+  read -r RPC_PORT <&3
+  MET=$(free_port)
+  write_cfg "$svc" "http://127.0.0.1:$RPC_PORT/" "$MET" "$P/$svc-a.toml"
+  "$BIN/$svc" --config-file "$P/$svc-a.toml" > "$P/$svc-a.log" 2>&1 &
+  PID=$!
+  for _ in $(seq 1 50); do curl -s -o /dev/null --http1.1 "http://127.0.0.1:$MET/health" && break; sleep 0.2; done
+  echo -n "HTTP/1.1 GET /health: "; curl -sS --http1.1 -w ' [%{http_version} %{http_code}]' "http://127.0.0.1:$MET/health"; echo
+  echo -n "h2c prior knowledge GET /health: "; curl -sS --http2-prior-knowledge -w ' [%{http_version} %{http_code}]' "http://127.0.0.1:$MET/health" 2>&1; echo " (curl exit $?)"
+  echo -n "h2c upgrade (Upgrade: h2c) GET /health: "; curl -sS --http2 -w ' [%{http_version} %{http_code}]' "http://127.0.0.1:$MET/health" 2>&1; echo
+  sleep 0.5
+  echo "service log lines about the rejected connection:"; grep -i -E 'HTTP2|preface|serving connection' "$P/$svc-a.log" | sed -E 's/\x1b\[[0-9;]*m//g' | cut -c1-220
+  kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null
+  exec 3<&-
+
+  echo "=================== $svc: ALPN offered by the RPC client over https"
+  exec 4< <(python3 -I "$P/listeners.py" alpn 20)
+  read -r TLS_PORT <&4
+  MET=$(free_port)
+  write_cfg "$svc" "https://127.0.0.1:$TLS_PORT/" "$MET" "$P/$svc-b.toml"
+  timeout 20 "$BIN/$svc" --config-file "$P/$svc-b.toml" > "$P/$svc-b.log" 2>&1 &
+  PID=$!
+  read -r -t 20 ALPN <&4; echo "$ALPN"
+  wait "$PID" 2>/dev/null; echo "$svc exit code after TLS close: $?"
+  exec 4<&-
+done
+
+## listeners.py
+"""Test listeners for the h2 reachability probe.
+
+mode "blackhole": accept TCP connections, read, never reply (keeps the
+service blocked in Provider::connect so its metrics listener stays up).
+mode "alpn": accept one TLS connection, parse the ClientHello and print the
+ALPN protocols the client offered, then close.
+Prints the bound port on the first line.
+"""
+import socket
+import sys
+import threading
+import time
+
+
+def parse_alpn(data):
+    # TLS record header: type(1) version(2) length(2)
+    if len(data) < 5 or data[0] != 0x16:
+        return "not a TLS handshake record: %r" % data[:16]
+    rec = data[5:5 + int.from_bytes(data[3:5], "big")]
+    if rec[0] != 0x01:
+        return "not a ClientHello"
+    body = rec[4:4 + int.from_bytes(rec[1:4], "big")]
+    p = 2 + 32  # legacy_version, random
+    p += 1 + body[p]  # session id
+    p += 2 + int.from_bytes(body[p:p + 2], "big")  # cipher suites
+    p += 1 + body[p]  # compression methods
+    ext_end = p + 2 + int.from_bytes(body[p:p + 2], "big")
+    p += 2
+    while p < ext_end:
+        etype = int.from_bytes(body[p:p + 2], "big")
+        elen = int.from_bytes(body[p + 2:p + 4], "big")
+        ext = body[p + 4:p + 4 + elen]
+        if etype == 0x0010:
+            protos = []
+            q = 2
+            while q < len(ext):
+                n = ext[q]
+                protos.append(ext[q + 1:q + 1 + n].decode())
+                q += 1 + n
+            return "ALPN offered: %s" % protos
+        p += 4 + elen
+    return "no ALPN extension in ClientHello"
+
+
+def main():
+    mode = sys.argv[1]
+    srv = socket.socket()
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(16)
+    print(srv.getsockname()[1], flush=True)
+    srv.settimeout(float(sys.argv[2]) if len(sys.argv) > 2 else 30.0)
+    held = []
+    deadline = time.time() + (float(sys.argv[2]) if len(sys.argv) > 2 else 30.0)
+    while time.time() < deadline:
+        try:
+            conn, _ = srv.accept()
+        except socket.timeout:
+            break
+        if mode == "alpn":
+            conn.settimeout(5)
+            data = b""
+            try:
+                while len(data) < 5 or len(data) < 5 + int.from_bytes(data[3:5], "big"):
+                    chunk = conn.recv(65536)
+                    if not chunk:
+                        break
+                    data += chunk
+            except socket.timeout:
+                pass
+            print(parse_alpn(data), flush=True)
+            conn.close()
+            break
+        held.append(conn)
+        threading.Thread(target=lambda c=conn: c.recv(65536), daemon=True).start()
+    for c in held:
+        c.close()
+
+
+if __name__ == "__main__":
+    main()
+
+## validator-a.toml
+rpc = "http://127.0.0.1:35069/"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+
+[observability]
+log_filter = "warn"
+metrics_address = "127.0.0.1:59737"
+## validator-a.log
+{"timestamp":"2026-10-08T17:35:43.701367Z","level":"WARN","fields":{"message":"Error serving connection.","error":"hyper::Error(Parse(VersionH2))"},"target":"metrics_exporter_prometheus::exporter::http_listener"}
+
+## validator-b.toml
+rpc = "https://127.0.0.1:38583/"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+
+[observability]
+log_filter = "warn"
+metrics_address = "127.0.0.1:60643"
+## validator-b.log
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, Custom { kind: Other, error: Custom { kind: UnexpectedEof, error: "tls handshake eof" } }) }))
+
+## sentinel-a.toml
+rpc = "http://127.0.0.1:45967/"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+oracle = "0x0000000000000000000000000000000000000000"
+consensus = "0x0000000000000000000000000000000000000000"
+
+[sentinel]
+fee_token = "0x0000000000000000000000000000000000000000"
+voting_window = 6
+engine = "http://127.0.0.1:1"
+
+[observability]
+log_filter = "warn"
+metrics_address = "127.0.0.1:49381"
+## sentinel-a.log
+{"timestamp":"2026-10-08T17:35:44.576353Z","level":"WARN","fields":{"message":"Error serving connection.","error":"hyper::Error(Parse(VersionH2))"},"target":"metrics_exporter_prometheus::exporter::http_listener"}
+
+## sentinel-b.toml
+rpc = "https://127.0.0.1:39531/"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+oracle = "0x0000000000000000000000000000000000000000"
+consensus = "0x0000000000000000000000000000000000000000"
+
+[sentinel]
+fee_token = "0x0000000000000000000000000000000000000000"
+voting_window = 6
+engine = "http://127.0.0.1:1"
+
+[observability]
+log_filter = "warn"
+metrics_address = "127.0.0.1:48437"
+## sentinel-b.log
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, Custom { kind: Other, error: Custom { kind: UnexpectedEof, error: "tls handshake eof" } }) }))
+

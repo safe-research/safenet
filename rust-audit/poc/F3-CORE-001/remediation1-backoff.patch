@@ -1,0 +1,22 @@
+--- a/crates/core/src/driver.rs	2026-10-09 00:54:32.428125069 +0530
++++ b/crates/core/src/driver.rs	2026-10-09 00:54:32.440353355 +0530
+@@ -207,6 +207,9 @@
+     /// its own, so it is returned instead of retried.
+     async fn next_input(&mut self) -> Result<Input<S::Event, S::Resume>, index::Error> {
+         let update = async {
++            // QA3 bite check (F3-CORE-001 remediation 1): exponential backoff on
++            // watcher errors, capped, reset on success.
++            let mut delay = STEP_RETRY_DELAY;
+             loop {
+                 match self.watcher.next().await {
+                     Ok(update) => return Ok(update),
+@@ -220,7 +223,8 @@
+                             ?err,
+                             "failed to get next blockchain update; retrying after delay"
+                         );
+-                        tokio::time::sleep(STEP_RETRY_DELAY).await;
++                        tokio::time::sleep(delay).await;
++                        delay = (delay * 2).min(Duration::from_millis(6_400));
+                     }
+                 }
+             }

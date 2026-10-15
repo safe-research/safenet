@@ -1,0 +1,11 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-b/debug/deps/validator-dd9411993fa56ac3)
+
+running 1 test
+test state::sign::qa2a_val030_no_finality_wait::qa2a_approval_emits_attestation_share_without_reorg_safety ... block 1000: oracle approved -> GenerateNonces now; signing deadline 1006 (no +max_reorg_depth)
+block 1001: threshold committed -> UseNonces (burn and share)
+SignShare broadcast with attestTransaction callback, expires_at 1007 (approval at 1000, max_reorg_depth 5): a reorg removing the approval still carries this attestation onto the canonical chain
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.26s
+

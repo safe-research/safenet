@@ -1,0 +1,31 @@
+
+running 4 tests
+FIX CHECK: Claim queued after OracleResult = true
+REPRO F3-SEN-002: local committed_count=1 (onchain committedCount=2)
+REPRO F3-SEN-002: after foreign reveal -> tracked=true, commands=0
+
+thread 'service::tests::qa3_sen_poc::f3_sen_002_foreign_commit_before_verdict_strands_the_claim' (285044) panicked at crates/sentinel/src/service.rs:2308:13:
+BUG: bonded request dropped on early finalize
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+REPRO F3-SEN-003: at revealDeadline+1 -> tracked=true, commands=1
+
+thread 'service::tests::qa3_sen_poc::f3_sen_003_missed_own_reveal_drops_without_claim' (285046) panicked at crates/sentinel/src/service.rs:2419:13:
+BUG: bonded request dropped at revealDeadline+1
+test service::tests::qa3_sen_poc::f3_sen_fix_recovers_the_claim ... ok
+test service::tests::qa3_sen_poc::f3_sen_002_foreign_commit_before_verdict_strands_the_claim ... FAILED
+test service::tests::qa3_sen_poc::f3_sen_003_missed_own_reveal_drops_without_claim ... FAILED
+
+thread 'service::tests::qa3_sen_poc::f3_sen_002_silent_committer_leaves_request_unfinalized' (285045) panicked at crates/sentinel/src/service.rs:2351:13:
+early finalize moved us to WaitingForOutcome
+test service::tests::qa3_sen_poc::f3_sen_002_silent_committer_leaves_request_unfinalized ... FAILED
+
+failures:
+
+failures:
+    service::tests::qa3_sen_poc::f3_sen_002_foreign_commit_before_verdict_strands_the_claim
+    service::tests::qa3_sen_poc::f3_sen_002_silent_committer_leaves_request_unfinalized
+    service::tests::qa3_sen_poc::f3_sen_003_missed_own_reveal_drops_without_claim
+
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p sentinel --bin sentinel`

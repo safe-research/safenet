@@ -1,0 +1,548 @@
+# R7 measurement: USDC.e approve gas vs the sentinel ApproveToken gas limit
+# Date: 2026-10-08T17:16:38Z
+# Bytecode and proxy storage: Foundry RPC cache ~/.foundry/cache/rpc/xdai/48635154 (Gnosis block 48635154, written by run 2026-10-07-aegis-env-review); proxy 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0 (FiatTokenProxy), implementation 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7 (FiatTokenV2_2); code hashes checked against the cached code_hash values.
+# Project: session scratch usdc-gas/ (no tracked file touched). Command: forge test -vv --offline --root .
+# forge forge Version: 1.5.1-v1.5.1
+
+Compiling 1 files with Solc 0.8.30
+Solc 0.8.30 finished in 308.49ms
+Compiler run successful!
+
+Ran 6 tests for test/UsdcApproveGas.t.sol:UsdcApproveGasTest
+[PASS] test_batchedModeApproveFromZeroAllowance() (gas: 44056)
+Logs:
+  approve with the full 55,000 as callee gas succeeded true
+
+[PASS] test_cachedCodeMatchesOnchainCodeHashes() (gas: 29075)
+[PASS] test_directModeApproveFromNonzeroAllowance() (gas: 82282)
+Logs:
+  approve from nonzero allowance succeeded true
+
+[PASS] test_directModeApproveFromZeroAllowance() (gas: 105115)
+Logs:
+  intrinsic gas 21596
+  execution budget in Direct mode 33404
+  approve from zero allowance succeeded false
+  allowance after 0
+
+[PASS] test_measureApproveFromZeroAllowance() (gas: 70936)
+Logs:
+  callee gas used (lastCallGas) 33841
+  Direct-mode tx gas needed 55437
+
+[PASS] test_minimumGasSearch() (gas: 837429)
+Logs:
+  minimum callee gas (search) 34223
+  minimum Direct-mode tx gas limit 55819
+  sentinel ApproveToken gas 55000
+
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 7.34ms (1.17ms CPU time)
+
+Ran 1 test suite in 8.05ms (7.34ms CPU time): 6 tests passed, 0 failed, 0 skipped (6 total tests)
+
+# ---- Reproduce: foundry.toml ----
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+cache_path = "cache"
+libs = []
+solc_version = "0.8.30"
+offline = true
+remappings = ["forge-std/=/home/sj.guest/safe/safenet/contracts/lib/forge-std/src/"]
+allow_paths = ["/home/sj.guest/safe/safenet/contracts/lib/forge-std"]
+
+# ---- scripts/extract.py (writes src/UsdcCode.sol from the Foundry cache) ----
+import json, os, sys
+from hashlib import sha3_256  # not keccak; keccak checked via forge instead
+p = os.path.expanduser("~/.foundry/cache/rpc/xdai/48635154")
+d = json.load(open(p))
+want = {"0x2a22f9c3b484c3629090feed35f17ff8f88f76f0": "PROXY", "0x107cf7fb73ea48d1d200989b156ce1894d7afec7": "IMPL"}
+out = {}
+for k, v in d["accounts"].items():
+    if k.lower() in want:
+        la = v["code"]["LegacyAnalyzed"]
+        bc = la["bytecode"]
+        n = la["original_len"]
+        code = bc[2:2 + 2 * n] if bc.startswith("0x") else bc[:2 * n]
+        out[want[k.lower()]] = {"code": code, "code_hash": v["code_hash"], "len": n}
+storage = []
+for k, v in d["storage"].items():
+    if k.lower() == "0x2a22f9c3b484c3629090feed35f17ff8f88f76f0":
+        for slot, val in v.items():
+            storage.append((slot, val))
+print("block", int(d["meta"]["block_env"]["number"], 16), file=sys.stderr)
+for name, info in out.items():
+    print(name, "len", info["len"], "code_hash", info["code_hash"], file=sys.stderr)
+def word(x):
+    return "0x" + format(int(x, 16), "064x")
+lines = []
+lines.append("// SPDX-License-Identifier: UNLICENSED")
+lines.append("pragma solidity ^0.8.30;")
+lines.append("library UsdcCode {")
+lines.append("    address internal constant PROXY = 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0;")
+lines.append("    address internal constant IMPL = 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7;")
+lines.append(f"    bytes32 internal constant PROXY_CODE_HASH = {out['PROXY']['code_hash']};")
+lines.append(f"    bytes32 internal constant IMPL_CODE_HASH = {out['IMPL']['code_hash']};")
+lines.append(f"    function proxyCode() internal pure returns (bytes memory) {{ return hex\"{out['PROXY']['code']}\"; }}")
+lines.append(f"    function implCode() internal pure returns (bytes memory) {{ return hex\"{out['IMPL']['code']}\"; }}")
+lines.append("    function slots() internal pure returns (bytes32[] memory keys, bytes32[] memory vals) {")
+lines.append(f"        keys = new bytes32[]({len(storage)});")
+lines.append(f"        vals = new bytes32[]({len(storage)});")
+for i, (s, v) in enumerate(storage):
+    lines.append(f"        keys[{i}] = bytes32(uint256({word(s)})); vals[{i}] = bytes32(uint256({word(v)}));")
+lines.append("    }")
+lines.append("}")
+open("src/UsdcCode.sol", "w").write("\n".join(lines) + "\n")
+
+# ---- test/UsdcApproveGas.t.sol ----
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.30;
+
+import {Test, Vm, console2} from "forge-std/Test.sol";
+import {UsdcCode} from "../src/UsdcCode.sol";
+
+interface IERC20 {
+    function approve(address spender, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function symbol() external view returns (string memory);
+}
+
+/// Measures the gas of `approve` on the real Gnosis USDC.e bytecode (FiatTokenProxy and
+/// FiatTokenV2_2 runtime code and proxy storage from Foundry's RPC cache at Gnosis block
+/// 48635154) against the sentinel's hard-coded `ApproveToken` gas limit.
+contract UsdcApproveGasTest is Test {
+    // Aegis SentinelOracle (spender of the bond) and an arbitrary sentinel EOA.
+    address constant ORACLE = 0x4F61B8832978e83b80D69551AEf07557DBE41d03;
+    address constant SENTINEL = 0x00000000000000000000000000000000005E471e;
+    // Aegis bond: fee 400000 (0.40 USDC.e) * bond multiplier 2000.
+    uint256 constant BOND = 800_000_000;
+    // `SentinelActionKind::ApproveToken` gas, crates/sentinel/src/service.rs:876.
+    uint256 constant APPROVE_GAS = 55_000;
+
+    function setUp() public {
+        vm.etch(UsdcCode.PROXY, UsdcCode.proxyCode());
+        vm.etch(UsdcCode.IMPL, UsdcCode.implCode());
+        (bytes32[] memory keys, bytes32[] memory vals) = UsdcCode.slots();
+        for (uint256 i; i < keys.length; i++) {
+            vm.store(UsdcCode.PROXY, keys[i], vals[i]);
+        }
+    }
+
+    function _data() internal pure returns (bytes memory) {
+        return abi.encodeCall(IERC20.approve, (ORACLE, BOND));
+    }
+
+    /// EIP-2028 intrinsic gas of a plain call transaction carrying `data`.
+    function _intrinsic(bytes memory data) internal pure returns (uint256 gas) {
+        gas = 21_000;
+        for (uint256 i; i < data.length; i++) {
+            gas += data[i] == 0 ? 4 : 16;
+        }
+    }
+
+    function test_cachedCodeMatchesOnchainCodeHashes() public view {
+        assertEq(keccak256(UsdcCode.PROXY.code), UsdcCode.PROXY_CODE_HASH);
+        assertEq(keccak256(UsdcCode.IMPL.code), UsdcCode.IMPL_CODE_HASH);
+        // The proxy reaches the implementation and reads the cached storage: `paused()` is
+        // false and `blacklister()` is the cached slot 2 value.
+        (bool ok, bytes memory ret) = UsdcCode.PROXY.staticcall(abi.encodeWithSignature("paused()"));
+        assertTrue(ok);
+        assertEq(abi.decode(ret, (bool)), false);
+        (ok, ret) = UsdcCode.PROXY.staticcall(abi.encodeWithSignature("blacklister()"));
+        assertTrue(ok);
+        assertEq(abi.decode(ret, (address)), 0x458cD345B4C05e8DF39d0A07220feb4Ec19F5e6f);
+    }
+
+    /// Direct mode: the transaction's gas limit is the action's `gas` (55,000), so the token
+    /// code runs with 55,000 minus the intrinsic gas. The allowance starts at zero, as it does
+    /// after every commit spends an exact approval.
+    function test_directModeApproveFromZeroAllowance() public {
+        bytes memory data = _data();
+        uint256 budget = APPROVE_GAS - _intrinsic(data);
+        vm.prank(SENTINEL);
+        (bool ok,) = UsdcCode.PROXY.call{gas: budget}(data);
+        console2.log("intrinsic gas", _intrinsic(data));
+        console2.log("execution budget in Direct mode", budget);
+        console2.log("approve from zero allowance succeeded", ok);
+        console2.log("allowance after", IERC20(UsdcCode.PROXY).allowance(SENTINEL, ORACLE));
+    }
+
+    /// Same budget when an allowance is already set (nonzero to nonzero).
+    function test_directModeApproveFromNonzeroAllowance() public {
+        // allowed[SENTINEL][ORACLE] = 1 through a first, generously funded approval in setUp-like
+        // fashion, then cool the accounts so the measured call starts cold again.
+        vm.prank(SENTINEL);
+        IERC20(UsdcCode.PROXY).approve(ORACLE, 1);
+        vm.cool(UsdcCode.PROXY);
+        vm.cool(UsdcCode.IMPL);
+        bytes memory data = _data();
+        uint256 budget = APPROVE_GAS - _intrinsic(data);
+        vm.prank(SENTINEL);
+        (bool ok,) = UsdcCode.PROXY.call{gas: budget}(data);
+        console2.log("approve from nonzero allowance succeeded", ok);
+    }
+
+    /// Exact callee gas of the approval from zero allowance, and the smallest gas limit a
+    /// Direct-mode transaction needs.
+    function test_measureApproveFromZeroAllowance() public {
+        bytes memory data = _data();
+        vm.prank(SENTINEL);
+        (bool ok,) = UsdcCode.PROXY.call{gas: 200_000}(data);
+        assertTrue(ok);
+        Vm.Gas memory gas = vm.lastCallGas();
+        console2.log("callee gas used (lastCallGas)", gas.gasTotalUsed);
+        console2.log("Direct-mode tx gas needed", gas.gasTotalUsed + _intrinsic(data));
+    }
+
+    /// Smallest callee gas at which the approval from zero allowance succeeds, found by binary
+    /// search with every account cooled before each attempt.
+    function test_minimumGasSearch() public {
+        bytes memory data = _data();
+        uint256 lo = 10_000;
+        uint256 hi = 200_000;
+        while (lo < hi) {
+            uint256 mid = (lo + hi) / 2;
+            uint256 id = vm.snapshotState();
+            vm.cool(UsdcCode.PROXY);
+            vm.cool(UsdcCode.IMPL);
+            vm.prank(SENTINEL);
+            (bool ok,) = UsdcCode.PROXY.call{gas: mid}(data);
+            bool set = IERC20(UsdcCode.PROXY).allowance(SENTINEL, ORACLE) == BOND;
+            vm.revertToState(id);
+            if (ok && set) {
+                hi = mid;
+            } else {
+                lo = mid + 1;
+            }
+        }
+        console2.log("minimum callee gas (search)", lo);
+        console2.log("minimum Direct-mode tx gas limit", lo + _intrinsic(data));
+        console2.log("sentinel ApproveToken gas", APPROVE_GAS);
+    }
+
+    /// Batched mode: the executor forwards the action's `gas` (55,000) to the token call.
+    function test_batchedModeApproveFromZeroAllowance() public {
+        bytes memory data = _data();
+        vm.prank(SENTINEL);
+        (bool ok,) = UsdcCode.PROXY.call{gas: APPROVE_GAS}(data);
+        console2.log("approve with the full 55,000 as callee gas succeeded", ok);
+    }
+}
+
+# ==== Part 2: the other sentinel actions on USDC.e in Direct mode (gas limit 250,000) ====
+# SentinelOracle: build artifact wt/base/contracts/build/out/SentinelOracle.sol/SentinelOracle.json (optimizer 1,000,000 runs, via IR), deployed with the Aegis parameters and feeToken = the USDC.e bytecode above; worst-case cold storage (receiver, sponsor and sentinel balances start at zero).
+# Command: forge test -vv --offline --root . --match-path test/OracleActionGas.t.sol
+
+No files changed, compilation skipped
+Ran 1 test for test/OracleActionGas.t.sol:TimeoutArbitrationGas
+[PASS] test_timeoutArbitration() (gas: 112346)
+Logs:
+  timeoutArbitration (fee refund)
+    succeeded true
+    callee gas used 52724
+    tx gas used incl. intrinsic 74300
+    headroom to 250,000 175700
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.68ms (146.25µs CPU time)
+Ran 1 test for test/OracleActionGas.t.sol:FinalizeTimedOutGas
+[PASS] test_finalizeTimesOutAndRefunds() (gas: 118088)
+Logs:
+  finalize (TIMED_OUT, fee refund)
+    succeeded true
+    callee gas used 58466
+    tx gas used incl. intrinsic 80042
+    headroom to 250,000 169958
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.73ms (169.92µs CPU time)
+Ran 1 test for test/OracleActionGas.t.sol:FinalizeAfterDeadlineGas
+[PASS] test_finalizeSlashesNonRevealerAndPaysDust() (gas: 125946)
+Logs:
+  finalize (RESOLVED, unrevealed bond and dust transfers)
+    succeeded true
+    callee gas used 66332
+    tx gas used incl. intrinsic 87908
+    headroom to 250,000 162092
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.68ms (151.88µs CPU time)
+Ran 1 test for test/OracleActionGas.t.sol:ClaimGas
+[PASS] test_claimWinner() (gas: 117297)
+Logs:
+  claim (winner, bond plus fee share)
+    succeeded true
+    callee gas used 55165
+    tx gas used incl. intrinsic 76741
+    headroom to 250,000 173259
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.77ms (144.58µs CPU time)
+Ran 1 test for test/OracleActionGas.t.sol:CommitGas
+[PASS] test_firstCommit() (gas: 179042)
+Logs:
+  commit (first of the request)
+    succeeded true
+    callee gas used 90701
+    tx gas used incl. intrinsic 112789
+    headroom to 250,000 137211
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.77ms (299.54µs CPU time)
+Ran 1 test for test/OracleActionGas.t.sol:RevealLastResolvesGas
+[PASS] test_lastRevealFinalizesWithDaoDustTransfer() (gas: 268848)
+Logs:
+  reveal (last, auto-finalize RESOLVED, dust transfer)
+    succeeded true
+    callee gas used 73057
+    tx gas used incl. intrinsic 95553
+    headroom to 250,000 154447
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.93ms (412.50µs CPU time)
+Ran 1 test for test/OracleActionGas.t.sol:RevealLastDisputeGas
+[PASS] test_lastRevealFreezes() (gas: 257746)
+Logs:
+  reveal (last, auto-finalize FROZEN)
+    succeeded true
+    callee gas used 28279
+    tx gas used incl. intrinsic 50963
+    headroom to 250,000 199037
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.82ms (502.58µs CPU time)
+Ran 7 test suites in 5.45ms (19.37ms CPU time): 7 tests passed, 0 failed, 0 skipped (7 total tests)
+
+# ---- test/OracleActionGas.t.sol ----
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.30;
+
+import {Test, Vm, console2} from "forge-std/Test.sol";
+import {UsdcCode} from "../src/UsdcCode.sol";
+
+interface IERC20 {
+    function approve(address spender, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
+
+interface ISentinelOracle {
+    function postRequest(bytes32 requestId, address sponsor, bytes calldata) external;
+    function commit(bytes32 requestId, bytes32 commitHash) external;
+    function reveal(bytes32 requestId, bool approve, bytes32 salt, string calldata reason) external;
+    function hashCommitment(address sentinel, bytes32 requestId, bool approve, bytes32 salt, string calldata reason)
+        external
+        pure
+        returns (bytes32);
+    function finalize(bytes32 requestId) external;
+    function claim(bytes32 requestId) external;
+    function timeoutArbitration(bytes32 requestId) external;
+    function addSentinel(address sentinel) external;
+}
+
+/// Same field order and types as `SentinelOracle.ConstructorParams` (contracts/src/SentinelOracle.sol:157-188).
+struct ConstructorParams {
+    address arbitrator;
+    address governance;
+    address protocolFundsReceiver;
+    address proposer;
+    address feeToken;
+    uint96 requestFee;
+    uint32 initialBondMultiplier;
+    uint32 initialSlashingMultiplier;
+    uint24 initialDaoFeeShare;
+    uint32 commitWindow;
+    uint32 revealWindow;
+    uint32 governanceDelay;
+    uint32 arbitrationTimeout;
+    string initialCharterEns;
+}
+
+/// Deploys the `SentinelOracle` build artifact (optimizer 1,000,000 runs, via IR, as deployed) with
+/// the Aegis parameters and the real USDC.e bytecode, then measures each sentinel action in its
+/// own transaction with the Direct-mode budget of the sentinel's fixed gas limit (250,000).
+abstract contract Base is Test {
+    ISentinelOracle oracle;
+    IERC20 constant USDC = IERC20(UsdcCode.PROXY);
+    address constant SPONSOR = address(0x5905);
+    address constant RECEIVER = address(0x9D02);
+    address constant ARBITRATOR = address(0xA4B1);
+    address[4] sentinels = [address(0x51), address(0x52), address(0x53), address(0x54)];
+    uint256 constant FEE = 400_000;
+    uint256 constant BOND = 800_000_000;
+    uint256 constant ACTION_GAS = 250_000;
+    bytes32 constant ID = keccak256("request");
+    uint256 P;
+
+    function setUp() public virtual {
+        vm.etch(UsdcCode.PROXY, UsdcCode.proxyCode());
+        vm.etch(UsdcCode.IMPL, UsdcCode.implCode());
+        (bytes32[] memory keys, bytes32[] memory vals) = UsdcCode.slots();
+        for (uint256 i; i < keys.length; i++) {
+            vm.store(UsdcCode.PROXY, keys[i], vals[i]);
+        }
+        ConstructorParams memory params = ConstructorParams({
+            arbitrator: ARBITRATOR,
+            governance: address(this),
+            protocolFundsReceiver: RECEIVER,
+            proposer: address(this),
+            feeToken: address(USDC),
+            requestFee: uint96(FEE),
+            initialBondMultiplier: 2000,
+            initialSlashingMultiplier: 1,
+            initialDaoFeeShare: 0,
+            commitWindow: 6,
+            revealWindow: 6,
+            governanceDelay: 0,
+            arbitrationTimeout: 483_840,
+            initialCharterEns: "charter.safenet-gov.eth"
+        });
+        bytes memory code = abi.encodePacked(vm.getCode("artifacts/SentinelOracle.json"), abi.encode(params));
+        address deployed;
+        assembly {
+            deployed := create(0, add(code, 0x20), mload(code))
+        }
+        require(deployed != address(0), "deploy failed");
+        oracle = ISentinelOracle(deployed);
+        deal(address(USDC), SPONSOR, FEE);
+        vm.prank(SPONSOR);
+        USDC.approve(address(oracle), FEE);
+        for (uint256 i; i < sentinels.length; i++) {
+            oracle.addSentinel(sentinels[i]);
+            deal(address(USDC), sentinels[i], BOND);
+            vm.prank(sentinels[i]);
+            USDC.approve(address(oracle), BOND);
+        }
+        vm.roll(1_000);
+        P = block.number;
+        oracle.postRequest(ID, SPONSOR, "");
+    }
+
+    function _salt(address s) internal pure returns (bytes32) {
+        return keccak256(abi.encode("salt", s));
+    }
+
+    function _commit(address s, bool approve, string memory reason) internal {
+        bytes32 hash = oracle.hashCommitment(s, ID, approve, _salt(s), reason);
+        vm.prank(s);
+        oracle.commit(ID, hash);
+    }
+
+    function _reveal(address s, bool approve, string memory reason) internal {
+        vm.prank(s);
+        oracle.reveal(ID, approve, _salt(s), reason);
+    }
+
+    function _intrinsic(bytes memory data) internal pure returns (uint256 gas) {
+        gas = 21_000;
+        for (uint256 i; i < data.length; i++) {
+            gas += data[i] == 0 ? 4 : 16;
+        }
+    }
+
+    /// Calls the oracle as a Direct-mode transaction with gas limit `ACTION_GAS` would run it.
+    function _direct(string memory label, address from, bytes memory data) internal returns (bool ok) {
+        uint256 budget = ACTION_GAS - _intrinsic(data);
+        vm.prank(from);
+        (ok,) = address(oracle).call{gas: budget}(data);
+        Vm.Gas memory gas = vm.lastCallGas();
+        console2.log(label);
+        console2.log("  succeeded", ok);
+        console2.log("  callee gas used", gas.gasTotalUsed);
+        console2.log("  tx gas used incl. intrinsic", gas.gasTotalUsed + _intrinsic(data));
+        console2.log("  headroom to 250,000", ACTION_GAS - (gas.gasTotalUsed + _intrinsic(data)));
+    }
+}
+
+contract CommitGas is Base {
+    function test_firstCommit() public {
+        bytes32 hash = oracle.hashCommitment(sentinels[0], ID, true, _salt(sentinels[0]), "");
+        assertTrue(_direct("commit (first of the request)", sentinels[0], abi.encodeCall(oracle.commit, (ID, hash))));
+    }
+}
+
+contract RevealLastResolvesGas is Base {
+    function setUp() public override {
+        super.setUp();
+        for (uint256 i; i < 3; i++) {
+            _commit(sentinels[i], true, "");
+        }
+        vm.roll(P + 7);
+        _reveal(sentinels[0], true, "");
+        _reveal(sentinels[1], true, "");
+    }
+
+    function test_lastRevealFinalizesWithDaoDustTransfer() public {
+        bytes memory data = abi.encodeCall(oracle.reveal, (ID, true, _salt(sentinels[2]), ""));
+        assertTrue(_direct("reveal (last, auto-finalize RESOLVED, dust transfer)", sentinels[2], data));
+    }
+}
+
+contract RevealLastDisputeGas is Base {
+    function setUp() public override {
+        super.setUp();
+        _commit(sentinels[0], true, "");
+        _commit(sentinels[1], false, "R-4.6");
+        vm.roll(P + 7);
+        _reveal(sentinels[0], true, "");
+    }
+
+    function test_lastRevealFreezes() public {
+        bytes memory data = abi.encodeCall(oracle.reveal, (ID, false, _salt(sentinels[1]), "R-4.6"));
+        assertTrue(_direct("reveal (last, auto-finalize FROZEN)", sentinels[1], data));
+    }
+}
+
+contract FinalizeAfterDeadlineGas is Base {
+    function setUp() public override {
+        super.setUp();
+        for (uint256 i; i < 4; i++) {
+            _commit(sentinels[i], true, "");
+        }
+        vm.roll(P + 7);
+        for (uint256 i; i < 3; i++) {
+            _reveal(sentinels[i], true, "");
+        }
+        vm.roll(P + 13);
+    }
+
+    function test_finalizeSlashesNonRevealerAndPaysDust() public {
+        assertTrue(
+            _direct("finalize (RESOLVED, unrevealed bond and dust transfers)", sentinels[0], abi.encodeCall(oracle.finalize, (ID)))
+        );
+    }
+}
+
+contract FinalizeTimedOutGas is Base {
+    function setUp() public override {
+        super.setUp();
+        _commit(sentinels[0], true, "");
+        vm.roll(P + 13);
+    }
+
+    function test_finalizeTimesOutAndRefunds() public {
+        assertTrue(_direct("finalize (TIMED_OUT, fee refund)", sentinels[0], abi.encodeCall(oracle.finalize, (ID))));
+    }
+}
+
+contract ClaimGas is Base {
+    function setUp() public override {
+        super.setUp();
+        for (uint256 i; i < 3; i++) {
+            _commit(sentinels[i], true, "");
+        }
+        vm.roll(P + 7);
+        for (uint256 i; i < 3; i++) {
+            _reveal(sentinels[i], true, "");
+        }
+    }
+
+    function test_claimWinner() public {
+        assertTrue(_direct("claim (winner, bond plus fee share)", sentinels[0], abi.encodeCall(oracle.claim, (ID))));
+        assertEq(USDC.balanceOf(sentinels[0]), BOND + FEE / 3);
+    }
+}
+
+contract TimeoutArbitrationGas is Base {
+    function setUp() public override {
+        super.setUp();
+        _commit(sentinels[0], true, "");
+        _commit(sentinels[1], false, "R-4.6");
+        vm.roll(P + 7);
+        _reveal(sentinels[0], true, "");
+        _reveal(sentinels[1], false, "R-4.6");
+        vm.roll(block.number + 483_841);
+    }
+
+    function test_timeoutArbitration() public {
+        assertTrue(
+            _direct("timeoutArbitration (fee refund)", sentinels[0], abi.encodeCall(oracle.timeoutArbitration, (ID)))
+        );
+    }
+}

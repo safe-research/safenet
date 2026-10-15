@@ -1,0 +1,12 @@
+===== literal (with remediation 1)
+{"timestamp":"2026-10-08T18:55:08.392140Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:44643"},"target":"safenet_core::observability"}
+Error: Transport(Custom("unsupported RPC URL scheme `htps`"))
+exit status: 1
+===== env (with remediation 1)
+{"timestamp":"2026-10-08T18:55:08.490894Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:45629"},"target":"safenet_core::observability"}
+Error: Transport(Custom("unsupported RPC URL scheme `htps`"))
+exit status: 1
+===== control (with remediation 1)
+{"timestamp":"2026-10-08T18:55:08.593420Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:34981"},"target":"safenet_core::observability"}
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:1, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+exit status: 1

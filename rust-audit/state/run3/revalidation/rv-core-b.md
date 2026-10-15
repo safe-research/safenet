@@ -1,0 +1,16 @@
+# Run 3 re-validation: rv-core-b (core transaction queue rows)
+
+Audit commit `361aaf3`. One row per canonical finding; the full reasoning is the `## Run 3 re-validation (rv-core-b, 2026-10-08)` section at the end of each finding file.
+
+| ID | Ledger severity | Verdict | Proposed severity | Certainty | Changed by | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| F-CORE-060 | High | Still valid | High (unchanged) | 98 | nothing changed the mechanism (`tx/fees.rs` untouched); the 7702 stack (#991 to #999) moved the code | E1 `poc/F-CORE-060/run3/` (run-1 parts 1 to 3, same numbers 4,037 / 59,550 and 104 / 3,277, plus a batched variant) and `poc/F2-CORE-060/run3/` |
+| F-CORE-061 | Medium | Still valid | Medium (unchanged) | 65 (Plausible, node wording `I`) | nothing changed the classifier or the generic arm | E1 `poc/F2-CORE-062/run3/` (3 tests, same results as run 2) |
+| F-CORE-062 | Medium | Still valid | Medium (unchanged) | 60 (gap half E1) | mechanism unchanged (#993 moved it to `allocated_nonces`); #996's release path covers only authorization nonces; basis row 9 (no unique key) no longer holds | E1 `poc/F2-CORE-061/run3/` (gap re-run plus a batched variant: one bad reading wedges the batched queue) and `poc/F2-CORE-064/run3/` |
+| F-CORE-063 | Medium | Still valid | Medium (unchanged) | 55 (irrevocable mark E1) | mechanism unchanged; no receipt read anywhere in `tx/` | E1 `poc/F2-CORE-061/run3/` (plus a batched variant dropping a whole batch) and `poc/F-CORE-068/run3/` |
+| F-CORE-064 | Medium | Still valid | Medium (unchanged) | 90 | #993 keeps `expires_at` on queued rows only; `allocated_nonces` has no expiry | E1 `poc/F2-CORE-064/run3/` (re-run plus a batched variant) |
+| F-CORE-065 | Low (`known`) | Still valid | Low (unchanged), `known` | 70 to 90 proposed (trigger 2 now E1) | nothing binds the new tables (#993, #995) to chain, signer or version | E1 `poc/F-CORE-065/run3/` (new: rotated signer at account nonce 0 is allocated nonce 53) |
+| F-CORE-066 | Medium | Still valid | Medium (unchanged) | 90 | #991 and #992 added `TryFrom<RawConfig>` that validates only the mode combination and a zero executor | E1 `poc/F2-CORE-065/run3/` (queue tests plus TOML `nan` through the validator loader) |
+| F-CORE-067 | Medium | Still valid | Medium (unchanged) | 98 | no idempotency key or queue rollback added; #1015 adds a replay source (the optimistically applied pending block replays on every restart) | E1 `poc/F-CORE-067/run3/` (run-1 parts 1 and 2 plus three variants) and `poc/F2-CORE-063/run3/` |
+| F-CORE-068 | High / Medium (forward-looking) | Changed | Low; fold into F-CORE-063 | 90 | batex code never merged; merged 7702 stack (#995, #1001, executor) keeps nonce-only inference; whole-batch revert settled as L4; `OnlySelf` route unreachable; residual is the swallowed mid-batch `CallFailed` | E1 `poc/F-CORE-068/run3/` (queue side) and the executor's Foundry tests (reference only) |
+| F-CORE-069 | High / Medium (forward-looking) | Moot | n/a (no live defect) | n/a | batex two-nonce span and `pending_delegation` rejected and never merged; replacement #993, #995, #996 cancels an unused authorization nonce in the same block | E1 `poc/F-CORE-069/run3/` (2 new tests pass; both fail with the recovery disabled; 6 existing tests pass) |

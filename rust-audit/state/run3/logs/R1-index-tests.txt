@@ -1,0 +1,71 @@
+# R1: cargo test -p safenet-core --lib index:: in wt/base at 361aaf3 (2026-10-08). Output tail.
+   Compiling alloy v2.0.5
+   Compiling sqlx v0.9.0
+   Compiling tokio-metrics v0.5.2
+   Compiling safenet-core v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/base/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.47s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-base/debug/deps/safenet_core-1a555efd99e0fbb6)
+
+running 59 tests
+test index::blocks::tests::auto_timings_use_chain_id ... ok
+test index::blocks::tests::does_not_reemit_recent_blocks_at_or_before_the_persisted_snapshot ... ok
+test index::blocks::tests::does_not_warp_when_start_block_is_within_reorg_window ... ok
+test index::blocks::tests::initializes_from_persisted_snapshot_range ... ok
+test index::blocks::tests::initializes_a_watcher ... ok
+test index::blocks::tests::next_waits_for_pending_block_and_fetches_it ... ok
+test index::blocks::tests::rejects_automatic_timings_for_unknown_chains ... ok
+test index::blocks::tests::resolves_automatic_timings_for_known_chains ... ok
+test index::blocks::tests::resolves_configured_timings ... ok
+test index::blocks::tests::resolves_mixed_configured_and_automatic_timings ... ok
+test index::blocks::tests::next_retries_if_block_is_not_ready_when_expected ... ok
+test index::blocks::tests::handles_reorgs_during_initialization ... ok
+test index::blocks::tests::evicting_from_recent_promotes_the_block_to_safe ... ok
+test index::blocks::tests::only_emits_blocks_at_or_after_start_block_inside_reorg_window ... ok
+test index::blocks::tests::fails_loudly_when_a_reorg_exceeds_max_depth ... ok
+test index::blocks::tests::resumes_after_a_single_pruned_snapshot_without_a_fake_reorg ... ok
+test index::blocks::tests::next_waits_for_the_next_slot_after_retries_are_exhausted ... ok
+test index::blocks::tests::revalidate_can_invalidate_the_oldest_tracked_block ... ok
+test index::blocks::tests::revalidate_invalidates_a_block_missing_from_rpc ... ok
+test index::bloom::tests::checks_inclusion ... ok
+test index::blocks::tests::safe_block_without_reorg_protection_is_the_last_indexed_block ... ok
+test index::blocks::tests::supports_no_reorg_protection ... ok
+test index::clock::tests::returns_instantly_when_sleeping_until_past ... ok
+test index::blocks::tests::revalidate_invalidates_a_reorged_block ... ok
+test index::blocks::tests::starts_from_configured_block_without_fake_reorg ... ok
+test index::blocks::tests::revalidate_returns_none_when_the_block_is_still_canonical ... ok
+test index::blocks::tests::revalidate_purges_queued_descendants ... ok
+test index::blocks::tests::supports_deep_reorgs_during_indexing ... ok
+test index::events::tests::block_invalidation_errors_on_hash_mismatch ... ok
+test index::events::tests::block_invalidation_errors_when_not_fetching_a_block ... ok
+test index::clock::tests::tokio_test_util_compatibility ... ok
+test index::events::tests::block_invalidation_returns_to_idle ... ok
+test index::events::tests::decodes_logs_with_known_block_timestamps ... ok
+test index::events::tests::decodes_and_sorts_mixed_logs ... ok
+test index::events::tests::decodes_and_sorts_logs ... ok
+test index::events::tests::client_filtered_errors_when_logs_do_not_match_bloom ... ok
+test index::events::tests::fetches_a_new_block_with_a_single_query ... ok
+test index::events::tests::multiple_queries_propagates_a_failed_query ... ok
+test index::events::tests::multiple_queries_fetches_one_event_per_query ... ok
+test index::events::tests::fetches_a_new_block_with_client_filtering ... ok
+test index::events::tests::multiple_queries_drops_fallible_events ... ok
+test index::events::tests::client_filtered_filters_logs_by_address_and_event ... ok
+test index::events::tests::new_block_uses_the_header_timestamp_when_logs_omit_it ... ok
+test index::events::tests::single_query_fetches_all_events_at_once ... ok
+test index::events::tests::multiple_queries_errors_when_a_query_returns_too_many_logs ... ok
+test index::events::tests::warp_does_not_fetch_headers_when_logs_have_timestamps ... ok
+test index::events::tests::warp_narrows_the_page_on_failure_and_resets_on_success ... ok
+test index::bloom::tests::example_block_bloom_filter ... ok
+test index::events::tests::warp_queries_each_event_for_single_block_pages ... ok
+test index::events::tests::single_query_errors_when_too_many_logs ... ok
+test index::events::tests::new_block_falls_back_to_multiple_queries_after_retries ... ok
+test index::events::tests::warp_fetches_the_headers_of_blocks_with_logs_missing_timestamps ... ok
+test index::tests::deserializes_auto_timings ... ok
+test index::tests::deserializes_flattened_config_with_defaults ... ok
+test index::tests::deserializes_flattened_config_overrides ... ok
+test index::events::tests::warps_through_a_range_in_pages ... ok
+test index::tests::recovers_from_an_uncled_block_with_unavailable_logs ... ok
+test index::events::tests::warp_retries_only_the_missing_headers_when_fetching_a_header_fails ... ok
+test index::tests::emits_block_updates_then_their_logs ... ok
+
+test result: ok. 59 passed; 0 failed; 0 ignored; 0 measured; 92 filtered out; finished in 0.01s
+

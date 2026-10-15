@@ -1,0 +1,11 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.71s
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 14 tests
+[excerpt: only this finding's tests are shown; the complete 14-test run is poc/F2-CORE-060/output-full-run.txt]
+test tx::tests::qa_f2_core_063_replayed_action_is_enqueued_and_broadcast_again_with_a_new_nonce ... rows after the replay: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x5afe\",\"gas\":21000,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}", None, Some(0), Some(10), Some(11)), (2, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x5afe\",\"gas\":21000,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}", None, Some(1), Some(11), None)]
+ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.20s
+

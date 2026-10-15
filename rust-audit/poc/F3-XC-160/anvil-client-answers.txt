@@ -1,0 +1,4 @@
+== anvil 1.5.1: eth_getLogs by an unknown block hash
+{"jsonrpc":"2.0","id":1,"result":[]}
+== anvil 1.5.1: eth_getBlockByNumber above the head
+{"jsonrpc":"2.0","id":1,"result":null}

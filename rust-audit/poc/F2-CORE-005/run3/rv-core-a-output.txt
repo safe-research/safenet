@@ -1,0 +1,34 @@
+# rv-core-a run 3 re-run, audit commit 361aaf3 (worktree wt/rv-core-a), 2026-10-08
+# command: cargo test -p safenet-core --lib -- --nocapture --test-threads=1 poc_f_core_001 qa_f2_core_001 qa_f2_core_011 qa_f2_core_030 qa_f2_core_005 rv3_ revalidate_invalidates_a_block_missing_from_rpc supports_no_reorg_protection safe_block_without_reorg_protection_is_the_last_indexed_block skips_panicked_tasks_without_losing_successful_resumes kdf::tests
+# sources: the rv-core-a-*.rs files in the run3 folders of this batch, injected into the mod tests of crates/core/src/index/{blocks,mod}.rs and crates/core/src/state/{mod,storage}.rs; reverted afterwards with git checkout
+# excerpt: only this finding's tests are shown; the batch ran 25 tests (22 passed, 3 failed by design: the run-1 F-CORE-001 PoC tests fail at their key assertion when the defect is present). Lines over 500 characters are truncated.
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.45s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/safenet_core-1a555efd99e0fbb6)
+running 25 tests
+test index::tests::qa_f2_core_005_max_logs_per_query_reached_within_one_block_stalls_forever ... attempt 1 (SingleQuery): Err(Events(TooManyLogs))
+attempt 2 (SingleQuery): Err(Events(TooManyLogs))
+attempt 3 (SingleQuery): Err(Events(TooManyLogs))
+attempt 4 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 5 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 6 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 7 (MultipleQueries): Err(Events(TooManyLogs))
+attempt 8 (MultipleQueries): Err(Events(TooManyLogs))
+ok
+test index::tests::qa_f2_core_005_undecodable_log_stalls_the_watcher_and_starves_the_block_watcher ... attempt  1 (SingleQuery): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  2 (SingleQuery): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  3 (SingleQuery): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  4 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  5 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  6 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  7 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  8 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt  9 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt 10 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt 11 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+attempt 12 (MultipleQueries): Err(Events(DecodeLog { block_hash: 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, log_index: 0 }))
+after 12 attempts: block watcher status BlockStatus { latest: 1000, safe: 999 }; unconsumed mock responses: 1
+ok
+failures:
+failures:
+test result: FAILED. 22 passed; 3 failed; 0 ignored; 0 measured; 143 filtered out; finished in 0.04s

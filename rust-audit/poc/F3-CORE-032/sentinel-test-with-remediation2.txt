@@ -1,0 +1,10 @@
+test service::tests::qa3_rollback_to_the_proposal_block_loses_the_verdict_and_the_reveal ... no rollback: commands after the verdict: [Action(SentinelAction { kind: ApproveToken { bond: 800000000 }, expires_at: Some(106) }), Action(SentinelAction { kind: Commit { id: 0x23d490d080446171493a1d2ae6a02ac79b3ea4f676668bb2abc7515f5225538d, hash: 0xcc5df88cef2fd216e7519f692deb916f4f274aa42fcb5086545b8d3f79ebf0ac }, expires_at: Some(106) }), Action(SentinelAction { kind: Reveal { id: 0x23d490d080446171493a1d2ae6a02ac79b3ea4f676668bb2abc7515f5225538d, approve: true, salt: 0x261eb185891d438bbfe68d2874d756c532288f5b4d45692135cd5fc33e0d398d, reason: "" }, expires_at: Some(112) })]
+no rollback: request state in the newest snapshot: Some(CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 112, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+rollback to S: request state in the newest snapshot: None
+test service::tests::qa3_rollback_with_replayed_verdict ... replayed verdict resumes before the own commit is replayed: reveal = true
+replayed verdict resumes after the own commit is replayed: reveal = false
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.02s
+--- whole sentinel suite with the remediation sketch:
+test service::tests::waiting_engine_checks_expire_using_the_available_deadline ... FAILED
+thread 'service::tests::waiting_engine_checks_expire_using_the_available_deadline' (300092) panicked at crates/sentinel/src/service.rs:2398:9:
+test result: FAILED. 51 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s

@@ -1,0 +1,2 @@
+DEBUG initializing block watcher {'latest': 12, 'safe': 7, 'resume': 'Some(BlockStatus { latest: 32, safe: 27 })'}
+ERROR unrecoverable driver error; exiting {'err': 'State(BadUpdate)'}

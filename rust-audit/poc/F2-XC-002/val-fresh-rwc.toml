@@ -1,0 +1,12 @@
+# QA2-XC re-run config for F2-XC-002: the same path with '?mode=rwc' appended (sqlx create_if_missing)
+# against an existing but EMPTY directory (a fresh named volume). rpc is a loopback JSON-RPC stub (poc/F2-XC-002/stub.py, port 8748).
+rpc = "http://127.0.0.1:8748"
+signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+database = "sqlite:/tmp/claude-501/-home-shebin-guest-safe-safenet/166c992f-87ea-4548-be85-5fcf1c13bf90/scratchpad/xc/vol/storage-rwc.db?mode=rwc"
+
+[validator]
+consensus = "0x1111111111111111111111111111111111111111"
+genesis_salt = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+[[validator.participants]]
+address = "0x0000000000000000000000000000000000000001"

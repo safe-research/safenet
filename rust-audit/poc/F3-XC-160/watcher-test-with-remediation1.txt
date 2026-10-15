@@ -1,0 +1,21 @@
+
+thread 'index::tests::qa3_lagging_backend_uncles_a_canonical_block' (257086) panicked at crates/core/src/index/mod.rs:435:43:
+called `Result::unwrap()` on an `Err` value: Events(Rpc(ErrorResp(ErrorPayload { code: -32001, message: "resource not found", data: None })))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test index::tests::qa3_lagging_backend_uncles_a_canonical_block ... FAILED
+
+failures:
+
+failures:
+    index::tests::qa3_lagging_backend_uncles_a_canonical_block
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p safenet-core --lib`
+--- whole core suite with remediation 1:
+test effects::tests::skips_panicked_tasks_without_losing_successful_resumes ... ok
+test index::blocks::tests::revalidate_invalidates_a_block_missing_from_rpc ... FAILED
+test index::tests::qa3_lagging_backend_uncles_a_canonical_block ... FAILED
+thread 'index::blocks::tests::revalidate_invalidates_a_block_missing_from_rpc' (257141) panicked at crates/core/src/index/blocks.rs:1227:9:
+thread 'index::tests::qa3_lagging_backend_uncles_a_canonical_block' (257181) panicked at crates/core/src/index/mod.rs:435:43:
+test result: FAILED. 150 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s

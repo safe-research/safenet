@@ -1,0 +1,9 @@
+Phase 8 (RW-VAL) live re-observation of the unforced NonceTree failure in a direct
+run of scripts/run_validator_reorg_nonce_test.sh (exit 0, SUCCESS). Validator B:
+
+2026-09-08T15:57:24.539791Z DEBUG starting nonce stream for group ::  
+2026-09-08T15:57:28.534140Z DEBUG stopping nonce stream for group ::  
+2026-09-08T15:57:29.237098Z WARN failed to perform effect :: nonce generator is unavailable NonceTree { group_id: 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672
+2026-09-08T15:57:29.240032Z DEBUG starting nonce stream for group ::  
+
+Later 'spawning effect task NonceTree' after the failure: 0 (no retry).

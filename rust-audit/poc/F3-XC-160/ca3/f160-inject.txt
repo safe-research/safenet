@@ -1,0 +1,27 @@
+fee token 0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80, test consensus 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0, oracle 0x0e228cd9Af086366230319995b3a4EB7e30Ceca2
+sentinel A (lagging-backend RPC) 0x15471E4acdDE51D455D285d4e8E9e00bD462dd4e, sentinel B (direct RPC) 0xB58f892Cd3ff8E15926793D5E57d9ba0D57191b3, sponsor 0x5fBE90F15576B903Bf931958BF6B9B1779460697
+request 0x285e06a53f6535ea7d459f606e883d2c44a377cb2f167ecc589cbd7e2d0649a6 opened in block P=18 (commit deadline P+6, reveal deadline P+12)
+== onchain after block P+20
+request progress (state, fee, arbitrationDeadline, committed, revealed, approve, deny, ...): [3,400000,0,2,1,1,0,0]
+sentinel A commitment (hash, bond, vote, claimed): ["0x5ac3775f00d32674697a7346d3e620101191f7a79b68136156fbae1312a1df09",800000000,1,false]
+sentinel B commitment (hash, bond, vote, claimed): ["0x2ac73aa916b74bed6aaa76d3d2ce132fc882c9709c738f88465cfdf1f4adf31e",800000000,2,true]
+fee token balance change: A -800000000, B 400000, oracle holds 799600000
+== proxy injections
+{"armed_for_block": 19, "trigger_block": 18, "t": 1791498472.029}
+{"method": "eth_getLogs", "number": 19, "injected": "-32001 (lagging backend)", "t": 1791498473.068}
+{"method": "eth_getBlockByNumber", "number": 19, "injected": "null (lagging backend)", "t": 1791498473.111}
+== sentinel A log (selected lines)
+22:27:52.127 DEBUG submitting transaction {'nonce': 0, 'block': 18, 'hash': '0x2a4ca86bd99c030d9708ee09f65fc2f01e5258a7b9b8ef45f4ebc942bb38f856'}
+22:27:52.180 DEBUG submitting transaction {'nonce': 1, 'block': 18, 'hash': '0x68df9fd25fd303fdcda2563d8e0ef2f2ce1a5f277031a6ac7f1ae3c22b8ec26b'}
+22:27:53.151 DEBUG last block no longer canonical, invalidating {'number': 19, 'hash': '0xf48d9fff0a71a9313cc0af3f98e2c62477f42a98069f5f125d26650abc912370'}
+22:27:53.151 DEBUG logs unavailable for uncled block, skipping {'number': 19, 'hash': '0xf48d9fff0a71a9313cc0af3f98e2c62477f42a98069f5f125d26650abc912370'}
+22:27:53.306 WARN ignoring unexpected commitment {'request_id': '0x285e06a53f6535ea7d459f606e883d2c44a377cb2f167ecc589cbd7e2d0649a6', 'state': 'waiting_for_engine_check'}
+22:27:53.306 WARN ignoring unexpected commitment {'request_id': '0x285e06a53f6535ea7d459f606e883d2c44a377cb2f167ecc589cbd7e2d0649a6', 'state': 'waiting_for_engine_check'}
+22:27:59.068 DEBUG ignoring reveal for an untracked request {'request_id': '0x285e06a53f6535ea7d459f606e883d2c44a377cb2f167ecc589cbd7e2d0649a6'}
+== sentinel B log (selected lines)
+22:27:52.061 DEBUG submitting transaction {'nonce': 0, 'block': 18, 'hash': '0xd208788e5d63f64f0a72a5a8c9450d025ce1b242b987507a158dfc737af5c47f'}
+22:27:52.068 DEBUG submitting transaction {'nonce': 1, 'block': 18, 'hash': '0xe435025b49fe6a1f7353608da172fdfb096714987f6c857b23c881879052b4cb'}
+22:27:58.138 DEBUG submitting transaction {'nonce': 2, 'block': 24, 'hash': '0x006357ac95e0887d9b88e67dac62fc6686c35b481b11edb8bf3d98f7183aa67e'}
+22:28:04.046 DEBUG submitting transaction {'nonce': 3, 'block': 30, 'hash': '0x51fc7ec3bdfb510d490e0b6b49f4e419276efb14de17b82e9747eb9c930f5950'}
+22:28:05.046 DEBUG submitting transaction {'nonce': 4, 'block': 31, 'hash': '0xc0da44291f9739539ad54583b337c9c5b4e56d36f9c9ee5a4c8645b85f89f011'}
+artifacts in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/CA3/qa3core/f160-ca3inject-1791498453

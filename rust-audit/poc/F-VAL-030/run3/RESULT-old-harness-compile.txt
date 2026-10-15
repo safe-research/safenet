@@ -1,0 +1,8 @@
+      1 error: could not compile `validator` (bin "validator" test) due to 11 previous errors
+      2 error[E0063]: missing field `oracle_approved` in initializer of `SigningState`
+      1 error[E0432]: unresolved import `crate::frost::preprocess`
+      1 error[E0432]: unresolved import `super::NonceState`
+      3 error[E0560]: struct `state::Epoch` has no field named `nonces`
+      1 error[E0599]: no variant named `NonceTree` found for enum `effect::Effect`
+      1 error[E0599]: no variant named `RevealNonceCommitments` found for enum `effect::Effect`
+      2 error[E0609]: no field `nonces` on type `&mut state::Epoch`

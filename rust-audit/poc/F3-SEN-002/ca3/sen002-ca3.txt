@@ -1,0 +1,40 @@
+[    5.9s] deployed fee_token=0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80 consensus=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 oracle=0x7148FDa1aBAF76AC28E4803D4791a2790CddFae1
+[    5.9s] sentinel A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8) started, run 1, pid 437611
+[    5.9s] sentinel B (0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC) started, run 1, pid 437612
+[   16.9s] proposal mined in block 16, request id 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b
+[   17.4s] engine A: request 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b (hold=True)
+[   17.4s] engine B: request 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b (hold=True)
+[   17.4s] engines received: A=1 B=1 (held)
+[   22.0s] M committed, mined in block 17; onchain request now {'commitDeadline': 22, 'revealDeadline': 28, 'state': 'PENDING', 'committed': 1, 'revealed': 0, 'approve': 0, 'deny': 0}
+[   22.4s] both honest sentinels logged 'ignoring unexpected commitment' for M's commit
+[   22.4s] engines released
+[   22.5s] engine A: answered 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b after 5.0s
+[   22.5s] engine B: answered 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b after 5.0s
+[  180.0s] commitDeadline=22 revealDeadline=28
+[  180.0s] FINAL onchain request (>= revealDeadline+20): {'commitDeadline': 22, 'revealDeadline': 28, 'state': 'PENDING', 'committed': 3, 'revealed': 2, 'approve': 2, 'deny': 0}
+[  180.0s] commitment[A] = {'bond': 800000000, 'vote': 'APPROVED', 'claimed': False}
+[  180.0s] commitment[B] = {'bond': 800000000, 'vote': 'APPROVED', 'claimed': False}
+[  180.0s] commitment[M] = {'bond': 800000000, 'vote': 'PENDING', 'claimed': False}
+[  180.0s] --- honest sentinel transactions (status 0 = reverted) ---
+[  180.1s]   A: {'block': 18, 'index': 0, 'fn': 'approve', 'status': 1, 'gasUsed': 46915, 'replay': ''}
+[  180.1s]   A: {'block': 18, 'index': 2, 'fn': 'commit', 'status': 1, 'gasUsed': 97998, 'replay': ''}
+[  180.1s]   A: {'block': 23, 'index': 1, 'fn': 'reveal', 'status': 1, 'gasUsed': 42488, 'replay': ''}
+[  180.1s]   A: {'block': 24, 'index': 1, 'fn': 'finalize', 'status': 0, 'gasUsed': 29664, 'replay': 'FinalizeTooEarly()'}
+[  180.1s]   B: {'block': 18, 'index': 1, 'fn': 'approve', 'status': 1, 'gasUsed': 46915, 'replay': ''}
+[  180.1s]   B: {'block': 18, 'index': 3, 'fn': 'commit', 'status': 1, 'gasUsed': 97998, 'replay': ''}
+[  180.1s]   B: {'block': 23, 'index': 0, 'fn': 'reveal', 'status': 1, 'gasUsed': 42488, 'replay': ''}
+[  180.1s]   B: {'block': 24, 'index': 0, 'fn': 'finalize', 'status': 0, 'gasUsed': 29664, 'replay': 'FinalizeTooEarly()'}
+[  180.1s] --- oracle events ---
+[  180.1s]   event (16, 1, 'NewRequest', '')
+[  180.1s]   event (17, 0, 'Committed', '0x90f79bf6eb2c4f870365e785982e1f101e93b906')
+[  180.1s]   event (18, 2, 'Committed', '0x70997970c51812dc3a010c7d01b50e0d17dc79c8')
+[  180.1s]   event (18, 4, 'Committed', '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc')
+[  180.1s]   event (23, 0, 'Revealed', '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc')
+[  180.1s]   event (23, 1, 'Revealed', '0x70997970c51812dc3a010c7d01b50e0d17dc79c8')
+=== verdict ===
+stuck_pending = True
+A_sent_reverted_finalize = True
+B_sent_reverted_finalize = True
+no_oracle_outcome_event = True
+[  180.1s] sentinel A stopped (SIGKILL), exit -9
+[  180.1s] sentinel B stopped (SIGKILL), exit -9

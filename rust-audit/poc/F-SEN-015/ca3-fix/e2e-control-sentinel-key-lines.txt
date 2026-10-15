@@ -1,0 +1,19 @@
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"DEBUG","fields":{"message":"reusing recorded engine verdict","request_id":"0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b","outcome":"Denied(RuleId(2, 1))"},"target":"sentinel::effect"}
+{"level":"DEBUG","fields":{"message":"pruned engine verdicts","block":25,"safe":20,"pruned":1},"target":"sentinel::effect"}
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"DEBUG","fields":{"message":"reusing recorded engine verdict","request_id":"0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c","outcome":"Denied(RuleId(2, 1))"},"target":"sentinel::effect"}
+{"level":"DEBUG","fields":{"message":"pruned engine verdicts","block":40,"safe":35,"pruned":1},"target":"sentinel::effect"}
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"DEBUG","fields":{"message":"reusing recorded engine verdict","request_id":"0x06ee96f22571ed9996998d94516e0fd760801ceb4c6ea018dd9d10173087381a","outcome":"Denied(RuleId(2, 1))"},"target":"sentinel::effect"}
+{"level":"DEBUG","fields":{"message":"pruned engine verdicts","block":55,"safe":50,"pruned":1},"target":"sentinel::effect"}
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"DEBUG","fields":{"message":"reusing recorded engine verdict","request_id":"0x28ba7546129aadadfdc2109adbad4628881f9b4ed3daca0bac1f5d49615d5588","outcome":"Denied(RuleId(2, 1))"},"target":"sentinel::effect"}
+{"level":"DEBUG","fields":{"message":"pruned engine verdicts","block":70,"safe":65,"pruned":1},"target":"sentinel::effect"}
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"DEBUG","fields":{"message":"reusing recorded engine verdict","request_id":"0x9033695e11afba3fec10dce1cf9d07f7adc88d1ede5bda7ca104ab045cbc7771","outcome":"Denied(RuleId(2, 1))"},"target":"sentinel::effect"}
+{"level":"DEBUG","fields":{"message":"pruned engine verdicts","block":85,"safe":80,"pruned":1},"target":"sentinel::effect"}
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"DEBUG","fields":{"message":"reusing recorded engine verdict","request_id":"0x1a4ec544b57b8e76efc0fa025a9bd24a32e7aae2b4feb9d6e4be34d8a777a1f8","outcome":"Denied(RuleId(2, 1))"},"target":"sentinel::effect"}
+{"level":"DEBUG","fields":{"message":"pruned engine verdicts","block":100,"safe":95,"pruned":1},"target":"sentinel::effect"}

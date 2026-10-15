@@ -1,0 +1,24 @@
+too-soon window 200 ms: events applied from blocks [1003]
+    26 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    150 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    379 ms after the header: logs of block 1003 (all logs) -> 1 log(s)
+too-soon window 500 ms: events applied from blocks [1003]
+    28 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    152 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    379 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    811 ms after the header: logs of block 1003 (one event) -> 1 log(s)
+    812 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+too-soon window 1000 ms: events applied from blocks []
+    27 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    151 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    380 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    812 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+    813 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+too-soon window 2000 ms: events applied from blocks []
+    27 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    151 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    380 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    814 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+    814 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+test driver::qa3_too_soon_tests::qa3_client_filtering_loses_events_inside_a_short_too_soon_window ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 9.15s

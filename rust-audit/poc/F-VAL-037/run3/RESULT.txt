@@ -1,0 +1,4 @@
+3-leaf participants tree: proof for address(0) at padding index 3 verifies = true
+2-leaf tree (no odd level): proof for address(0) verifies = false
+test merkle::poc_f_val_037_run3::zero_address_leaf_proves_against_an_odd_participants_tree ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.00s
