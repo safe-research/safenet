@@ -873,7 +873,7 @@ impl SentinelEncoder {
                 }
                 .abi_encode()
                 .into(),
-                gas: 55_000,
+                gas: 100_000,
             },
             // Measured onchain at ~196k gas for a request's first commit (fresh
             // storage slots for the request, the commitment and the ERC-20
