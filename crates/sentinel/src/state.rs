@@ -104,13 +104,21 @@ pub enum SentinelRequestState {
     ///
     /// `arbitration_deadline` is `DisputeTriggered.deadline`: once it passes
     /// without a ruling, `handle_block_advance` submits the permissionless
-    /// `timeoutArbitration()` together with `claim()` and drops the request,
-    /// rather than leaving the bond locked until someone else times it out.
+    /// `timeoutArbitration()` together with `claim()` and moves to
+    /// `Claiming`, rather than leaving the bond locked until someone else
+    /// times it out.
     WaitingForDisputeResolution {
         approve: bool,
         slash_amount: U96,
         arbitration_deadline: u64,
     },
+    /// A `Claim` was queued and we are waiting for our own `Claimed` event,
+    /// which removes the request. `deadline` is the block the `Claim` was
+    /// queued in plus the configured claim window: once it passes without
+    /// our `Claimed`, `handle_block_advance` logs an error once so the bond
+    /// can be recovered manually, without retrying, and clears `deadline` to
+    /// `None`; the request is only removed once our own `Claimed` arrives.
+    Claiming { deadline: Option<u64> },
 }
 
 fn default_true() -> bool {
@@ -127,6 +135,7 @@ impl SentinelRequestState {
             Self::CollectingVotes { .. } => "collecting_votes",
             Self::WaitingForOutcome { .. } => "waiting_for_outcome",
             Self::WaitingForDisputeResolution { .. } => "waiting_for_dispute_resolution",
+            Self::Claiming { .. } => "claiming",
         }
     }
 
@@ -146,9 +155,14 @@ impl SentinelRequestState {
     /// already drops a request that reaches its commit deadline without
     /// `self_committed`, so reaching `CollectingVotes` at all guarantees a
     /// real commit.
+    ///
+    /// `Claiming` returns `None` as well, but is never asked: our `Claim` is
+    /// already queued, so the terminal handlers return before reaching it.
     pub(crate) fn approve_and_slash_amount(&self) -> Option<(bool, U96)> {
         match self {
-            Self::WaitingForEngineCheck { .. } | Self::WaitingForRequest { .. } => None,
+            Self::WaitingForEngineCheck { .. }
+            | Self::WaitingForRequest { .. }
+            | Self::Claiming { .. } => None,
             Self::CollectingCommitments {
                 approve,
                 slash_amount,
@@ -186,7 +200,8 @@ impl SentinelRequestState {
     /// submitted whether or not our own reveal landed.
     /// `WaitingForDisputeResolution` defaults to `true`, though moot in
     /// practice -- the oracle never re-emits `OracleResult` for a request
-    /// that's already `FROZEN`.
+    /// that's already `FROZEN`. `Claiming` is never read: the terminal
+    /// handlers return before reaching it.
     pub(crate) fn self_revealed(&self) -> bool {
         match self {
             Self::WaitingForEngineCheck { .. }
@@ -194,7 +209,7 @@ impl SentinelRequestState {
             | Self::CollectingCommitments { .. } => false,
             Self::CollectingVotes { self_revealed, .. }
             | Self::WaitingForOutcome { self_revealed, .. } => *self_revealed,
-            Self::WaitingForDisputeResolution { .. } => true,
+            Self::WaitingForDisputeResolution { .. } | Self::Claiming { .. } => true,
         }
     }
 }

@@ -213,6 +213,7 @@ consensus = "$CONSENSUS"
 [sentinel]
 fee_token = "$FEE_TOKEN"
 voting_window = $((COMMIT_WINDOW + REVEAL_WINDOW))
+claim_window = 10
 engine = "http://$engine"
 
 [index]

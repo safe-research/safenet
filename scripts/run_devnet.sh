@@ -412,6 +412,7 @@ for sentinel in "${SENTINELS[@]}"; do
         echo "[sentinel]"
         echo "fee_token = \"${fee_token}\""
         echo "voting_window = 1"
+        echo "claim_window = 10"
         echo "engine = \"http://localhost:${engine_port}\""
         echo
         echo "[observability]"

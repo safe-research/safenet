@@ -34,6 +34,7 @@ pub struct SentinelService {
     signer: Signer,
     chain_id: U256,
     voting_window: u64,
+    claim_window: u64,
     /// Checks proposed transactions.
     engine: EngineClient,
     /// Maximum time the sentinel engine has to answer a security check.
@@ -58,6 +59,9 @@ pub struct SentinelTransition {
     /// The number of blocks a request without an onchain commit deadline is
     /// kept alive for before being cleaned up.
     voting_window: u64,
+    /// The number of blocks to wait for our own `Claimed` after queuing a
+    /// `Claim` before giving up on it with an error.
+    claim_window: u64,
 }
 
 /// Encodes [`SentinelAction`]s into the transactions that commit, reveal,
@@ -80,6 +84,7 @@ impl SentinelService {
         signer: Signer,
         chain_id: U256,
         voting_window: u64,
+        claim_window: u64,
         engine: EngineClient,
         engine_timeout: Duration,
         verdicts: VerdictStore,
@@ -91,6 +96,7 @@ impl SentinelService {
             signer,
             chain_id,
             voting_window,
+            claim_window,
             engine,
             engine_timeout,
             verdicts,
@@ -99,6 +105,15 @@ impl SentinelService {
 }
 
 impl SentinelTransition {
+    /// The state of a request whose `Claim` is queued in `block`: it stays
+    /// tracked until our own `Claimed` arrives, with an error logged once if
+    /// the claim window passes without it.
+    fn claiming(&self, block: u64) -> RequestState {
+        RequestState::Claiming {
+            deadline: Some(block.saturating_add(self.claim_window)),
+        }
+    }
+
     /// Starts tracking a newly proposed oracle transaction and requests a
     /// verdict from the configured sentinel engine via
     /// [`effect::Effect::EngineCheck`]. `block_timestamp` is the timestamp of
@@ -443,8 +458,9 @@ impl SentinelTransition {
 
     /// Drops requests we never got to commit on in time, reveals (or drops)
     /// requests past their commit deadline, finalizes requests past their
-    /// reveal deadline, and times out and claims disputes past their
-    /// arbitration deadline.
+    /// reveal deadline, times out and claims disputes past their
+    /// arbitration deadline, and gives up on claims whose own `Claimed`
+    /// never arrived within the claim window.
     fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Commands<State, Self>) {
         let mut actions = Vec::new();
 
@@ -556,9 +572,9 @@ impl SentinelTransition {
                 // Our `timeoutArbitration()` reverts if another sentinel's
                 // (or a late ruling) lands first, but the `claim()` queued
                 // behind it succeeds either way, since the request is no
-                // longer `FROZEN` by then. So there is nothing left to wait
-                // on, and the request is dropped; the `ArbitrationTimedOut`
-                // that follows is ignored as untracked.
+                // longer `FROZEN` by then. So only our own `Claimed` is left
+                // to wait on; the `ArbitrationTimedOut` that follows is
+                // ignored as already claiming.
                 crate::metrics::requests_resolved_total(ResolvedOutcome::Timeout).increment(1);
                 actions.extend([
                     SentinelAction {
@@ -572,7 +588,29 @@ impl SentinelTransition {
                     }
                     .into(),
                 ]);
-                false
+                *entry = self.claiming(block);
+                true
+            }
+            RequestState::Claiming { deadline } => {
+                let Some(claim_deadline) = *deadline else {
+                    return true;
+                };
+                if block <= claim_deadline {
+                    return true;
+                }
+                // No retry: the transaction queue already resubmits `Claim`
+                // until it is mined, so a missing `Claimed` means it
+                // reverted or the queue is stuck, which needs an operator.
+                // The request stays tracked until our `Claimed` arrives (e.g.
+                // after a manual recovery); the deadline is cleared so the
+                // error is only logged once.
+                tracing::error!(
+                    request_id = %id,
+                    deadline = claim_deadline,
+                    "claim deadline passed without our own claim landing; the bond must be recovered manually"
+                );
+                *deadline = None;
+                true
             }
         });
 
@@ -593,6 +631,7 @@ impl SentinelTransition {
     fn handle_resolved(
         &self,
         mut state: State,
+        block: u64,
         event: SentinelOracle::DisputeResolved,
     ) -> (State, Commands<State, Self>) {
         let (approve, slash_amount) = match state.0.remove(&event.requestId) {
@@ -627,6 +666,7 @@ impl SentinelTransition {
             crate::metrics::dispute_bond_slashed_amount().record(slash_amount.to::<u128>() as f64);
         }
 
+        state.0.insert(event.requestId, self.claiming(block));
         let actions = vec![
             SentinelAction {
                 kind: SentinelActionKind::Claim {
@@ -650,10 +690,21 @@ impl SentinelTransition {
     fn handle_arbitration_timeout(
         &self,
         mut state: State,
+        block: u64,
         request_id: B256,
     ) -> (State, Commands<State, Self>) {
         match state.0.remove(&request_id) {
             Some(RequestState::WaitingForDisputeResolution { .. }) => {}
+            // Expected after our own arbitration timeout at the deadline
+            // (see `handle_block_advance`): our `Claim` is already queued.
+            Some(entry @ RequestState::Claiming { .. }) => {
+                tracing::trace!(
+                    request_id = %request_id,
+                    "ignoring arbitration timeout for a request that is already claiming"
+                );
+                state.0.insert(request_id, entry);
+                return (state, Vec::new());
+            }
             // Still claim: the oracle is authoritative that this request
             // timed out, and having any tracked entry at all means we most
             // likely posted a bond for it, even though our own local FSM
@@ -676,6 +727,7 @@ impl SentinelTransition {
 
         crate::metrics::requests_resolved_total(ResolvedOutcome::Timeout).increment(1);
 
+        state.0.insert(request_id, self.claiming(block));
         let actions = vec![
             SentinelAction {
                 kind: SentinelActionKind::Claim { id: request_id },
@@ -686,19 +738,36 @@ impl SentinelTransition {
         (state, actions)
     }
 
-    /// Records this sentinel's own fee reward once a `claim()` it (or
-    /// anyone else) submitted lands onchain. No request state is touched:
-    /// by the time a request is claimable, the handler that queued `Claim`
-    /// has already removed its tracked entry, so
-    /// `feeReward` is read directly off the event rather than correlated
-    /// against anything retained locally.
+    /// Our own `claim()` landed onchain: records the fee reward and stops
+    /// tracking the request, since a successful claim ends our involvement
+    /// in it. The request is expected to be waiting in `Claiming`. Other
+    /// sentinels' claims are ignored.
     fn handle_claimed(
         &self,
-        state: State,
+        mut state: State,
         event: SentinelOracle::Claimed,
     ) -> (State, Commands<State, Self>) {
-        if event.sentinel == self.signer.address() && !event.feeReward.is_zero() {
+        if event.sentinel != self.signer.address() {
+            return (state, Vec::new());
+        }
+        if !event.feeReward.is_zero() {
             crate::metrics::fee_reward_amount().record(event.feeReward.to::<u128>() as f64);
+        }
+        match state.0.remove(&event.requestId) {
+            Some(RequestState::Claiming { .. }) => {}
+            Some(entry) => {
+                tracing::warn!(
+                    request_id = %event.requestId,
+                    state = entry.name(),
+                    "own claim for a request that is not claiming"
+                );
+            }
+            None => {
+                tracing::trace!(
+                    request_id = %event.requestId,
+                    "ignoring own claim for an untracked request"
+                );
+            }
         }
         (state, Vec::new())
     }
@@ -719,8 +788,21 @@ impl SentinelTransition {
     fn handle_request_timed_out(
         &self,
         mut state: State,
+        block: u64,
         event: SentinelOracle::RequestTimedOut,
     ) -> (State, Commands<State, Self>) {
+        // Our `Claim` is already queued; keep waiting for our own `Claimed`
+        // rather than dropping the request below.
+        if matches!(
+            state.0.get(&event.requestId),
+            Some(RequestState::Claiming { .. })
+        ) {
+            tracing::warn!(
+                request_id = %event.requestId,
+                "ignoring request timeout for a request that is already claiming"
+            );
+            return (state, Vec::new());
+        }
         let Some(entry) = state.0.remove(&event.requestId) else {
             tracing::trace!(
                 request_id = %event.requestId,
@@ -743,6 +825,7 @@ impl SentinelTransition {
             return (state, Vec::new());
         }
         crate::metrics::requests_resolved_total(ResolvedOutcome::Timeout).increment(1);
+        state.0.insert(event.requestId, self.claiming(block));
         let actions = vec![
             SentinelAction {
                 kind: SentinelActionKind::Claim {
@@ -777,6 +860,18 @@ impl SentinelTransition {
         mut state: State,
         event: SentinelOracle::DisputeTriggered,
     ) -> (State, Commands<State, Self>) {
+        // Our `Claim` is already queued; keep waiting for our own `Claimed`
+        // rather than dropping the request below.
+        if matches!(
+            state.0.get(&event.requestId),
+            Some(RequestState::Claiming { .. })
+        ) {
+            tracing::warn!(
+                request_id = %event.requestId,
+                "ignoring dispute trigger for a request that is already claiming"
+            );
+            return (state, Vec::new());
+        }
         let Some(entry) = state.0.remove(&event.requestId) else {
             tracing::trace!(
                 request_id = %event.requestId,
@@ -826,8 +921,21 @@ impl SentinelTransition {
     fn handle_oracle_result(
         &self,
         mut state: State,
+        block: u64,
         event: SentinelOracle::OracleResult,
     ) -> (State, Commands<State, Self>) {
+        // Our `Claim` is already queued; keep waiting for our own `Claimed`
+        // rather than dropping the request below.
+        if matches!(
+            state.0.get(&event.requestId),
+            Some(RequestState::Claiming { .. })
+        ) {
+            tracing::warn!(
+                request_id = %event.requestId,
+                "ignoring oracle result for a request that is already claiming"
+            );
+            return (state, Vec::new());
+        }
         let Some(entry) = state.0.remove(&event.requestId) else {
             tracing::trace!(
                 request_id = %event.requestId,
@@ -855,6 +963,7 @@ impl SentinelTransition {
             ResolvedOutcome::RevealMissed
         };
         crate::metrics::requests_resolved_total(outcome).increment(1);
+        state.0.insert(event.requestId, self.claiming(block));
         let actions = vec![
             SentinelAction {
                 kind: SentinelActionKind::Claim {
@@ -979,22 +1088,22 @@ impl StateTransition<State> for SentinelTransition {
                     )) => self.handle_revealed(state, event),
                     SentinelEvents::Oracle(
                         SentinelOracle::SentinelOracleEvents::RequestTimedOut(event),
-                    ) => self.handle_request_timed_out(state, event),
+                    ) => self.handle_request_timed_out(state, block, event),
                     SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::OracleResult(
                         event,
-                    )) => self.handle_oracle_result(state, event),
+                    )) => self.handle_oracle_result(state, block, event),
                     SentinelEvents::Oracle(
                         SentinelOracle::SentinelOracleEvents::DisputeTriggered(event),
                     ) => self.handle_dispute_triggered(state, event),
                     SentinelEvents::Oracle(
                         SentinelOracle::SentinelOracleEvents::DisputeResolved(event),
-                    ) => self.handle_resolved(state, event),
+                    ) => self.handle_resolved(state, block, event),
                     SentinelEvents::Oracle(
                         SentinelOracle::SentinelOracleEvents::ArbitrationTimedOut(event),
-                    ) => self.handle_arbitration_timeout(state, event.requestId),
+                    ) => self.handle_arbitration_timeout(state, block, event.requestId),
                     SentinelEvents::Oracle(
                         SentinelOracle::SentinelOracleEvents::DisputeOutOfScope(event),
-                    ) => self.handle_arbitration_timeout(state, event.requestId),
+                    ) => self.handle_arbitration_timeout(state, block, event.requestId),
                     SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Claimed(
                         event,
                     )) => self.handle_claimed(state, event),
@@ -1041,6 +1150,7 @@ impl Service for SentinelService {
             signer,
             chain_id,
             voting_window,
+            claim_window,
             engine,
             engine_timeout,
             verdicts,
@@ -1052,6 +1162,7 @@ impl Service for SentinelService {
                 signer,
                 chain_id,
                 voting_window,
+                claim_window,
             },
             DefaultInitializer,
             effect::Handler::new(engine, engine_timeout, verdicts),
@@ -1088,6 +1199,7 @@ mod tests {
     const OTHER: Address = address!("8888888888888888888888888888888888888888");
     const CHAIN_ID: u64 = 1;
     const VOTING_WINDOW: u64 = 10;
+    const CLAIM_WINDOW: u64 = 5;
     /// The reason attached to an engine-approved transaction.
     const REASON: &str = "";
 
@@ -1109,6 +1221,7 @@ mod tests {
             signer: self_signer(),
             chain_id: U256::from(CHAIN_ID),
             voting_window: VOTING_WINDOW,
+            claim_window: CLAIM_WINDOW,
         }
     }
 
@@ -1403,6 +1516,29 @@ mod tests {
         );
     }
 
+    /// Asserts that `id` waits in `Claiming` for the claim window opened by
+    /// the `Claim` queued in `block`, and is only removed once our own
+    /// `Claimed` arrives.
+    fn assert_claiming_until_own_claim(
+        svc: &SentinelTransition,
+        state: State,
+        id: B256,
+        block: u64,
+    ) {
+        assert_eq!(
+            state.0[&id],
+            RequestState::Claiming {
+                deadline: Some(block + CLAIM_WINDOW),
+            },
+        );
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(block + 1, claimed_event(id, self_address(), 500, 100))),
+        );
+        assert!(commands.is_empty());
+        assert!(!state.0.contains_key(&id));
+    }
+
     /// Full happy path: propose, commit (from two sentinels), reveal (from
     /// two sentinels) — unanimously in favor — and finalize/claim as soon as
     /// the last reveal lands, without waiting out the reveal window.
@@ -1611,7 +1747,6 @@ mod tests {
             state,
             Message::Event(log(24, oracle_result_event(id, true))),
         );
-        assert!(!state.0.contains_key(&id));
         assert_eq!(
             commands,
             vec![
@@ -1622,6 +1757,7 @@ mod tests {
                 .into(),
             ],
         );
+        assert_claiming_until_own_claim(&svc, state, id, 24);
     }
 
     /// Regression for a production incident: another sentinel's commit
@@ -1919,7 +2055,6 @@ mod tests {
 
         let (state, commands) = svc.apply_transition(state, Message::Event(log(50, event)));
 
-        assert!(!state.0.contains_key(&id));
         assert_eq!(
             commands,
             vec![
@@ -1930,6 +2065,7 @@ mod tests {
                 .into(),
             ],
         );
+        assert_claiming_until_own_claim(&svc, state, id, 50);
     }
 
     /// Bond slashing is partial, so a losing vote still leaves an unslashed
@@ -1942,7 +2078,6 @@ mod tests {
 
         let (state, commands) = svc.apply_transition(state, Message::Event(log(50, event)));
 
-        assert!(!state.0.contains_key(&id));
         assert_eq!(
             commands,
             vec![
@@ -1953,6 +2088,7 @@ mod tests {
                 .into(),
             ],
         );
+        assert_claiming_until_own_claim(&svc, state, id, 50);
     }
 
     /// `timeoutArbitration()` -- nobody rules within `ARBITRATION_TIMEOUT` --
@@ -1965,7 +2101,6 @@ mod tests {
 
         let (state, commands) = svc.apply_transition(state, Message::Event(log(50, event)));
 
-        assert!(!state.0.contains_key(&id));
         assert_eq!(
             commands,
             vec![
@@ -1976,6 +2111,7 @@ mod tests {
                 .into(),
             ],
         );
+        assert_claiming_until_own_claim(&svc, state, id, 50);
     }
 
     /// `markOutOfScope` -- the arbitrator declining outright -- reuses the
@@ -1988,7 +2124,6 @@ mod tests {
 
         let (state, commands) = svc.apply_transition(state, Message::Event(log(50, event)));
 
-        assert!(!state.0.contains_key(&id));
         assert_eq!(
             commands,
             vec![
@@ -1999,38 +2134,128 @@ mod tests {
                 .into(),
             ],
         );
+        assert_claiming_until_own_claim(&svc, state, id, 50);
     }
 
-    /// `Claimed` carries no request state to correlate against (the tracked
-    /// entry is already gone by the time a request is claimable), so it
-    /// must be a pure pass-through regardless of whose claim it is.
+    /// While `Claiming`, only our own `Claimed` removes the request. Another
+    /// sentinel's `Claimed` leaves it alone, and an unexpected terminal event
+    /// neither queues a second `Claim` nor drops the request.
     #[test]
-    fn claimed_event_never_mutates_state() {
-        let svc = transition();
-        let id = B256::repeat_byte(0x0f);
-        let mut state = State::default();
-        state.0.insert(
-            id,
-            RequestState::WaitingForRequest {
-                approve: true,
-                reason: String::new(),
-                deadline: 10,
+    fn flow_claiming_waits_for_our_own_claim() {
+        let (svc, id, state) = setup_dispute();
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                50,
+                dispute_resolved_event(id, OnchainRequestState::RESOLVED_APPROVED, U256::ZERO),
+            )),
+        );
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+        let claiming = state.clone();
+
+        let mut state = state;
+        for event in [
+            dispute_resolved_event(id, OnchainRequestState::RESOLVED_APPROVED, U256::ZERO),
+            dispute_triggered_event(id, 60),
+            arbitration_timed_out_event(id),
+            dispute_out_of_scope_event(id),
+            request_timed_out_event(id),
+            oracle_result_event(id, true),
+            claimed_event(id, OTHER, 500, 100),
+        ] {
+            let commands;
+            (state, commands) = svc.apply_transition(state, Message::Event(log(51, event)));
+            assert!(commands.is_empty());
+            assert_eq!(state, claiming);
+        }
+
+        assert_claiming_until_own_claim(&svc, state, id, 50);
+    }
+
+    /// If our own `Claimed` never arrives within the claim window, no
+    /// second `Claim` is queued and the error is only logged once (the
+    /// deadline is cleared), but the request stays tracked until our own
+    /// `Claimed` finally lands.
+    #[test]
+    fn flow_claim_deadline_keeps_the_request_without_retrying() {
+        let (svc, id, state) = setup_dispute();
+        let event = dispute_resolved_event(id, OnchainRequestState::RESOLVED_APPROVED, U256::ZERO);
+        let (state, _) = svc.apply_transition(state, Message::Event(log(50, event)));
+
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(50 + CLAIM_WINDOW));
+        assert!(commands.is_empty());
+        assert_eq!(
+            state.0[&id],
+            RequestState::Claiming {
+                deadline: Some(50 + CLAIM_WINDOW),
             },
         );
 
-        let (after_self, commands) = svc.apply_transition(
-            state.clone(),
-            Message::Event(log(1, claimed_event(id, self_address(), 500, 100))),
-        );
+        let (state, commands) =
+            svc.apply_transition(state, Message::NewBlock(50 + CLAIM_WINDOW + 1));
         assert!(commands.is_empty());
-        assert_eq!(after_self, state);
+        let expired = RequestState::Claiming { deadline: None };
+        assert_eq!(state.0[&id], expired);
 
-        let (after_other, commands) = svc.apply_transition(
-            state.clone(),
-            Message::Event(log(1, claimed_event(id, OTHER, 500, 100))),
+        let (state, commands) =
+            svc.apply_transition(state, Message::NewBlock(50 + 2 * CLAIM_WINDOW + 2));
+        assert!(commands.is_empty());
+        assert_eq!(state.0[&id], expired);
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                50 + 2 * CLAIM_WINDOW + 3,
+                claimed_event(id, self_address(), 500, 100),
+            )),
         );
         assert!(commands.is_empty());
-        assert_eq!(after_other, state);
+        assert!(state.0.is_empty());
+    }
+
+    /// Past the arbitration deadline without a ruling, we time the
+    /// arbitration out and claim ourselves, then wait for our own `Claimed`;
+    /// the `ArbitrationTimedOut` that follows queues no second `Claim`.
+    #[test]
+    fn flow_arbitration_deadline_times_out_and_claims() {
+        let (svc, id, state) = setup_dispute();
+
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(60));
+        assert!(commands.is_empty());
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(61));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::TimeoutArbitration { id },
+                    expires_at: None,
+                }
+                .into(),
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(62, arbitration_timed_out_event(id))),
+        );
+        assert!(commands.is_empty());
+
+        assert_claiming_until_own_claim(&svc, state, id, 61);
     }
 
     /// Nobody reveals at all — a genuine timeout with no other sentinel's
@@ -2112,7 +2337,6 @@ mod tests {
         // commitment.
         let (state, commands) =
             svc.apply_transition(state, Message::Event(log(42, request_timed_out_event(id))));
-        assert!(!state.0.contains_key(&id));
         assert_eq!(
             commands,
             vec![
@@ -2123,6 +2347,7 @@ mod tests {
                 .into(),
             ],
         );
+        assert_claiming_until_own_claim(&svc, state, id, 42);
     }
 
     /// Our own reveal never lands, but the other sentinel's does. Our bond
@@ -2198,7 +2423,6 @@ mod tests {
             state,
             Message::Event(log(42, oracle_result_event(id, true))),
         );
-        assert!(!state.0.contains_key(&id));
         assert_eq!(
             commands,
             vec![
@@ -2209,6 +2433,7 @@ mod tests {
                 .into(),
             ],
         );
+        assert_claiming_until_own_claim(&svc, state, id, 42);
     }
 
     /// Same recovery guarantee as
@@ -2272,7 +2497,6 @@ mod tests {
             Message::Event(log(22, oracle_result_event(id, true))),
         );
 
-        assert!(!state.0.contains_key(&id));
         assert_eq!(
             commands,
             vec![
@@ -2283,6 +2507,7 @@ mod tests {
                 .into(),
             ],
         );
+        assert_claiming_until_own_claim(&svc, state, id, 22);
     }
 
     /// A resume without a matching outstanding engine check can arrive after
