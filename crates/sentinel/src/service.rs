@@ -408,7 +408,22 @@ impl SentinelTransition {
         if event.sentinel == self.signer.address() {
             *self_revealed = true;
         }
-        if *revealed_count < *committed_count {
+        // Only finalize early on an exact match: if the counts somehow
+        // overshoot, the request waits for the reveal deadline instead.
+        if *revealed_count != *committed_count {
+            return (state, Vec::new());
+        }
+        // `CollectingVotes` is only reached once our own commit landed, so
+        // every commitment being revealed implies ours was too. If it wasn't,
+        // the local counts disagree with the onchain ones; wait for the
+        // reveal deadline instead of finalizing early.
+        if !*self_revealed {
+            tracing::warn!(
+                request_id = %event.requestId,
+                committed_count = *committed_count,
+                revealed_count = *revealed_count,
+                "all commitments revealed without our own reveal"
+            );
             return (state, Vec::new());
         }
         let (update, actions) = self.finalize(entry, event.requestId);
@@ -1751,6 +1766,96 @@ mod tests {
             vec![
                 SentinelAction {
                     kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+    }
+
+    /// Voting only ends early when the reveal tally exactly matches the
+    /// commit tally *and* includes our own reveal. Here a re-delivered reveal
+    /// from the other sentinel makes the counts match before ours is seen,
+    /// and our reveal then overshoots them; neither finalizes early, so the
+    /// request waits for the reveal deadline instead of being dropped.
+    #[test]
+    fn flow_mismatched_reveal_tally_waits_for_reveal_deadline() {
+        let svc = transition();
+        let safe_tx_hash = B256::repeat_byte(0x14);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                2,
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
+            )),
+        );
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(3, committed_event(id, self_address(), 500u64))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(4, committed_event(id, OTHER, 500u64))),
+        );
+        let (state, _) = svc.apply_transition(state, Message::NewBlock(21));
+
+        // The other sentinel's reveal, delivered twice, matches the commit
+        // count without our own reveal: no early finalize.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(22, revealed_event(id, OTHER, true, 500u64))),
+        );
+        assert!(commands.is_empty());
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(22, revealed_event(id, OTHER, true, 500u64))),
+        );
+        assert!(commands.is_empty());
+
+        // Our own reveal overshoots the commit count: still no early
+        // finalize.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(23, revealed_event(id, self_address(), true, 500u64))),
+        );
+        assert!(commands.is_empty());
+        assert_eq!(
+            state.0[&id],
+            RequestState::CollectingVotes {
+                approve: true,
+                slash_amount: U96::from(500),
+                reveal_deadline: 40,
+                committed_count: 2,
+                revealed_count: 3,
+                approve_count: 3,
+                deny_count: 0,
+                self_revealed: true,
+            },
+        );
+
+        // The reveal deadline finalizes.
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(40));
+        assert!(commands.is_empty());
+        let (_, commands) = svc.apply_transition(state, Message::NewBlock(41));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Finalize { id },
                     expires_at: None,
                 }
                 .into(),
