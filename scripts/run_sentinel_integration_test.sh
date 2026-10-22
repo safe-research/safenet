@@ -38,7 +38,14 @@ CHARTER_ENS="safenet-charter.safe.eth"
 ARBITRATION_TIMEOUT=20
 FUNDING_ETH=1ether
 FUNDING_TOKEN=1000000
-# Anvil account 0 — deployer, MyToken owner, and SentinelOracle arbitrator.
+# The fee token is the production one, Gnosis Chain's USDC.e: Circle's
+# `FiatTokenProxy` in front of a `FiatTokenV2_2` implementation, installed at
+# their production addresses (see step 3), so the sentinels pay the same gas
+# for approvals and bond transfers as they do onchain.
+FEE_TOKEN=0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0
+FEE_TOKEN_IMPLEMENTATION=0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7
+# Anvil account 0 — deployer, fee token master minter, and SentinelOracle
+# arbitrator.
 DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 DEPLOYER_PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 TX_SAFE=0x1111111111111111111111111111111111111111
@@ -75,11 +82,33 @@ PIDS+=("$!")
 sleep 2
 
 # --- 3. Deploy contracts ---
-echo "Deploying fee token..."
-env FACTORY=2 \
-	forge script --root "$ROOT/contracts" DeployERC20Script --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
-FEE_TOKEN=$(jq -r '.returns.erc20.value' "$ROOT/contracts/build/broadcast/DeployERC20.s.sol/$CHAIN_ID/run-latest.json")
-echo "Fee token deployed at $FEE_TOKEN"
+echo "Installing the USDC.e fee token..."
+cast rpc --rpc-url "$RPC_URL" anvil_setCode "$FEE_TOKEN" "$(cat "$ROOT/scripts/bytecode/USDCProxy.hex")" >/dev/null
+cast rpc --rpc-url "$RPC_URL" anvil_setCode "$FEE_TOKEN_IMPLEMENTATION" "$(cat "$ROOT/scripts/bytecode/USDC.hex")" >/dev/null
+# `setCode` leaves the proxy with empty storage, so seed the slots the
+# production deployment's `initialize*` calls would have written, mirroring
+# their values onchain except for the master minter, which is the deployer
+# here so it can mint the fee tokens funded in step 4.
+set_fee_token_storage() {
+	cast rpc --rpc-url "$RPC_URL" anvil_setStorageAt "$FEE_TOKEN" "$1" "$2" >/dev/null
+}
+# `FiatTokenProxy` admin and implementation (ZeppelinOS unstructured storage).
+set_fee_token_storage 0x10d6a54a4754c8869d6886b5f5d7fbfa5b4522237ea5c60d11bc4e7a1ff9390b \
+	0x0000000000000000000000007a48dac683da91e4faa5ab13d91ab5fd170875bd
+set_fee_token_storage 0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3 \
+	"$(cast to-uint256 "$FEE_TOKEN_IMPLEMENTATION")"
+# `FiatTokenV2_2` state: owner, pauser (unpaused), blacklister, name, symbol,
+# decimals, currency, master minter (initialized), and initialized version.
+set_fee_token_storage 0 0x000000000000000000000000458cd345b4c05e8df39d0a07220feb4ec19f5e6f
+set_fee_token_storage 1 0x000000000000000000000000458cd345b4c05e8df39d0a07220feb4ec19f5e6f
+set_fee_token_storage 2 0x000000000000000000000000458cd345b4c05e8df39d0a07220feb4ec19f5e6f
+set_fee_token_storage 4 0x4272696467656420555344432028476e6f73697329000000000000000000002a
+set_fee_token_storage 5 0x555344432e65000000000000000000000000000000000000000000000000000c
+set_fee_token_storage 6 0x0000000000000000000000000000000000000000000000000000000000000006
+set_fee_token_storage 7 0x5553440000000000000000000000000000000000000000000000000000000006
+set_fee_token_storage 8 "0x000000000000000000000001${DEPLOYER:2}"
+set_fee_token_storage 18 0x0000000000000000000000000000000000000000000000000000000000000003
+echo "Fee token installed at $FEE_TOKEN ($(cast call --rpc-url "$RPC_URL" "$FEE_TOKEN" "symbol()(string)"))"
 
 echo "Deploying test consensus..."
 forge script --root "$ROOT/contracts" DeployTestConsensusScript --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --broadcast
@@ -121,10 +150,12 @@ echo "Sentinel B: $SENTINEL_B_ADDR"
 echo "Sponsor:    $SPONSOR_ADDR"
 
 echo "Funding accounts with ETH and the fee token..."
+cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" \
+	"$FEE_TOKEN" "configureMinter(address,uint256)" "$DEPLOYER" "$((FUNDING_TOKEN * 3))" >/dev/null
 for addr in "$SENTINEL_A_ADDR" "$SENTINEL_B_ADDR" "$SPONSOR_ADDR"; do
 	cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --value "$FUNDING_ETH" "$addr" >/dev/null
 	cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" \
-		"$FEE_TOKEN" "transfer(address,uint256)" "$addr" "$FUNDING_TOKEN" >/dev/null
+		"$FEE_TOKEN" "mint(address,uint256)" "$addr" "$FUNDING_TOKEN" >/dev/null
 done
 
 echo "Deploying transaction token..."
