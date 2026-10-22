@@ -47,8 +47,21 @@ pub struct SentinelConfig {
     /// The number of blocks a request without an onchain commit deadline is
     /// kept alive for before being cleaned up.
     pub voting_window: u64,
+    /// The number of blocks to wait for our own `Claimed` event after
+    /// queuing a `claim()`. If it passes without one, an error is logged
+    /// once so the bond can be recovered manually; the request stays
+    /// tracked until our own `Claimed` arrives.
+    #[serde(default = "SentinelConfig::default_claim_window")]
+    pub claim_window: u64,
     /// Base URL of the transaction-verification engine used by this sentinel.
     pub engine: Url,
+}
+
+impl SentinelConfig {
+    /// About one hour on Gnosis Chain.
+    const fn default_claim_window() -> u64 {
+        720
+    }
 }
 
 impl Config {
@@ -97,6 +110,7 @@ mod tests {
             address!("0x0303030303030303030303030303030303030303")
         );
         assert_eq!(config.sentinel.voting_window, 100);
+        assert_eq!(config.sentinel.claim_window, 720);
         assert_eq!(config.sentinel.engine.as_str(), "http://localhost:5473/");
         assert_eq!(
             config.observability.log_filter.to_string(),
