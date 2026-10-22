@@ -40,6 +40,12 @@ fee_token = "0x0000000000000000000000000000000000000000"
 # from it, so set it to the oracle's commit window.
 voting_window = 6
 
+# The number of blocks to wait for this sentinel's own `Claimed` event after
+# it submits `claim()`. Once it passes, an error is logged so the bond can be
+# recovered manually, and the request is no longer tracked. Optional; falls
+# back to the default when omitted.
+# claim_window = 720   # default: 720 (~1 hour on Gnosis Chain)
+
 # Base URL of this sentinel's transaction-verification engine. The sentinel
 # appends the versioned security-check path itself.
 engine = "http://localhost:5473"
