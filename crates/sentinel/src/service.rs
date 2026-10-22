@@ -138,6 +138,7 @@ impl SentinelTransition {
             RequestState::WaitingForEngineCheck {
                 deadline,
                 request: None,
+                committed_count: 0,
             },
         );
         crate::metrics::requests_proposed_total().increment(1);
@@ -162,8 +163,12 @@ impl SentinelTransition {
         request_id: B256,
         outcome: CheckOutcome,
     ) -> (State, Commands<State, Self>) {
-        let (deadline, request) = match state.0.remove(&request_id) {
-            Some(RequestState::WaitingForEngineCheck { deadline, request }) => (deadline, request),
+        let (deadline, request, committed_count) = match state.0.remove(&request_id) {
+            Some(RequestState::WaitingForEngineCheck {
+                deadline,
+                request,
+                committed_count,
+            }) => (deadline, request, committed_count),
             Some(entry) => {
                 tracing::warn!(
                     %request_id,
@@ -188,7 +193,7 @@ impl SentinelTransition {
             }
         };
         if let Some(request) = request {
-            return self.commit_vote(state, request_id, approve, reason, request);
+            return self.commit_vote(state, request_id, approve, reason, request, committed_count);
         }
 
         state.0.insert(
@@ -203,7 +208,9 @@ impl SentinelTransition {
     }
 
     /// Starts voting on an open request by locking a bond behind a blind
-    /// commitment.
+    /// commitment. `committed_count` seeds the commitment tally with the
+    /// other sentinels' commits already seen while the engine check was
+    /// outstanding.
     fn commit_vote(
         &self,
         mut state: State,
@@ -211,6 +218,7 @@ impl SentinelTransition {
         approve: bool,
         reason: String,
         request: Request,
+        committed_count: u64,
     ) -> (State, Commands<State, Self>) {
         let Request {
             bond_target,
@@ -228,7 +236,7 @@ impl SentinelTransition {
                 slash_amount,
                 commit_deadline,
                 reveal_deadline,
-                committed_count: 0,
+                committed_count,
                 self_committed: false,
             },
         );
@@ -269,16 +277,18 @@ impl SentinelTransition {
         match state.0.remove(&request_id) {
             Some(RequestState::WaitingForRequest {
                 approve, reason, ..
-            }) => self.commit_vote(state, request_id, approve, reason, request),
+            }) => self.commit_vote(state, request_id, approve, reason, request, 0),
             Some(RequestState::WaitingForEngineCheck {
                 deadline,
                 request: None,
+                committed_count,
             }) => {
                 state.0.insert(
                     request_id,
                     RequestState::WaitingForEngineCheck {
                         deadline,
                         request: Some(request),
+                        committed_count,
                     },
                 );
                 (state, Vec::new())
@@ -300,41 +310,61 @@ impl SentinelTransition {
     }
 
     /// Tallies a commitment landing onchain, from any sentinel, for a
-    /// request we're still collecting commits for.
+    /// request that is open for commits -- including while our own engine
+    /// check is still outstanding, so the tally matches the onchain count.
     fn handle_committed(
         &self,
         mut state: State,
         event: SentinelOracle::Committed,
     ) -> (State, Commands<State, Self>) {
+        let is_self = event.sentinel == self.signer.address();
         let Some(entry) = state.0.get_mut(&event.requestId) else {
-            tracing::debug!(
-                request_id = %event.requestId,
-                "ignoring commitment for an untracked request"
-            );
+            if is_self {
+                tracing::warn!(
+                    request_id = %event.requestId,
+                    "ignoring own commitment for an untracked request"
+                );
+            } else {
+                tracing::debug!(
+                    request_id = %event.requestId,
+                    "ignoring commitment for an untracked request"
+                );
+            }
             return (state, Vec::new());
         };
-        let RequestState::CollectingCommitments {
-            committed_count,
-            self_committed,
-            ..
-        } = entry
-        else {
-            tracing::warn!(
-                request_id = %event.requestId,
-                state = entry.name(),
-                "ignoring unexpected commitment"
-            );
-            return (state, Vec::new());
-        };
-        *committed_count += 1;
-        // Guarded on the false-to-true edge (rather than just
-        // `event.sentinel == self.signer.address()`) so a re-delivered
-        // `Committed` log (e.g. replayed after a reorg restores this exact
-        // block range) can't double-count our own participation.
-        if !*self_committed && event.sentinel == self.signer.address() {
-            *self_committed = true;
-            crate::metrics::requests_participated_total().increment(1);
-            crate::metrics::bond_amount().record(event.bondAmount.to::<u128>() as f64);
+        match entry {
+            // We only commit once the engine check has completed, so this
+            // commitment is always another sentinel's.
+            RequestState::WaitingForEngineCheck {
+                request: Some(_),
+                committed_count,
+                ..
+            } => {
+                *committed_count += 1;
+            }
+            RequestState::CollectingCommitments {
+                committed_count,
+                self_committed,
+                ..
+            } => {
+                *committed_count += 1;
+                // Guarded on the false-to-true edge (rather than just
+                // `is_self`) so a re-delivered `Committed` log (e.g. replayed
+                // after a reorg restores this exact block range) can't
+                // double-count our own participation.
+                if !*self_committed && is_self {
+                    *self_committed = true;
+                    crate::metrics::requests_participated_total().increment(1);
+                    crate::metrics::bond_amount().record(event.bondAmount.to::<u128>() as f64);
+                }
+            }
+            _ => {
+                tracing::warn!(
+                    request_id = %event.requestId,
+                    state = entry.name(),
+                    "ignoring unexpected commitment"
+                );
+            }
         }
         (state, Vec::new())
     }
@@ -401,7 +431,9 @@ impl SentinelTransition {
         let mut actions = Vec::new();
 
         state.0.retain(|id, entry| match entry {
-            RequestState::WaitingForEngineCheck { deadline, request } => {
+            RequestState::WaitingForEngineCheck {
+                deadline, request, ..
+            } => {
                 block
                     <= request
                         .as_ref()
@@ -1353,6 +1385,7 @@ mod tests {
                     commit_deadline: 20,
                     reveal_deadline: 40,
                 }),
+                committed_count: 0,
             },
         );
 
@@ -1416,6 +1449,7 @@ mod tests {
             RequestState::WaitingForEngineCheck {
                 deadline: 1 + VOTING_WINDOW,
                 request: None,
+                committed_count: 0,
             },
         );
 
@@ -1602,6 +1636,116 @@ mod tests {
             Message::Event(log(24, oracle_result_event(id, true))),
         );
         assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+    }
+
+    /// Regression for a production incident: another sentinel's commit
+    /// landing while our engine check is still outstanding must be counted,
+    /// so the local tally matches the onchain one. Otherwise the other
+    /// sentinel's reveal alone matches the (short) commit count, voting ends
+    /// before our own reveal is seen, and the bonded request is dropped.
+    #[test]
+    fn flow_commitment_during_engine_check_is_counted() {
+        let svc = transition();
+        let safe_tx_hash = B256::repeat_byte(0x13);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                2,
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
+            )),
+        );
+
+        // The other sentinel commits before our engine check completes.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(3, committed_event(id, OTHER, 500u64))),
+        );
+        assert!(commands.is_empty());
+
+        // The engine approves; the commitment tally starts from the commit
+        // already seen onchain.
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(4, committed_event(id, self_address(), 500u64))),
+        );
+        assert_eq!(
+            state.0[&id],
+            RequestState::CollectingCommitments {
+                approve: true,
+                reason: REASON.to_string(),
+                slash_amount: U96::from(500),
+                commit_deadline: 20,
+                reveal_deadline: 40,
+                committed_count: 2,
+                self_committed: true,
+            },
+        );
+
+        // The other sentinel's reveal alone doesn't end voting.
+        let (state, _) = svc.apply_transition(state, Message::NewBlock(21));
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(22, revealed_event(id, OTHER, true, 500u64))),
+        );
+        assert!(commands.is_empty());
+        assert_eq!(
+            state.0[&id],
+            RequestState::CollectingVotes {
+                approve: true,
+                slash_amount: U96::from(500),
+                reveal_deadline: 40,
+                committed_count: 2,
+                revealed_count: 1,
+                approve_count: 1,
+                deny_count: 0,
+                self_revealed: false,
+            },
+        );
+
+        // Our own reveal completes the tally and finalizes, and the outcome
+        // claims our bond back.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(23, revealed_event(id, self_address(), true, 500u64))),
+        );
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Finalize { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+        let (_, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(24, oracle_result_event(id, true))),
+        );
         assert_eq!(
             commands,
             vec![
@@ -2120,6 +2264,7 @@ mod tests {
             RequestState::WaitingForEngineCheck {
                 deadline: 1 + VOTING_WINDOW,
                 request: None,
+                committed_count: 0,
             },
         );
 
@@ -2170,6 +2315,7 @@ mod tests {
             RequestState::WaitingForEngineCheck {
                 deadline: 10,
                 request: None,
+                committed_count: 0,
             },
         );
         state.0.insert(
@@ -2182,6 +2328,7 @@ mod tests {
                     commit_deadline: 20,
                     reveal_deadline: 40,
                 }),
+                committed_count: 0,
             },
         );
 
