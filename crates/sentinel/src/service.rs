@@ -380,6 +380,8 @@ impl SentinelTransition {
             return (state, Vec::new());
         };
         let RequestState::CollectingVotes {
+            approve,
+            slash_amount,
             committed_count,
             revealed_count,
             approve_count,
@@ -422,15 +424,20 @@ impl SentinelTransition {
             );
             return (state, Vec::new());
         }
-        let (update, actions) = self.finalize(entry, event.requestId);
-        match update {
-            None => {
-                state.0.remove(&event.requestId);
+        *entry = RequestState::WaitingForOutcome {
+            approve: *approve,
+            slash_amount: *slash_amount,
+            self_revealed: true,
+        };
+        let actions = vec![
+            SentinelAction {
+                kind: SentinelActionKind::Finalize {
+                    id: event.requestId,
+                },
+                expires_at: None,
             }
-            Some(entry) => {
-                state.0.insert(event.requestId, entry);
-            }
-        }
+            .into(),
+        ];
         (state, actions)
     }
 
@@ -501,20 +508,39 @@ impl SentinelTransition {
                 true
             }
             RequestState::CollectingVotes {
-                reveal_deadline, ..
+                approve,
+                slash_amount,
+                reveal_deadline,
+                self_revealed,
+                ..
             } => {
                 if block <= *reveal_deadline {
                     return true;
                 }
-                let (update, finalization) = self.finalize(entry, *id);
-                actions.extend(finalization);
-                match update {
-                    None => false,
-                    Some(new_state) => {
-                        *entry = new_state;
-                        true
-                    }
+                // Finalize even if our own reveal never landed: our commit
+                // did, so our bond is at stake, and its unslashed remainder
+                // (`bondAmount - slashAmount`) is only claimable once the
+                // request is finalized. If another sentinel finalizes first,
+                // ours reverts with `RequestNotPending`, which is harmless.
+                if !*self_revealed {
+                    tracing::warn!(
+                        request_id = %id,
+                        "reveal deadline passed without our own reveal; finalizing to reclaim the unslashed bond"
+                    );
                 }
+                actions.push(
+                    SentinelAction {
+                        kind: SentinelActionKind::Finalize { id: *id },
+                        expires_at: None,
+                    }
+                    .into(),
+                );
+                *entry = RequestState::WaitingForOutcome {
+                    approve: *approve,
+                    slash_amount: *slash_amount,
+                    self_revealed: *self_revealed,
+                };
+                true
             }
             RequestState::WaitingForOutcome { .. } => true,
             RequestState::WaitingForDisputeResolution {
@@ -662,8 +688,8 @@ impl SentinelTransition {
 
     /// Records this sentinel's own fee reward once a `claim()` it (or
     /// anyone else) submitted lands onchain. No request state is touched:
-    /// by the time a request is claimable, [`Self::finalize`]/
-    /// [`Self::handle_resolved`] have already removed its tracked entry, so
+    /// by the time a request is claimable, the handler that queued `Claim`
+    /// has already removed its tracked entry, so
     /// `feeReward` is read directly off the event rather than correlated
     /// against anything retained locally.
     fn handle_claimed(
@@ -675,66 +701,6 @@ impl SentinelTransition {
             crate::metrics::fee_reward_amount().record(event.feeReward.to::<u128>() as f64);
         }
         (state, Vec::new())
-    }
-
-    /// Shared finalize step, reached from either the early-finalize check
-    /// in [`Self::handle_revealed`] or the reveal-deadline branch in
-    /// [`Self::handle_block_advance`]; always exits `CollectingVotes` in
-    /// this same step, so a request's finalize step can only ever run once.
-    ///
-    /// Only submits `Finalize` when it's worth this sentinel spending the
-    /// gas: either it revealed its own vote, or nobody revealed at all (a
-    /// genuine timeout, where its still-`PENDING` commitment is only
-    /// reclaimable once *someone* finalizes). In every other case it
-    /// wouldn't benefit from triggering finalization, so the request is
-    /// dropped instead.
-    ///
-    /// Which outcome the submitted `finalize()` call actually reaches --
-    /// a dispute, a timeout, or a direct resolution -- is not predicted
-    /// here; [`RequestState::WaitingForOutcome`] waits on the oracle's own
-    /// `DisputeTriggered`/`RequestTimedOut`/`OracleResult` event to decide
-    /// that (see [`Self::handle_dispute_triggered`],
-    /// [`Self::handle_request_timed_out`], [`Self::handle_oracle_result`]).
-    fn finalize(
-        &self,
-        state: &RequestState,
-        request_id: B256,
-    ) -> (Option<RequestState>, Commands<State, Self>) {
-        let RequestState::CollectingVotes {
-            approve,
-            slash_amount,
-            revealed_count,
-            self_revealed,
-            ..
-        } = state
-        else {
-            return (None, Vec::new());
-        };
-        let approve = *approve;
-        let slash_amount = *slash_amount;
-        let timed_out = *revealed_count == 0;
-
-        // If this sentinel did not participate and it was not a timeout
-        // then no actions should be taken and the request should be dropped
-        if !*self_revealed && !timed_out {
-            return (None, Vec::new());
-        }
-
-        let actions = vec![
-            SentinelAction {
-                kind: SentinelActionKind::Finalize { id: request_id },
-                expires_at: None,
-            }
-            .into(),
-        ];
-
-        (
-            Some(RequestState::WaitingForOutcome {
-                approve,
-                slash_amount,
-            }),
-            actions,
-        )
     }
 
     /// `finalize()` found nobody had revealed onchain (or nobody had even
@@ -839,10 +805,9 @@ impl SentinelTransition {
     }
 
     /// `finalize()` found exactly one side established onchain -- expected
-    /// only from `WaitingForOutcome`, and only ever for a request where we
-    /// ourselves revealed (see the guard in [`Self::finalize`]), so our own
-    /// vote is guaranteed to be the winning side here (unlike
-    /// `DisputeTriggered`, only one side was ever established at all).
+    /// only from `WaitingForOutcome`. If our own reveal landed, our vote is
+    /// guaranteed to be the winning side (unlike `DisputeTriggered`, only
+    /// one side was ever established at all).
     ///
     /// A tracked request found in any *other* state here is unexpected, but
     /// the result is real onchain regardless -- claim anyway (see the
@@ -852,10 +817,9 @@ impl SentinelTransition {
     /// bond in the first place (`WaitingForEngineCheck`/`WaitingForRequest`)
     /// -- then there is nothing to claim, so we don't.
     ///
-    /// Recovering from an unexpected state also means the "guaranteed
-    /// winning side" reasoning above no longer holds: we may have committed
-    /// a bond but never gotten our own `Reveal` onchain before someone
-    /// else's `finalize()` resolved the request. That bond is still ours to
+    /// Our own `Reveal` may never have landed, either because we finalized
+    /// at the reveal deadline without it or because someone else's
+    /// `finalize()` resolved the request first. That bond is still ours to
     /// reclaim via `claim()`, but it comes back slashed, not rewarded, so
     /// [`RequestState::self_revealed`] picks the metric outcome instead of
     /// assuming a win.
@@ -1627,6 +1591,7 @@ mod tests {
             RequestState::WaitingForOutcome {
                 approve: true,
                 slash_amount: U96::from(500),
+                self_revealed: true,
             },
         );
         assert_eq!(
@@ -1923,6 +1888,7 @@ mod tests {
             RequestState::WaitingForOutcome {
                 approve: true,
                 slash_amount: U96::from(500),
+                self_revealed: true,
             }
         );
 
@@ -2127,6 +2093,7 @@ mod tests {
             RequestState::WaitingForOutcome {
                 approve: true,
                 slash_amount: U96::from(500),
+                self_revealed: false,
             },
         );
         assert_eq!(
@@ -2145,6 +2112,92 @@ mod tests {
         // commitment.
         let (state, commands) =
             svc.apply_transition(state, Message::Event(log(42, request_timed_out_event(id))));
+        assert!(!state.0.contains_key(&id));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+    }
+
+    /// Our own reveal never lands, but the other sentinel's does. Our bond
+    /// is still at stake (only `slashAmount` of it is slashed), so at the
+    /// reveal deadline we finalize instead of dropping the request, and
+    /// claim the unslashed remainder once the outcome is known.
+    #[test]
+    fn flow_finalizes_and_claims_when_our_own_reveal_is_missed() {
+        let svc = transition();
+        let safe_tx_hash = B256::repeat_byte(0x15);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                5,
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
+            )),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(6, committed_event(id, self_address(), 500u64))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(7, committed_event(id, OTHER, 500u64))),
+        );
+        let (state, _) = svc.apply_transition(state, Message::NewBlock(21));
+
+        // Only the other sentinel's reveal lands.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(22, revealed_event(id, OTHER, true, 500u64))),
+        );
+        assert!(commands.is_empty());
+
+        // The reveal deadline passes without our own reveal; we finalize
+        // anyway instead of dropping the request.
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(41));
+        assert_eq!(
+            state.0[&id],
+            RequestState::WaitingForOutcome {
+                approve: true,
+                slash_amount: U96::from(500),
+                self_revealed: false,
+            },
+        );
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Finalize { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+
+        // The other sentinel's vote wins; we claim what's left of our bond.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(42, oracle_result_event(id, true))),
+        );
         assert!(!state.0.contains_key(&id));
         assert_eq!(
             commands,
