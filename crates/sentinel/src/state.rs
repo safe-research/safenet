@@ -25,10 +25,15 @@ pub struct Request {
 pub enum SentinelRequestState {
     /// The proposal is waiting for its sentinel engine check to complete. If
     /// the request opens onchain first, its voting data is retained in
-    /// `request` until the check resumes.
+    /// `request` until the check resumes, and `committed_count` tallies the
+    /// other sentinels' `Committed` events that land in the meantime, so
+    /// `CollectingCommitments` starts from the onchain count. None of them
+    /// can be ours: we only commit once the check has completed.
     WaitingForEngineCheck {
         deadline: u64,
         request: Option<Request>,
+        #[serde(default)]
+        committed_count: u64,
     },
     /// Our vote intent is decided, but the oracle hasn't opened the request
     /// for voting yet. `deadline` is our own guessed cutoff, since the real
@@ -201,6 +206,7 @@ mod tests {
             SentinelRequestState::WaitingForEngineCheck {
                 deadline: 10,
                 request: None,
+                committed_count: 0,
             }
             .approve_and_slash_amount(),
             None,
@@ -274,6 +280,7 @@ mod tests {
             !SentinelRequestState::WaitingForEngineCheck {
                 deadline: 10,
                 request: None,
+                committed_count: 0,
             }
             .self_revealed()
         );
@@ -337,6 +344,24 @@ mod tests {
         assert_eq!(restored, state);
     }
 
+    /// Snapshots written before `WaitingForEngineCheck` tracked
+    /// `committed_count` still load, with no commits counted.
+    #[test]
+    fn waiting_for_engine_check_without_committed_count_deserializes() {
+        let restored: SentinelRequestState =
+            serde_json::from_str(r#"{"WaitingForEngineCheck":{"deadline":10,"request":null}}"#)
+                .unwrap();
+
+        assert_eq!(
+            restored,
+            SentinelRequestState::WaitingForEngineCheck {
+                deadline: 10,
+                request: None,
+                committed_count: 0,
+            },
+        );
+    }
+
     #[test]
     fn state_multiple_requests_in_different_phases() {
         let checking_id = B256::from([1u8; 32]);
@@ -349,6 +374,7 @@ mod tests {
             SentinelRequestState::WaitingForEngineCheck {
                 deadline: 10,
                 request: None,
+                committed_count: 0,
             },
         );
         state.0.insert(
@@ -361,6 +387,7 @@ mod tests {
                     commit_deadline: 30,
                     reveal_deadline: 40,
                 }),
+                committed_count: 0,
             },
         );
         state.0.insert(
