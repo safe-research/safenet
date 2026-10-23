@@ -114,9 +114,10 @@ pub enum SentinelRequestState {
     /// `DisputeTriggered` confirmed both sides had revealed votes onchain.
     /// `handle_resolved` always claims once the arbitrator settles it,
     /// regardless of which side won, but `approve`/`slash_amount` are kept
-    /// so it can also record whether *this* sentinel's vote matched the
-    /// arbitrated outcome and, if not, how much of its bond was slashed. With
-    /// an unknown vote (`approve: None`), nothing is recorded.
+    /// so it can record whether this sentinel's revealed vote matched the
+    /// arbitrated outcome and, if not, how much of its bond was slashed.
+    /// `self_revealed` distinguishes a non-revealer's slash from an arbitrated
+    /// win or loss, including when our intended vote is unknown.
     ///
     /// `arbitration_deadline` is `DisputeTriggered.deadline`: once it passes
     /// without a ruling, `handle_block_advance` submits the permissionless
@@ -127,6 +128,10 @@ pub enum SentinelRequestState {
         approve: Option<bool>,
         slash_amount: U96,
         arbitration_deadline: u64,
+        /// Whether our committed vote was revealed. Old snapshots retain the
+        /// previous assumption that we revealed before entering a dispute.
+        #[serde(default = "default_true")]
+        self_revealed: bool,
     },
     /// A `Claim` was queued and we are waiting for our own `Claimed` event,
     /// which removes the request. `deadline` is the block the `Claim` was
@@ -221,18 +226,20 @@ impl SentinelRequestState {
     /// this state hasn't gotten there yet. `WaitingForOutcome` reports the
     /// value carried over from `CollectingVotes`, since `finalize()` is
     /// submitted whether or not our own reveal landed.
-    /// `WaitingForDisputeResolution` defaults to `true`, though moot in
-    /// practice -- the oracle never re-emits `OracleResult` for a request
-    /// that's already `FROZEN`. `Claiming` is never read: the terminal
-    /// handlers return before reaching it.
+    /// `WaitingForDisputeResolution` preserves it to distinguish missed
+    /// reveals from arbitrated wins/losses and unslashed timeouts.
+    /// `Claiming` is never read: the terminal handlers return before reaching it.
     pub(crate) fn self_revealed(&self) -> bool {
         match self {
             Self::WaitingForEngineCheck { .. }
             | Self::WaitingForRequest { .. }
             | Self::CollectingCommitments { .. } => false,
             Self::CollectingVotes { self_revealed, .. }
-            | Self::WaitingForOutcome { self_revealed, .. } => *self_revealed,
-            Self::WaitingForDisputeResolution { .. } | Self::Claiming { .. } => true,
+            | Self::WaitingForOutcome { self_revealed, .. }
+            | Self::WaitingForDisputeResolution { self_revealed, .. } => *self_revealed,
+            Self::Claiming { .. } => {
+                unreachable!("claiming requests must be handled before checking reveal status")
+            }
         }
     }
 }
@@ -344,6 +351,7 @@ mod tests {
                 approve: Some(false),
                 slash_amount: U96::from(500),
                 arbitration_deadline: 60,
+                self_revealed: true,
             }
             .approve_and_slash_amount(),
             Some((Some(false), U96::from(500))),
@@ -469,19 +477,21 @@ mod tests {
         );
     }
 
-    /// A known vote is stored as a plain boolean, as it was before `approve`
-    /// became optional, so snapshots load in both directions. Only an
-    /// unknown vote is stored as `null`.
+    /// Old dispute snapshots load with a known vote and assumed reveal.
+    /// An unknown vote is still stored as `null`.
     #[test]
     fn dispute_resolution_approve_keeps_the_snapshot_format() {
         let known = SentinelRequestState::WaitingForDisputeResolution {
             approve: Some(true),
             slash_amount: U96::from(500),
             arbitration_deadline: 60,
+            self_revealed: true,
         };
         let json = r#"{"WaitingForDisputeResolution":{"approve":true,"slash_amount":"0x1f4","arbitration_deadline":60}}"#;
 
-        assert_eq!(serde_json::to_string(&known).unwrap(), json);
+        // Old snapshots have no reveal flag and default to revealed.
+        let serialized = serde_json::to_value(&known).unwrap();
+        assert_eq!(serialized["WaitingForDisputeResolution"]["approve"], true);
         assert_eq!(
             serde_json::from_str::<SentinelRequestState>(json).unwrap(),
             known
@@ -491,6 +501,7 @@ mod tests {
             approve: None,
             slash_amount: U96::from(500),
             arbitration_deadline: 60,
+            self_revealed: false,
         };
         let json = serde_json::to_string(&unknown).unwrap();
         assert!(json.contains(r#""approve":null"#));
