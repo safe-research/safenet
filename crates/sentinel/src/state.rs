@@ -98,7 +98,9 @@ pub enum SentinelRequestState {
     /// a known vote as a plain boolean, so ones written before it was
     /// optional still load.
     ///
-    /// `self_revealed` is carried over from `CollectingVotes`: `finalize()`
+    /// `self_revealed` is carried over from `CollectingVotes` (and is `false`
+    /// when finalizing an unrecovered verdict from `WaitingForEngineCheck`,
+    /// since nothing could be revealed): `finalize()`
     /// is submitted whether or not our own reveal landed, since the
     /// unslashed remainder of our bond is only claimable once the request
     /// is finalized. It only picks the `handle_oracle_result` metric
