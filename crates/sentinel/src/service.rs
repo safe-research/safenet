@@ -661,6 +661,7 @@ impl SentinelTransition {
             RequestState::WaitingForOutcome { .. } => true,
             RequestState::WaitingForDisputeResolution {
                 arbitration_deadline,
+                self_revealed,
                 ..
             } => {
                 // `<=` rather than `!= arbitration_deadline + 1`: warp-mode
@@ -675,7 +676,12 @@ impl SentinelTransition {
                 // longer `FROZEN` by then. So only our own `Claimed` is left
                 // to wait on; the `ArbitrationTimedOut` that follows is
                 // ignored as already claiming.
-                crate::metrics::requests_resolved_total(ResolvedOutcome::Timeout).increment(1);
+                let outcome = if *self_revealed {
+                    ResolvedOutcome::Timeout
+                } else {
+                    ResolvedOutcome::RevealMissed
+                };
+                crate::metrics::requests_resolved_total(outcome).increment(1);
                 actions.extend([
                     SentinelAction {
                         kind: SentinelActionKind::TimeoutArbitration { id: *id },
@@ -728,19 +734,21 @@ impl SentinelTransition {
     /// arbitrated `outcome` (`resolveDispute` only ever resolves to
     /// `RESOLVED_APPROVED`/`RESOLVED_DENIED`, never `TIMED_OUT`) and, if it
     /// lost, how much of its bond `slash_amount` says was slashed for it.
-    /// Neither is recorded when our vote is unknown (`approve: None`).
+    /// A missing reveal is recorded as `RevealMissed`, regardless of the
+    /// ruling, since a non-revealer is slashed even if its intended side won.
     fn handle_resolved(
         &self,
         mut state: State,
         block: u64,
         event: SentinelOracle::DisputeResolved,
     ) -> (State, Commands<State, Self>) {
-        let (approve, slash_amount) = match state.0.remove(&event.requestId) {
+        let (approve, slash_amount, self_revealed) = match state.0.remove(&event.requestId) {
             Some(RequestState::WaitingForDisputeResolution {
                 approve,
                 slash_amount,
+                self_revealed,
                 ..
-            }) => (approve, slash_amount),
+            }) => (approve, slash_amount, self_revealed),
             Some(entry) => {
                 tracing::warn!(
                     request_id = %event.requestId,
@@ -759,7 +767,9 @@ impl SentinelTransition {
             }
         };
 
-        if let Some(approve) = approve {
+        if !self_revealed {
+            crate::metrics::requests_resolved_total(ResolvedOutcome::RevealMissed).increment(1);
+        } else if let Some(approve) = approve {
             let won = approve == (event.outcome == OracleRequestState::RESOLVED_APPROVED);
             if won {
                 crate::metrics::requests_resolved_total(ResolvedOutcome::DisputeWon).increment(1);
@@ -788,9 +798,10 @@ impl SentinelTransition {
     /// `ARBITRATION_TIMEOUT`) or `DisputeOutOfScope` (the arbitrator
     /// declining outright). Both reuse the oracle's `TIMED_OUT` machinery
     /// (see the Solidity comments on `timeoutArbitration`/`markOutOfScope`):
-    /// no side is established, so every committed bond returns in full via
-    /// `claim()` -- unlike [`Self::handle_resolved`], there is no winning
-    /// side and no slash to record.
+    /// revealed bonds return in full via `claim()`, but non-revealers remain
+    /// slashed and are recorded as `RevealMissed`. There is no arbitrated
+    /// winning or losing side. Nothing is recorded from an unexpected state,
+    /// as it can't tell whether our reveal landed.
     fn handle_arbitration_timeout(
         &self,
         mut state: State,
@@ -798,7 +809,14 @@ impl SentinelTransition {
         request_id: B256,
     ) -> (State, Commands<State, Self>) {
         match state.0.remove(&request_id) {
-            Some(RequestState::WaitingForDisputeResolution { .. }) => {}
+            Some(RequestState::WaitingForDisputeResolution { self_revealed, .. }) => {
+                let outcome = if self_revealed {
+                    ResolvedOutcome::Timeout
+                } else {
+                    ResolvedOutcome::RevealMissed
+                };
+                crate::metrics::requests_resolved_total(outcome).increment(1);
+            }
             // Expected after our own arbitration timeout at the deadline
             // (see `handle_block_advance`): our `Claim` is already queued.
             Some(entry @ RequestState::Claiming { .. }) => {
@@ -828,8 +846,6 @@ impl SentinelTransition {
                 return (state, Vec::new());
             }
         }
-
-        crate::metrics::requests_resolved_total(ResolvedOutcome::Timeout).increment(1);
 
         state.0.insert(request_id, self.claiming(block));
         let actions = vec![
@@ -997,6 +1013,7 @@ impl SentinelTransition {
                     approve,
                     slash_amount,
                     arbitration_deadline: event.deadline,
+                    self_revealed: entry.self_revealed(),
                 },
             );
         }
@@ -2332,6 +2349,7 @@ mod tests {
                 approve: Some(true),
                 slash_amount: U96::from(500),
                 arbitration_deadline: 60,
+                self_revealed: true,
             }
         );
 
