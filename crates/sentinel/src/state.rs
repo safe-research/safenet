@@ -113,11 +113,20 @@ pub enum SentinelRequestState {
         arbitration_deadline: u64,
     },
     /// A `Claim` was queued and we are waiting for our own `Claimed` event,
-    /// which removes the request. `deadline` is the block the `Claim` was
-    /// queued in plus the configured claim window: once it passes without
-    /// our `Claimed`, `handle_block_advance` logs an error so the bond can be
-    /// recovered manually, and removes the request without retrying.
-    Claiming { deadline: u64 },
+    /// which is the only thing that removes the request. `deadline` is the
+    /// block the `Claim` was queued in plus the configured claim window. It
+    /// is an alerting threshold, not a retention limit: once it passes
+    /// without our `Claimed`, `handle_block_advance` logs an error once,
+    /// sets `overdue`, and keeps the request, so a bond that may still be
+    /// locked or claimable stays tracked, across restarts too, until our
+    /// own claim lands. No retry is queued. Snapshots written before
+    /// `overdue` was tracked load as not yet overdue, so the alert fires on
+    /// the next block past the deadline.
+    Claiming {
+        deadline: u64,
+        #[serde(default)]
+        overdue: bool,
+    },
 }
 
 fn default_true() -> bool {
@@ -421,6 +430,39 @@ mod tests {
                 approve: true,
                 slash_amount: U96::from(500),
                 self_revealed: true,
+            },
+        );
+    }
+
+    /// Snapshots written before `Claiming` tracked `overdue` still load, as
+    /// not yet overdue.
+    #[test]
+    fn claiming_without_overdue_deserializes() {
+        let restored: SentinelRequestState =
+            serde_json::from_str(r#"{"Claiming":{"deadline":10}}"#).unwrap();
+
+        assert_eq!(
+            restored,
+            SentinelRequestState::Claiming {
+                deadline: 10,
+                overdue: false,
+            },
+        );
+    }
+
+    #[test]
+    fn waiting_for_dispute_resolution_deserializes() {
+        let restored: SentinelRequestState = serde_json::from_str(
+            r#"{"WaitingForDisputeResolution":{"approve":false,"slash_amount":"0x1f4","arbitration_deadline":60}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            restored,
+            SentinelRequestState::WaitingForDisputeResolution {
+                approve: false,
+                slash_amount: U96::from(500),
+                arbitration_deadline: 60,
             },
         );
     }

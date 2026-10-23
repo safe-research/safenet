@@ -110,7 +110,23 @@ impl SentinelTransition {
     fn claiming(&self, block: u64) -> RequestState {
         RequestState::Claiming {
             deadline: block.saturating_add(self.claim_window),
+            overdue: false,
         }
+    }
+
+    /// Whether `id` is already `Claiming`, in which case a terminal `event`
+    /// (e.g. a re-delivered log) must leave it untouched: our `Claim` is
+    /// already queued, and only our own `Claimed` may remove the request.
+    fn is_claiming(state: &State, id: B256, event: &str) -> bool {
+        let claiming = matches!(state.0.get(&id), Some(RequestState::Claiming { .. }));
+        if claiming {
+            tracing::debug!(
+                request_id = %id,
+                event,
+                "ignoring terminal event for a request that is already claiming"
+            );
+        }
+        claiming
     }
 
     /// Starts tracking a newly proposed oracle transaction and requests a
@@ -462,8 +478,8 @@ impl SentinelTransition {
     /// Drops requests we never got to commit on in time, reveals (or drops)
     /// requests past their commit deadline, finalizes requests past their
     /// reveal deadline, times out and claims disputes past their
-    /// arbitration deadline, and gives up on claims whose own `Claimed`
-    /// never arrived within the claim window.
+    /// arbitration deadline, and alerts once on claims whose own `Claimed`
+    /// hasn't arrived within the claim window (they stay tracked).
     fn handle_block_advance(&self, mut state: State, block: u64) -> (State, Commands<State, Self>) {
         let mut actions = Vec::new();
 
@@ -594,19 +610,23 @@ impl SentinelTransition {
                 *entry = self.claiming(block);
                 true
             }
-            RequestState::Claiming { deadline } => {
-                if block <= *deadline {
-                    return true;
+            RequestState::Claiming { deadline, overdue } => {
+                if block > *deadline && !*overdue {
+                    // No retry: the transaction queue already resubmits
+                    // `Claim` until it is mined, so a missing `Claimed`
+                    // means it reverted or the queue is stuck, which needs
+                    // an operator. The request stays tracked, since the
+                    // bond may still be locked or claimable, and only our
+                    // own `Claimed` removes it; `overdue` keeps this alert
+                    // from repeating on every block.
+                    tracing::error!(
+                        request_id = %id,
+                        deadline = *deadline,
+                        "claim deadline passed without our own claim landing; the bond may need manual recovery"
+                    );
+                    *overdue = true;
                 }
-                // No retry: the transaction queue already resubmits `Claim`
-                // until it is mined, so a missing `Claimed` means it
-                // reverted or the queue is stuck, which needs an operator.
-                tracing::error!(
-                    request_id = %id,
-                    deadline = *deadline,
-                    "claim deadline passed without our own claim landing; the bond must be recovered manually"
-                );
-                false
+                true
             }
         });
 
@@ -750,7 +770,14 @@ impl SentinelTransition {
             crate::metrics::fee_reward_amount().record(event.feeReward.to::<u128>() as f64);
         }
         match state.0.remove(&event.requestId) {
-            Some(RequestState::Claiming { .. }) => {}
+            Some(RequestState::Claiming { overdue, .. }) => {
+                if overdue {
+                    tracing::info!(
+                        request_id = %event.requestId,
+                        "overdue claim landed; the bond is recovered"
+                    );
+                }
+            }
             Some(entry) => {
                 tracing::warn!(
                     request_id = %event.requestId,
@@ -787,6 +814,9 @@ impl SentinelTransition {
         block: u64,
         event: SentinelOracle::RequestTimedOut,
     ) -> (State, Commands<State, Self>) {
+        if Self::is_claiming(&state, event.requestId, "request timeout") {
+            return (state, Vec::new());
+        }
         let Some(entry) = state.0.remove(&event.requestId) else {
             tracing::trace!(
                 request_id = %event.requestId,
@@ -844,6 +874,9 @@ impl SentinelTransition {
         mut state: State,
         event: SentinelOracle::DisputeTriggered,
     ) -> (State, Commands<State, Self>) {
+        if Self::is_claiming(&state, event.requestId, "dispute trigger") {
+            return (state, Vec::new());
+        }
         let Some(entry) = state.0.remove(&event.requestId) else {
             tracing::trace!(
                 request_id = %event.requestId,
@@ -896,6 +929,9 @@ impl SentinelTransition {
         block: u64,
         event: SentinelOracle::OracleResult,
     ) -> (State, Commands<State, Self>) {
+        if Self::is_claiming(&state, event.requestId, "oracle result") {
+            return (state, Vec::new());
+        }
         let Some(entry) = state.0.remove(&event.requestId) else {
             tracing::trace!(
                 request_id = %event.requestId,
@@ -1150,7 +1186,11 @@ mod tests {
         primitives::{Bytes, Uint, address, aliases::U96, keccak256},
         signers::k256::ecdsa::SigningKey,
     };
-    use safenet_core::index::{EventBlock, EventLog};
+    use safenet_core::{
+        index::{EventBlock, EventLog},
+        state::storage::SnapshotStore,
+    };
+    use sqlx::sqlite::SqlitePool;
 
     const ORACLE: Address = address!("1111111111111111111111111111111111111111");
     const CONSENSUS: Address = address!("3333333333333333333333333333333333333333");
@@ -1489,6 +1529,7 @@ mod tests {
             state.0[&id],
             RequestState::Claiming {
                 deadline: block + CLAIM_WINDOW,
+                overdue: false,
             },
         );
         let (state, commands) = svc.apply_transition(
@@ -2098,8 +2139,9 @@ mod tests {
     }
 
     /// While `Claiming`, only our own `Claimed` removes the request. Another
-    /// sentinel's `Claimed` leaves it alone, and a re-delivered ruling or
-    /// arbitration escape queues no second `Claim`.
+    /// sentinel's `Claimed` leaves it alone, and a re-delivered terminal
+    /// event (finalize outcome, ruling or arbitration escape) neither queues
+    /// a second `Claim` nor drops the request.
     #[test]
     fn flow_claiming_waits_for_our_own_claim() {
         let (svc, id, state) = setup_dispute();
@@ -2121,46 +2163,201 @@ mod tests {
                 .into(),
             ],
         );
-        let claiming = state.clone();
-
-        let mut state = state;
-        for event in [
-            dispute_resolved_event(id, OnchainRequestState::RESOLVED_APPROVED, U256::ZERO),
-            arbitration_timed_out_event(id),
-            dispute_out_of_scope_event(id),
-            claimed_event(id, OTHER, 500, 100),
-        ] {
-            let commands;
-            (state, commands) = svc.apply_transition(state, Message::Event(log(51, event)));
-            assert!(commands.is_empty());
-            assert_eq!(state, claiming);
-        }
-
+        let state = assert_ignored_while_claiming(&svc, state, id, 51);
         assert_claiming_until_own_claim(&svc, state, id, 50);
     }
 
-    /// If our own `Claimed` never arrives within the claim window, the
-    /// request is removed without queuing another `Claim`; a late `Claimed`
-    /// afterwards changes nothing.
+    /// Delivers every terminal event, plus another sentinel's `Claimed`, to
+    /// `id` while it is `Claiming`, asserting that none queues anything or
+    /// changes the state.
+    fn assert_ignored_while_claiming(
+        svc: &SentinelTransition,
+        mut state: State,
+        id: B256,
+        block: u64,
+    ) -> State {
+        let claiming = state.0[&id].clone();
+        assert!(matches!(claiming, RequestState::Claiming { .. }));
+        let before = state.clone();
+        for (name, event) in [
+            ("DisputeTriggered", dispute_triggered_event(id, block + 10)),
+            ("RequestTimedOut", request_timed_out_event(id)),
+            ("OracleResult", oracle_result_event(id, true)),
+            (
+                "DisputeResolved",
+                dispute_resolved_event(id, OnchainRequestState::RESOLVED_APPROVED, U256::ZERO),
+            ),
+            ("ArbitrationTimedOut", arbitration_timed_out_event(id)),
+            ("DisputeOutOfScope", dispute_out_of_scope_event(id)),
+            (
+                "other sentinel's Claimed",
+                claimed_event(id, OTHER, 500, 100),
+            ),
+        ] {
+            let commands;
+            (state, commands) = svc.apply_transition(state, Message::Event(log(block, event)));
+            assert!(commands.is_empty(), "{name} queued {commands:?}");
+            assert_eq!(
+                state.0.get(&id),
+                Some(&claiming),
+                "{name} moved the request out of Claiming",
+            );
+            assert_eq!(state, before, "{name} changed the state");
+        }
+        state
+    }
+
+    /// A `Claiming` state whose claim window, ending at `deadline`, has
+    /// passed.
+    fn overdue(deadline: u64) -> RequestState {
+        RequestState::Claiming {
+            deadline,
+            overdue: true,
+        }
+    }
+
+    /// Commits `state` as the snapshot for `block` and reloads it through a
+    /// fresh store over the same database, exactly as `StateMachine::new`
+    /// resumes after a restart.
+    async fn restart(pool: &SqlitePool, block: u64, state: &State) -> State {
+        SnapshotStore::<State>::new(pool.clone())
+            .await
+            .unwrap()
+            .commit(block, state)
+            .await
+            .unwrap();
+        let (restored_block, restored) = SnapshotStore::<State>::new(pool.clone())
+            .await
+            .unwrap()
+            .current()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored_block, block);
+        restored
+    }
+
+    async fn pool() -> SqlitePool {
+        safenet_core::utils::connect_sqlite("sqlite::memory:".parse().unwrap())
+            .await
+            .unwrap()
+    }
+
+    /// Past the claim window without our own `Claimed`, the request is kept
+    /// and marked overdue (the error is logged on that transition only),
+    /// with no `Claim` retried. Later blocks leave it unchanged, so the
+    /// alert doesn't repeat. Another sentinel's `Claimed` or a re-delivered
+    /// terminal event can't remove it, but our own late `Claimed` does.
     #[test]
-    fn flow_claim_deadline_removes_the_request_without_retrying() {
+    fn flow_overdue_claim_stays_tracked_until_our_own_claim() {
         let (svc, id, state) = setup_dispute();
         let event = dispute_resolved_event(id, OnchainRequestState::RESOLVED_APPROVED, U256::ZERO);
         let (state, _) = svc.apply_transition(state, Message::Event(log(50, event)));
+        let deadline = 50 + CLAIM_WINDOW;
 
-        let (state, commands) = svc.apply_transition(state, Message::NewBlock(50 + CLAIM_WINDOW));
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(deadline));
         assert!(commands.is_empty());
-        assert!(state.0.contains_key(&id));
+        assert_eq!(
+            state.0[&id],
+            RequestState::Claiming {
+                deadline,
+                overdue: false,
+            },
+        );
 
-        let (state, commands) =
-            svc.apply_transition(state, Message::NewBlock(50 + CLAIM_WINDOW + 1));
+        let (mut state, commands) = svc.apply_transition(state, Message::NewBlock(deadline + 1));
         assert!(commands.is_empty());
-        assert!(!state.0.contains_key(&id));
+        assert_eq!(state.0[&id], overdue(deadline));
+
+        for block in deadline + 2..deadline + 10 {
+            let commands;
+            (state, commands) = svc.apply_transition(state, Message::NewBlock(block));
+            assert!(commands.is_empty());
+            assert_eq!(state.0[&id], overdue(deadline));
+        }
+
+        let state = assert_ignored_while_claiming(&svc, state, id, deadline + 10);
 
         let (state, commands) = svc.apply_transition(
             state,
             Message::Event(log(
-                50 + CLAIM_WINDOW + 2,
+                deadline + 11,
+                claimed_event(id, self_address(), 500, 100),
+            )),
+        );
+        assert!(commands.is_empty());
+        assert!(state.0.is_empty());
+    }
+
+    /// An overdue claim is persisted and restored as overdue, so a restart
+    /// neither forgets the bond nor re-alerts or retries; our own late
+    /// `Claimed` still cleans it up.
+    #[tokio::test]
+    async fn flow_overdue_claim_survives_restart() {
+        let (svc, id, state) = setup_dispute();
+        let event = dispute_resolved_event(id, OnchainRequestState::RESOLVED_APPROVED, U256::ZERO);
+        let (state, _) = svc.apply_transition(state, Message::Event(log(50, event)));
+        let deadline = 50 + CLAIM_WINDOW;
+        let (state, _) = svc.apply_transition(state, Message::NewBlock(deadline + 1));
+        assert_eq!(state.0[&id], overdue(deadline));
+
+        let pool = pool().await;
+        let state = restart(&pool, deadline + 1, &state).await;
+        let svc = transition();
+        assert_eq!(state.0[&id], overdue(deadline));
+
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(deadline + 2));
+        assert!(commands.is_empty());
+        assert_eq!(state.0[&id], overdue(deadline));
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                deadline + 3,
+                claimed_event(id, self_address(), 500, 100),
+            )),
+        );
+        assert!(commands.is_empty());
+        assert!(state.0.is_empty());
+    }
+
+    /// A dispute on a request we committed to survives a restart while
+    /// awaiting arbitration; once resolved, the bond is claimed and stays
+    /// tracked past the claim window until our own `Claimed` lands.
+    #[tokio::test]
+    async fn flow_dispute_recovers_across_restart() {
+        // `setup_dispute` commits and reveals our vote, then delivers
+        // `DisputeTriggered` at block 24 into `WaitingForDisputeResolution`.
+        let (_, id, state) = setup_dispute();
+        let waiting = state.0[&id].clone();
+
+        let pool = pool().await;
+        let state = restart(&pool, 24, &state).await;
+        let svc = transition();
+        assert_eq!(state.0[&id], waiting);
+
+        let event = dispute_resolved_event(id, OnchainRequestState::RESOLVED_APPROVED, U256::ZERO);
+        let (state, commands) = svc.apply_transition(state, Message::Event(log(50, event)));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+
+        let deadline = 50 + CLAIM_WINDOW;
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(deadline + 1));
+        assert!(commands.is_empty());
+        assert_eq!(state.0[&id], overdue(deadline));
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                deadline + 2,
                 claimed_event(id, self_address(), 500, 100),
             )),
         );
