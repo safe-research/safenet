@@ -52,6 +52,8 @@ metrics_address = "0.0.0.0:3555"
 
 Each sentinel must be provisioned with a `secp256k1` private key. This key is used to authenticate the sentinel onchain for participation in Safenet Aegis. It must be funded with sufficient gas for the EVM transactions required for onchain commit/reveal communication, and with enough of the fee token to put up bonds on the requests it votes on.
 
+A bond stays locked from `commit` until the sentinel's `claim` for that request lands, so hold enough of the fee token for several bonds at once. With only one bond's worth, every bond that is still locked (for example during arbitration, or one stranded as described under [Bonds](#bonds)) stops the sentinel from voting on anything else.
+
 > [!TIP]
 >
 > The sentinel currently requires the private key at startup and does not support any KMS systems. Do not use this key for anything else, especially security-related tasks. Use it only for running the sentinel, and fund it only with the amount needed for gas and bonds. In the future, we plan to support KMS systems for more secure setups.
@@ -90,6 +92,61 @@ docker run --name safenet-sentinel \
     --config-file=sentinel.toml
 ```
 
+## Bonds
+
+Each `commit` puts up a bond in the fee token. The sentinel tracks every request it has committed to until its own `claim` for that request lands onchain, so that the bond (minus any slash) and its fee share are returned:
+
+| Request state | Bond locked | Next step |
+| --- | --- | --- |
+| Waiting for the engine check, or for the `NewRequest` event | no, unless our own `commit` landed after a rollback (see below) | may be dropped (commit deadline passed, engine failure); never dropped once our own `commit` landed, but voting resumes with the recovered verdict, or `finalize` is sent at the reveal deadline |
+| Collecting commitments, before our own `commit` landed | no | dropped at the commit deadline |
+| Collecting commitments, after our own `commit` landed | yes | collecting votes at the commit deadline |
+| Collecting votes | yes | once every commitment is revealed, or at the reveal deadline, `finalize` is sent, even if our own `reveal` never landed |
+| Waiting for the outcome | yes | `OracleResult`, `RequestTimedOut` or `DisputeTriggered`; `claim` is sent for the first two |
+| Waiting for dispute resolution | yes | arbitration ruling, or `timeoutArbitration` at the arbitration deadline; then `claim` is sent |
+| Claiming | yes, until our own `Claimed` | our own `Claimed` event; an `error` is logged once if it hasn't arrived by the claim deadline |
+
+A sentinel whose own `reveal` did not land still has `finalize` and `claim` sent: the contract only slashes the request's `slashAmount` from it, and the remainder of the bond can be claimed.
+
+The sentinel only sends `commit` once the engine check is done, but a chain reorganization can roll back the sentinel's state to before the check while the `commit` it sent still lands. The sentinel then logs `own commitment landed while waiting for the engine check; recovering its verdict` at `warn` and uses the verdict it recorded when it committed, without asking the engine again, since a fresh verdict could differ from the one it committed to. Once that verdict is recovered (`recovered recorded engine verdict`), voting continues without a second `commit`. If the recorded verdict can't be read, or is still missing at the reveal deadline, the sentinel logs a `warn` and sends `finalize` once the reveal deadline has passed, then `claim` as usual: without our `reveal`, only the request's `slashAmount` is slashed from our bond, and the remainder is returned.
+
+`finalize` and `claim` are retried by the transaction queue until they are included in a block. If another sentinel finalizes the request first, our `finalize` reverts with `RequestNotPending`; this is expected and harmless.
+
+### Claim Deadline
+
+After sending `claim`, the sentinel waits `claim_window` blocks (in the `[sentinel]` table of the [configuration file](../crates/sentinel/sentinel.sample.toml), default 720, about one hour on Gnosis Chain) for its own `Claimed` event. If the event does not arrive in time, it logs the following `error`, with the affected request in its `request_id` field and the missed claim deadline in `deadline`:
+
+```
+claim deadline passed without our own claim landing; the bond must be recovered manually
+```
+
+The sentinel does not retry, because a `claim` that was included but reverted points to an unexpected onchain state or a bug, and sending it again would only spend gas. Treat this log as an alert: investigate it and [recover the bond manually](#recovering-a-stranded-bond). The sentinel logs the error only once, but keeps tracking the request until its own `Claimed` event arrives, whether from a `claim` still waiting in the transaction queue or from the manual recovery.
+
+The following `warn` logs also point to a bond that may need attention, since they mean the sentinel's view of a request disagrees with the onchain events:
+
+- `ignoring own commitment for an untracked request`
+- `all commitments revealed without our own reveal`
+- `own claim for a request that is not claiming`
+
+### Recovering a Stranded Bond
+
+A bond is stranded when the sentinel's account has a `Committed` event for a request but no matching `Claimed` event. To find and recover one:
+
+1. If you are acting on the [claim deadline](#claim-deadline) `error` log, take the request ID from its `request_id` field and continue with step 2. Otherwise, for example to check for bonds stranded by an earlier version, list the sentinel's `Committed` and `Claimed` events on the `SentinelOracle` (both have `sentinel` as an indexed topic, so they can be filtered on a block explorer or with `cast logs`), and note every `requestId` that has a `Committed` but no `Claimed`.
+2. For each such request, call `getCommitment(requestId, sentinel)`. A `bondAmount` above zero with `claimed = false` confirms the bond is still locked.
+3. Call `getRequest(requestId)` and look at `progress.state`:
+   - `PENDING` (1): the request was never finalized. Once the reveal deadline (`terms.revealDeadline`) has passed, call `finalize(requestId)` from any account.
+   - `FROZEN` (2): the request is in arbitration. Wait for the arbitrator's ruling, or once `progress.arbitrationDeadline` has passed, call `timeoutArbitration(requestId)` from any account.
+   - `RESOLVED_APPROVED` (3), `RESOLVED_DENIED` (4) or `TIMED_OUT` (5): the request can be claimed.
+4. Call `claim(requestId)` **from the sentinel's own account** (signed with the sentinel key), since the contract pays out the bond of `msg.sender`. For example:
+   ```sh
+   cast send --rpc-url "$RPC_URL" --private-key "$SIGNER_PRIVATE_KEY" \
+       "$ORACLE" "claim(bytes32)" "$REQUEST_ID"
+   ```
+   This uses the same account nonce as the running sentinel, so send it while the sentinel has no transaction in flight, or stop the sentinel first.
+
+If `claim` reverts, decode the error: `AlreadyClaimed` means the bond was already returned, `RequestNotResolved` means step 3 is not done yet, and `NothingToClaim` means the account never committed to that request.
+
 ## Debugging
 
 There are a few things you can do to verify your sentinel is running as expected:
@@ -108,3 +165,4 @@ There are a few things you can do to verify your sentinel is running as expected
   - Missing logs. Some RPC providers do not reliably return all logs for `eth_getLogs` requests. This issue can be mitigated with the appropriate configuration (see [`eth_getLogs` Reliability](#eth_getlogs-reliability)).
 - An unreachable engine or a request that exceeds the sentinel's timeout makes the sentinel abstain instead of guessing. Check both services' logs and connectivity over the configured `sentinel.engine` URL.
 - Insufficient funds on the sentinel account to submit onchain transactions. Logs will show transaction submissions failing (`submission failed, will retry without bumping fees`, with the RPC's insufficient-funds error). An account without enough of the fee token instead has its `commit` transactions revert onchain, which shows on a block explorer.
+- A bond that was never claimed. Logs will show `claim deadline passed without our own claim landing; the bond must be recovered manually`, and the fee token balance stays lower than expected. See [Recovering a Stranded Bond](#recovering-a-stranded-bond).
