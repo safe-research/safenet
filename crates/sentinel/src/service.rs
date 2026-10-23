@@ -154,6 +154,7 @@ impl SentinelTransition {
                 deadline,
                 request: None,
                 committed_count: 0,
+                self_committed: false,
             },
         );
         crate::metrics::requests_proposed_total().increment(1);
@@ -169,7 +170,8 @@ impl SentinelTransition {
         )
     }
 
-    /// Consumes a [`effect::Effect::EngineCheck`]'s resolved outcome for
+    /// Consumes a [`effect::Effect::EngineCheck`]'s (or
+    /// [`effect::Effect::RecoverVerdict`]'s) resolved outcome for
     /// `request_id`. If the onchain request is already open, voting begins
     /// immediately; otherwise the resolved decision waits for `NewRequest`.
     fn handle_engine_check_result(
@@ -178,12 +180,14 @@ impl SentinelTransition {
         request_id: B256,
         outcome: CheckOutcome,
     ) -> (State, Commands<State, Self>) {
-        let (deadline, request, committed_count) = match state.0.remove(&request_id) {
+        let (deadline, request, committed_count, self_committed) = match state.0.remove(&request_id)
+        {
             Some(RequestState::WaitingForEngineCheck {
                 deadline,
                 request,
                 committed_count,
-            }) => (deadline, request, committed_count),
+                self_committed,
+            }) => (deadline, request, committed_count, self_committed),
             Some(entry) => {
                 tracing::warn!(
                     %request_id,
@@ -202,13 +206,41 @@ impl SentinelTransition {
         let (approve, reason) = match outcome {
             CheckOutcome::Approved => (true, String::new()),
             CheckOutcome::Denied(rule) => (false, rule.to_string()),
+            // Our bond is locked, but without the verdict we can't reveal.
+            // Keep the request so `handle_block_advance` finalizes it once the
+            // reveal deadline passes, like a missed reveal, and the unslashed
+            // remainder of our bond is claimed.
+            CheckOutcome::Unknown if self_committed => {
+                tracing::warn!(
+                    %request_id,
+                    "verdict behind our own commitment could not be recovered; finalizing after the reveal deadline to reclaim the unslashed bond"
+                );
+                state.0.insert(
+                    request_id,
+                    RequestState::WaitingForEngineCheck {
+                        deadline,
+                        request,
+                        committed_count,
+                        self_committed,
+                    },
+                );
+                return (state, Vec::new());
+            }
             CheckOutcome::Unknown => {
                 tracing::warn!(%request_id, "engine check failed; dropping request unanswered");
                 return (state, Vec::new());
             }
         };
         if let Some(request) = request {
-            return self.commit_vote(state, request_id, approve, reason, request, committed_count);
+            return self.commit_vote(
+                state,
+                request_id,
+                approve,
+                reason,
+                request,
+                committed_count,
+                self_committed,
+            );
         }
 
         state.0.insert(
@@ -224,8 +256,10 @@ impl SentinelTransition {
 
     /// Starts voting on an open request by locking a bond behind a blind
     /// commitment. `committed_count` seeds the commitment tally with the
-    /// other sentinels' commits already seen while the engine check was
-    /// outstanding.
+    /// commits already seen while the engine check was outstanding. If our
+    /// own commitment is already among them (`self_committed`, see
+    /// [`RequestState::WaitingForEngineCheck`]), nothing is submitted again.
+    #[allow(clippy::too_many_arguments)]
     fn commit_vote(
         &self,
         mut state: State,
@@ -234,6 +268,7 @@ impl SentinelTransition {
         reason: String,
         request: Request,
         committed_count: u64,
+        self_committed: bool,
     ) -> (State, Commands<State, Self>) {
         let Request {
             bond_target,
@@ -252,9 +287,12 @@ impl SentinelTransition {
                 commit_deadline,
                 reveal_deadline,
                 committed_count,
-                self_committed: false,
+                self_committed,
             },
         );
+        if self_committed {
+            return (state, Vec::new());
+        }
         let actions = vec![
             SentinelAction {
                 kind: SentinelActionKind::ApproveToken {
@@ -292,11 +330,12 @@ impl SentinelTransition {
         match state.0.remove(&request_id) {
             Some(RequestState::WaitingForRequest {
                 approve, reason, ..
-            }) => self.commit_vote(state, request_id, approve, reason, request, 0),
+            }) => self.commit_vote(state, request_id, approve, reason, request, 0, false),
             Some(RequestState::WaitingForEngineCheck {
                 deadline,
                 request: None,
                 committed_count,
+                self_committed,
             }) => {
                 state.0.insert(
                     request_id,
@@ -304,6 +343,7 @@ impl SentinelTransition {
                         deadline,
                         request: Some(request),
                         committed_count,
+                        self_committed,
                     },
                 );
                 (state, Vec::new())
@@ -327,9 +367,13 @@ impl SentinelTransition {
     /// Tallies a commitment landing onchain, from any sentinel, for a
     /// request that is open for commits -- including while our own engine
     /// check is still outstanding, so the tally matches the onchain count.
+    /// Our own commitment landing in that state means the check's result was
+    /// lost, so the verdict it was built from is recovered via
+    /// [`effect::Effect::RecoverVerdict`].
     fn handle_committed(
         &self,
         mut state: State,
+        block: u64,
         event: SentinelOracle::Committed,
     ) -> (State, Commands<State, Self>) {
         let is_self = event.sentinel == self.signer.address();
@@ -348,14 +392,34 @@ impl SentinelTransition {
             return (state, Vec::new());
         };
         match entry {
-            // We only commit once the engine check has completed, so this
-            // commitment is always another sentinel's.
             RequestState::WaitingForEngineCheck {
                 request: Some(_),
                 committed_count,
+                self_committed,
                 ..
             } => {
                 *committed_count += 1;
+                // We only commit once the engine check has completed, so our
+                // own commitment here means a rollback undid the check's
+                // result, but not the `Commit` it queued. Recover the verdict
+                // it was built from, so voting can resume as quickly as
+                // possible.
+                if !*self_committed && is_self {
+                    *self_committed = true;
+                    crate::metrics::requests_participated_total().increment(1);
+                    crate::metrics::bond_amount().record(event.bondAmount.to::<u128>() as f64);
+                    tracing::warn!(
+                        request_id = %event.requestId,
+                        "own commitment landed while waiting for the engine check; recovering its verdict"
+                    );
+                    return (
+                        state,
+                        vec![Command::Effect(effect::Effect::RecoverVerdict {
+                            request_id: event.requestId,
+                            block,
+                        })],
+                    );
+                }
             }
             RequestState::CollectingCommitments {
                 committed_count,
@@ -444,7 +508,7 @@ impl SentinelTransition {
             return (state, Vec::new());
         }
         *entry = RequestState::WaitingForOutcome {
-            approve: *approve,
+            approve: Some(*approve),
             slash_amount: *slash_amount,
             self_revealed: true,
         };
@@ -469,6 +533,38 @@ impl SentinelTransition {
         let mut actions = Vec::new();
 
         state.0.retain(|id, entry| match entry {
+            // Our bond is locked: wait for the recovered verdict until it can
+            // no longer be revealed, rather than until the commit deadline.
+            RequestState::WaitingForEngineCheck {
+                request: Some(request),
+                self_committed: true,
+                ..
+            } => {
+                if block <= request.reveal_deadline {
+                    return true;
+                }
+                // Without the verdict we never revealed. Finalize anyway, like
+                // a missed reveal, so the unslashed remainder of our bond
+                // (`bondAmount - slashAmount`) can be claimed.
+                tracing::warn!(
+                    request_id = %id,
+                    "reveal deadline passed without recovering the verdict behind our own commitment; finalizing to reclaim the unslashed bond"
+                );
+                actions.push(
+                    SentinelAction {
+                        kind: SentinelActionKind::Finalize { id: *id },
+                        expires_at: None,
+                    }
+                    .into(),
+                );
+                *entry = RequestState::WaitingForOutcome {
+                    // Our vote is unknown.
+                    approve: None,
+                    slash_amount: request.slash_amount,
+                    self_revealed: false,
+                };
+                true
+            }
             RequestState::WaitingForEngineCheck {
                 deadline, request, ..
             } => {
@@ -556,7 +652,7 @@ impl SentinelTransition {
                     .into(),
                 );
                 *entry = RequestState::WaitingForOutcome {
-                    approve: *approve,
+                    approve: Some(*approve),
                     slash_amount: *slash_amount,
                     self_revealed: *self_revealed,
                 };
@@ -632,6 +728,7 @@ impl SentinelTransition {
     /// arbitrated `outcome` (`resolveDispute` only ever resolves to
     /// `RESOLVED_APPROVED`/`RESOLVED_DENIED`, never `TIMED_OUT`) and, if it
     /// lost, how much of its bond `slash_amount` says was slashed for it.
+    /// Neither is recorded when our vote is unknown (`approve: None`).
     fn handle_resolved(
         &self,
         mut state: State,
@@ -662,12 +759,15 @@ impl SentinelTransition {
             }
         };
 
-        let won = approve == (event.outcome == OracleRequestState::RESOLVED_APPROVED);
-        if won {
-            crate::metrics::requests_resolved_total(ResolvedOutcome::DisputeWon).increment(1);
-        } else {
-            crate::metrics::requests_resolved_total(ResolvedOutcome::DisputeLost).increment(1);
-            crate::metrics::dispute_bond_slashed_amount().record(slash_amount.to::<u128>() as f64);
+        if let Some(approve) = approve {
+            let won = approve == (event.outcome == OracleRequestState::RESOLVED_APPROVED);
+            if won {
+                crate::metrics::requests_resolved_total(ResolvedOutcome::DisputeWon).increment(1);
+            } else {
+                crate::metrics::requests_resolved_total(ResolvedOutcome::DisputeLost).increment(1);
+                crate::metrics::dispute_bond_slashed_amount()
+                    .record(slash_amount.to::<u128>() as f64);
+            }
         }
 
         state.0.insert(event.requestId, self.claiming(block));
@@ -1086,7 +1186,7 @@ impl StateTransition<State> for SentinelTransition {
                     )) => self.handle_new_request(state, event),
                     SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Committed(
                         event,
-                    )) => self.handle_committed(state, event),
+                    )) => self.handle_committed(state, block, event),
                     SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Revealed(
                         event,
                     )) => self.handle_revealed(state, event),
@@ -1478,6 +1578,7 @@ mod tests {
                     reveal_deadline: 40,
                 }),
                 committed_count: 0,
+                self_committed: false,
             },
         );
 
@@ -1565,6 +1666,7 @@ mod tests {
                 deadline: 1 + VOTING_WINDOW,
                 request: None,
                 committed_count: 0,
+                self_committed: false,
             },
         );
 
@@ -1729,7 +1831,7 @@ mod tests {
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForOutcome {
-                approve: true,
+                approve: Some(true),
                 slash_amount: U96::from(500),
                 self_revealed: true,
             },
@@ -1872,6 +1974,190 @@ mod tests {
                 .into(),
             ],
         );
+    }
+
+    /// Drives a request to the state left behind when a rollback undid the
+    /// engine check's result but not the `Commit` it queued: the request is
+    /// open, another sentinel has committed, and our own commitment lands
+    /// while we are still waiting for the check.
+    fn setup_own_commitment_during_engine_check(
+        svc: &SentinelTransition,
+        safe_tx_hash: B256,
+    ) -> (B256, State) {
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                2,
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
+            )),
+        );
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(3, committed_event(id, OTHER, 500u64))),
+        );
+
+        // Our own commitment lands: the verdict it was built from is
+        // recovered instead of waiting for a check result that won't come.
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(4, committed_event(id, self_address(), 500u64))),
+        );
+        assert_eq!(
+            commands,
+            vec![Command::Effect(effect::Effect::RecoverVerdict {
+                request_id: id,
+                block: 4,
+            })],
+        );
+        assert_eq!(
+            state.0[&id],
+            RequestState::WaitingForEngineCheck {
+                deadline: 1 + VOTING_WINDOW,
+                request: Some(Request {
+                    bond_target: U96::from(500),
+                    slash_amount: U96::from(500),
+                    commit_deadline: 20,
+                    reveal_deadline: 40,
+                }),
+                committed_count: 2,
+                self_committed: true,
+            },
+        );
+
+        (id, state)
+    }
+
+    /// The recovered verdict resumes voting without committing again, and
+    /// our vote is revealed as usual.
+    #[test]
+    fn flow_own_commitment_during_engine_check_recovers_the_verdict() {
+        let svc = transition();
+        let (id, state) = setup_own_commitment_during_engine_check(&svc, B256::repeat_byte(0x16));
+
+        let (state, commands) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        assert!(commands.is_empty());
+        assert_eq!(
+            state.0[&id],
+            RequestState::CollectingCommitments {
+                approve: true,
+                reason: REASON.to_string(),
+                slash_amount: U96::from(500),
+                commit_deadline: 20,
+                reveal_deadline: 40,
+                committed_count: 2,
+                self_committed: true,
+            },
+        );
+
+        let (_, commands) = svc.apply_transition(state, Message::NewBlock(21));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Reveal {
+                        id,
+                        approve: true,
+                        salt: self_signer().reveal_salt(id),
+                        reason: REASON.to_string(),
+                    },
+                    expires_at: Some(40),
+                }
+                .into(),
+            ],
+        );
+    }
+
+    /// Past the reveal deadline without the verdict, our vote can't be
+    /// revealed anymore, so the request is finalized like a missed reveal and
+    /// the unslashed remainder of our bond is claimed.
+    fn assert_finalizes_and_claims_without_reveal(
+        svc: &SentinelTransition,
+        id: B256,
+        state: State,
+    ) {
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(40));
+        assert!(commands.is_empty());
+        assert!(matches!(
+            state.0[&id],
+            RequestState::WaitingForEngineCheck {
+                self_committed: true,
+                ..
+            }
+        ));
+
+        let (state, commands) = svc.apply_transition(state, Message::NewBlock(41));
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Finalize { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+        assert_eq!(
+            state.0[&id],
+            RequestState::WaitingForOutcome {
+                approve: None,
+                slash_amount: U96::from(500),
+                self_revealed: false,
+            },
+        );
+
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(42, oracle_result_event(id, true))),
+        );
+        assert_eq!(
+            commands,
+            vec![
+                SentinelAction {
+                    kind: SentinelActionKind::Claim { id },
+                    expires_at: None,
+                }
+                .into(),
+            ],
+        );
+        assert_claiming_until_own_claim(svc, state, id, 42);
+    }
+
+    /// With our bond locked, a recovered verdict that arrives after the commit
+    /// deadline can still be revealed, so the request is kept until the
+    /// reveal deadline. If it never arrives, we claim without revealing.
+    #[test]
+    fn flow_own_commitment_during_engine_check_claims_without_reveal_at_the_reveal_deadline() {
+        let svc = transition();
+        let (id, state) = setup_own_commitment_during_engine_check(&svc, B256::repeat_byte(0x17));
+
+        assert_finalizes_and_claims_without_reveal(&svc, id, state);
+    }
+
+    /// Without a recorded verdict there is nothing we can reveal, so the
+    /// request is neither committed again nor dropped: we claim without
+    /// revealing once the reveal deadline passes.
+    #[test]
+    fn flow_own_commitment_during_engine_check_without_a_recorded_verdict_claims_without_reveal() {
+        let svc = transition();
+        let (id, state) = setup_own_commitment_during_engine_check(&svc, B256::repeat_byte(0x18));
+
+        let (state, commands) = resolve_engine_check(&svc, state, id, CheckOutcome::Unknown);
+        assert!(commands.is_empty());
+
+        assert_finalizes_and_claims_without_reveal(&svc, id, state);
     }
 
     /// Voting only ends early when the reveal tally exactly matches the
@@ -2026,7 +2312,7 @@ mod tests {
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForOutcome {
-                approve: true,
+                approve: Some(true),
                 slash_amount: U96::from(500),
                 self_revealed: true,
             }
@@ -2043,7 +2329,7 @@ mod tests {
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForDisputeResolution {
-                approve: true,
+                approve: Some(true),
                 slash_amount: U96::from(500),
                 arbitration_deadline: 60,
             }
@@ -2320,7 +2606,7 @@ mod tests {
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForOutcome {
-                approve: true,
+                approve: Some(true),
                 slash_amount: U96::from(500),
                 self_revealed: false,
             },
@@ -2406,7 +2692,7 @@ mod tests {
         assert_eq!(
             state.0[&id],
             RequestState::WaitingForOutcome {
-                approve: true,
+                approve: Some(true),
                 slash_amount: U96::from(500),
                 self_revealed: false,
             },
@@ -2648,6 +2934,7 @@ mod tests {
                 deadline: 1 + VOTING_WINDOW,
                 request: None,
                 committed_count: 0,
+                self_committed: false,
             },
         );
 
@@ -2699,6 +2986,7 @@ mod tests {
                 deadline: 10,
                 request: None,
                 committed_count: 0,
+                self_committed: false,
             },
         );
         state.0.insert(
@@ -2712,6 +3000,7 @@ mod tests {
                     reveal_deadline: 40,
                 }),
                 committed_count: 0,
+                self_committed: false,
             },
         );
 
