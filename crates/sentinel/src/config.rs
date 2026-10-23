@@ -48,8 +48,9 @@ pub struct SentinelConfig {
     /// kept alive for before being cleaned up.
     pub voting_window: u64,
     /// The number of blocks to wait for our own `Claimed` event after
-    /// queuing a `claim()`. Once it passes, an error is logged so the bond
-    /// can be recovered manually, and the request is no longer tracked.
+    /// queuing a `claim()` before alerting. Once it passes, an error is
+    /// logged once so the bond can be recovered manually; the request stays
+    /// tracked until our own `Claimed` arrives.
     #[serde(default = "SentinelConfig::default_claim_window")]
     pub claim_window: u64,
     /// Base URL of the transaction-verification engine used by this sentinel.
