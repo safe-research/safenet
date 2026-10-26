@@ -71,6 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         config.signer.clone(),
         U256::from(chain_id),
         config.sentinel.voting_window,
+        config.sentinel.claim_window,
         EngineClient::new(config.sentinel.engine)?,
         engine_timeout,
         VerdictStore::new(pool.clone()).await?,
