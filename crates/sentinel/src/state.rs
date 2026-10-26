@@ -82,7 +82,20 @@ pub enum SentinelRequestState {
     /// request actually reached -- is decided by the oracle's emitted event,
     /// not predicted locally; `approve`/`slash_amount` are carried through
     /// for the `DisputeTriggered` case, where they seed the next state.
-    WaitingForOutcome { approve: bool, slash_amount: U96 },
+    ///
+    /// `self_revealed` is carried over from `CollectingVotes`: `finalize()`
+    /// is submitted whether or not our own reveal landed, since the
+    /// unslashed remainder of our bond is only claimable once the request
+    /// is finalized. It only picks the `handle_oracle_result` metric
+    /// outcome. Snapshots written before it was tracked only reached this
+    /// state after our own reveal, or from a total timeout that never reads
+    /// it, so it defaults to `true`.
+    WaitingForOutcome {
+        approve: bool,
+        slash_amount: U96,
+        #[serde(default = "default_true")]
+        self_revealed: bool,
+    },
     /// `DisputeTriggered` confirmed both sides had revealed votes onchain.
     /// `handle_resolved` always claims once the arbitrator settles it,
     /// regardless of which side won, but `approve`/`slash_amount` are kept
@@ -98,6 +111,10 @@ pub enum SentinelRequestState {
         slash_amount: U96,
         arbitration_deadline: u64,
     },
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl SentinelRequestState {
@@ -146,6 +163,7 @@ impl SentinelRequestState {
             | Self::WaitingForOutcome {
                 approve,
                 slash_amount,
+                ..
             }
             | Self::WaitingForDisputeResolution {
                 approve,
@@ -163,19 +181,20 @@ impl SentinelRequestState {
     /// `CollectingCommitments` is always `false`: reaching this at all
     /// already required `self_committed` via `approve_and_slash_amount`,
     /// but revealing only starts once `CollectingVotes` is reached, and
-    /// this state hasn't gotten there yet. `WaitingForOutcome` is always
-    /// `true`: `finalize()`'s own guard only ever submits from a
-    /// non-timeout, single-side resolution once `self_revealed` was already
-    /// `true`. `WaitingForDisputeResolution` defaults to `true` too, though
-    /// moot in practice -- the oracle never re-emits `OracleResult` for a
-    /// request that's already `FROZEN`.
+    /// this state hasn't gotten there yet. `WaitingForOutcome` reports the
+    /// value carried over from `CollectingVotes`, since `finalize()` is
+    /// submitted whether or not our own reveal landed.
+    /// `WaitingForDisputeResolution` defaults to `true`, though moot in
+    /// practice -- the oracle never re-emits `OracleResult` for a request
+    /// that's already `FROZEN`.
     pub(crate) fn self_revealed(&self) -> bool {
         match self {
             Self::WaitingForEngineCheck { .. }
             | Self::WaitingForRequest { .. }
             | Self::CollectingCommitments { .. } => false,
-            Self::CollectingVotes { self_revealed, .. } => *self_revealed,
-            Self::WaitingForOutcome { .. } | Self::WaitingForDisputeResolution { .. } => true,
+            Self::CollectingVotes { self_revealed, .. }
+            | Self::WaitingForOutcome { self_revealed, .. } => *self_revealed,
+            Self::WaitingForDisputeResolution { .. } => true,
         }
     }
 }
@@ -259,6 +278,7 @@ mod tests {
             SentinelRequestState::WaitingForOutcome {
                 approve: true,
                 slash_amount: U96::from(500),
+                self_revealed: false,
             }
             .approve_and_slash_amount(),
             Some((true, U96::from(500))),
@@ -294,6 +314,14 @@ mod tests {
         );
         assert!(!collecting_commitments(20, 40).self_revealed());
         assert!(
+            !SentinelRequestState::WaitingForOutcome {
+                approve: true,
+                slash_amount: U96::from(500),
+                self_revealed: false,
+            }
+            .self_revealed()
+        );
+        assert!(
             !SentinelRequestState::CollectingVotes {
                 approve: true,
                 slash_amount: U96::from(500),
@@ -327,6 +355,7 @@ mod tests {
             SentinelRequestState::WaitingForOutcome {
                 approve: true,
                 slash_amount: U96::from(500),
+                self_revealed: true,
             }
             .self_revealed()
         );
@@ -358,6 +387,26 @@ mod tests {
                 deadline: 10,
                 request: None,
                 committed_count: 0,
+            },
+        );
+    }
+
+    /// Snapshots written before `WaitingForOutcome` tracked `self_revealed`
+    /// only reached it after our own reveal (or from a total timeout that
+    /// never reads it), so they load as revealed.
+    #[test]
+    fn waiting_for_outcome_without_self_revealed_deserializes() {
+        let restored: SentinelRequestState = serde_json::from_str(
+            r#"{"WaitingForOutcome":{"approve":true,"slash_amount":"0x1f4"}}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            restored,
+            SentinelRequestState::WaitingForOutcome {
+                approve: true,
+                slash_amount: U96::from(500),
+                self_revealed: true,
             },
         );
     }
