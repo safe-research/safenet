@@ -79,17 +79,16 @@ pub enum ResolvedOutcome {
     /// Won without a dispute: this sentinel's own reveal landed onchain and
     /// the request resolved unanimously in its favor.
     Unanimous,
-    /// Nobody revealed; bonds reclaimed.
+    /// Total timeout, or arbitration timeout after our own reveal; bond
+    /// reclaimed without a slash.
     Timeout,
-    /// This sentinel committed a bond but its own reveal never landed
-    /// onchain before the request resolved unanimously anyway -- the bond
-    /// is slashed like any other non-revealer once a side is established,
-    /// so this is a loss, not a win, despite the request resolving without
-    /// a dispute.
+    /// This sentinel committed but never revealed, and another sentinel
+    /// established a side. The bond is slashed regardless of whether the
+    /// request resolved unanimously, was arbitrated, or arbitration timed out.
     RevealMissed,
-    /// This sentinel's vote matched the arbitrated outcome.
+    /// This sentinel's revealed vote matched the arbitrated outcome.
     DisputeWon,
-    /// This sentinel's vote didn't match the arbitrated outcome.
+    /// This sentinel's revealed vote didn't match the arbitrated outcome.
     DisputeLost,
 }
 
@@ -106,8 +105,8 @@ impl ResolvedOutcome {
 }
 
 /// How every request this sentinel participated in was ultimately resolved,
-/// by `outcome`. `dispute_won + dispute_lost` over the total is how often a
-/// request this sentinel voted on ended up arbitrated; `unanimous +
+/// by `outcome`. `dispute_won + dispute_lost` counts arbitrated requests
+/// where this sentinel revealed; `unanimous +
 /// dispute_won` over the total is this sentinel's win rate; `reveal_missed`
 /// is neither -- a bond that was committed but slashed for never revealing.
 pub fn requests_resolved_total(outcome: ResolvedOutcome) -> Counter {
