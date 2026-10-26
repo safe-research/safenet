@@ -898,9 +898,9 @@ impl SentinelTransition {
     /// the timeout is real onchain regardless -- claim anyway (see the
     /// identical reasoning on [`Self::handle_dispute_triggered`]) rather
     /// than stranding a bond that's actually reclaimable right now. Unless,
-    /// per [`RequestState::approve_and_slash_amount`], we never posted a
-    /// bond in the first place (`WaitingForEngineCheck`/`WaitingForRequest`)
-    /// -- then there is nothing to claim, so we don't.
+    /// per [`RequestState::approve_and_slash_amount`], our own commitment
+    /// never landed in the first place -- then there is nothing to claim, so
+    /// we don't.
     fn handle_request_timed_out(
         &self,
         mut state: State,
@@ -967,10 +967,9 @@ impl SentinelTransition {
     /// anyway, via [`RequestState::approve_and_slash_amount`], rather than
     /// dropping it. Silently leaving the request stuck outside every claim
     /// path would strand its bond until someone notices and intervenes
-    /// manually. The one exception is `WaitingForEngineCheck`/
-    /// `WaitingForRequest`: our own logic never posts a bond that early, so
-    /// `approve_and_slash_amount` returns `None` and there is genuinely
-    /// nothing of ours to wait on -- the request is dropped instead.
+    /// manually. The one exception is a request our own commitment never
+    /// landed for: `approve_and_slash_amount` returns `None` and there is
+    /// genuinely nothing of ours to wait on -- the request is dropped instead.
     fn handle_dispute_triggered(
         &self,
         mut state: State,
@@ -1025,9 +1024,9 @@ impl SentinelTransition {
     /// the result is real onchain regardless -- claim anyway (see the
     /// identical reasoning on [`Self::handle_dispute_triggered`]) rather
     /// than stranding a bond that's actually reclaimable right now. Unless,
-    /// per [`RequestState::approve_and_slash_amount`], we never posted a
-    /// bond in the first place (`WaitingForEngineCheck`/`WaitingForRequest`)
-    /// -- then there is nothing to claim, so we don't.
+    /// per [`RequestState::approve_and_slash_amount`], our own commitment
+    /// never landed in the first place -- then there is nothing to claim, so
+    /// we don't.
     ///
     /// Our own `Reveal` may never have landed, either because we finalized
     /// at the reveal deadline without it or because someone else's
