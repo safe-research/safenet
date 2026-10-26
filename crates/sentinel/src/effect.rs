@@ -1,7 +1,9 @@
-//! The sentinel's single effect: requesting a proposed transaction's verdict
-//! from the sentinel engine. Emitted by
-//! `SentinelTransition::handle_oracle_transaction_proposed` and consumed by
-//! `SentinelTransition::apply_transition`'s `Message::Resume` arm.
+//! The sentinel's effects: requesting a proposed transaction's verdict from the
+//! sentinel engine, emitted by
+//! `SentinelTransition::handle_oracle_transaction_proposed`, and recovering an
+//! already recorded verdict, emitted by `SentinelTransition::handle_committed`.
+//! Both are consumed by `SentinelTransition::apply_transition`'s
+//! `Message::Resume` arm.
 
 use crate::{
     bindings::consensus::SafeTransaction,
@@ -15,6 +17,7 @@ use std::time::Duration;
 /// An impure operation the sentinel's state transition asks the [`Handler`]
 /// to perform.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Effect {
     /// Defer the approve/deny decision for `request_id` (a proposed
     /// `transaction` on `safe`) to the configured sentinel engine.
@@ -33,12 +36,19 @@ pub enum Effect {
         proposal_timestamp: u64,
         block: u64,
     },
+    /// Resume with the verdict already recorded for `request_id`, without
+    /// asking the engine. Our own commitment for `request_id` landed while its
+    /// engine check result was lost (e.g. a rollback undid the resume, but not
+    /// the queued `Commit`), so only the verdict that commitment was built from
+    /// can be used. `block` extends how long that verdict is retained.
+    RecoverVerdict { request_id: B256, block: u64 },
 }
 
 /// The result of performing an [`Effect`], resumed into the state machine.
 #[derive(Debug, Clone)]
 pub enum Resume {
-    /// Resume with [`Effect::EngineCheck`]'s outcome for `request_id`.
+    /// Resume with [`Effect::EngineCheck`]'s or [`Effect::RecoverVerdict`]'s
+    /// outcome for `request_id`.
     EngineCheckResult {
         request_id: B256,
         outcome: CheckOutcome,
@@ -117,6 +127,30 @@ impl Handler {
             }
         }
     }
+
+    /// Returns the verdict recorded for `request_id`, or
+    /// [`CheckOutcome::Unknown`] if there is none. The engine is never asked:
+    /// a fresh verdict could differ from the one already committed to.
+    async fn recover_verdict(&self, request_id: B256, block: u64) -> CheckOutcome {
+        match self.verdicts.get(request_id, block).await {
+            Ok(Some(outcome)) => {
+                tracing::info!(%request_id, ?outcome, "recovered recorded engine verdict");
+                outcome
+            }
+            Ok(None) => {
+                tracing::error!(%request_id, "no recorded engine verdict to recover");
+                CheckOutcome::Unknown
+            }
+            Err(err) => {
+                tracing::error!(
+                    %request_id,
+                    ?err,
+                    "failed to read recorded engine verdict to recover"
+                );
+                CheckOutcome::Unknown
+            }
+        }
+    }
 }
 
 impl EffectHandler<Effect, Resume> for Handler {
@@ -132,6 +166,10 @@ impl EffectHandler<Effect, Resume> for Handler {
                 outcome: self
                     .engine_check(request_id, transaction, proposal_timestamp, block)
                     .await,
+            },
+            Effect::RecoverVerdict { request_id, block } => Resume::EngineCheckResult {
+                request_id,
+                outcome: self.recover_verdict(request_id, block).await,
             },
         }
     }
@@ -211,12 +249,19 @@ mod tests {
         )
     }
 
-    async fn check(handler: &Handler) -> CheckOutcome {
+    async fn perform(handler: &Handler, effect: Effect) -> CheckOutcome {
         let Resume::EngineCheckResult {
             request_id,
             outcome,
-        } = handler
-            .perform_effect(Effect::EngineCheck {
+        } = handler.perform_effect(effect).await;
+        assert_eq!(request_id, REQUEST_ID);
+        outcome
+    }
+
+    async fn check(handler: &Handler) -> CheckOutcome {
+        perform(
+            handler,
+            Effect::EngineCheck {
                 request_id: REQUEST_ID,
                 transaction: SafeTransaction {
                     safe: SAFE,
@@ -224,10 +269,20 @@ mod tests {
                 },
                 proposal_timestamp: 1_700_000_000,
                 block: 1,
-            })
-            .await;
-        assert_eq!(request_id, REQUEST_ID);
-        outcome
+            },
+        )
+        .await
+    }
+
+    async fn recover(handler: &Handler) -> CheckOutcome {
+        perform(
+            handler,
+            Effect::RecoverVerdict {
+                request_id: REQUEST_ID,
+                block: 2,
+            },
+        )
+        .await
     }
 
     #[tokio::test]
@@ -258,6 +313,25 @@ mod tests {
         let handler = handler(&[r#"{"verdict":"abstain"}"#, r#"{"verdict":"secure"}"#]).await;
 
         assert_eq!(check(&handler).await, CheckOutcome::Unknown);
+        assert_eq!(check(&handler).await, CheckOutcome::Approved);
+    }
+
+    #[tokio::test]
+    async fn recovers_the_recorded_verdict_without_asking_the_engine() {
+        let handler = handler(&[r#"{"verdict":"insecure","rule":"R-2.1"}"#]).await;
+        let denied = CheckOutcome::Denied(RuleId::new(2, 1));
+
+        assert_eq!(check(&handler).await, denied);
+        // The engine is gone, but the recorded verdict is recovered.
+        assert_eq!(recover(&handler).await, denied);
+    }
+
+    #[tokio::test]
+    async fn recovering_without_a_recorded_verdict_does_not_ask_the_engine() {
+        let handler = handler(&[r#"{"verdict":"secure"}"#]).await;
+
+        assert_eq!(recover(&handler).await, CheckOutcome::Unknown);
+        // The engine's answer was never consumed by the recovery.
         assert_eq!(check(&handler).await, CheckOutcome::Approved);
     }
 }

@@ -27,13 +27,23 @@ pub enum SentinelRequestState {
     /// the request opens onchain first, its voting data is retained in
     /// `request` until the check resumes, and `committed_count` tallies the
     /// other sentinels' `Committed` events that land in the meantime, so
-    /// `CollectingCommitments` starts from the onchain count. None of them
-    /// can be ours: we only commit once the check has completed.
+    /// `CollectingCommitments` starts from the onchain count.
+    ///
+    /// We only commit once the check has completed, so our own `Committed`
+    /// only lands here if a rollback undid the check's result but not the
+    /// `Commit` it queued. `self_committed` then records that our bond is
+    /// locked while the recorded verdict is recovered: voting resumes without
+    /// committing again. If the verdict can't be recovered, the request is
+    /// kept until its reveal deadline and then finalized without our reveal,
+    /// like a missed reveal, so the unslashed remainder of our bond is
+    /// claimed.
     WaitingForEngineCheck {
         deadline: u64,
         request: Option<Request>,
         #[serde(default)]
         committed_count: u64,
+        #[serde(default)]
+        self_committed: bool,
     },
     /// Our vote intent is decided, but the oracle hasn't opened the request
     /// for voting yet. `deadline` is our own guessed cutoff, since the real
@@ -82,6 +92,11 @@ pub enum SentinelRequestState {
     /// request actually reached -- is decided by the oracle's emitted event,
     /// not predicted locally; `approve`/`slash_amount` are carried through
     /// for the `DisputeTriggered` case, where they seed the next state.
+    /// `approve` is `None` when our vote is unknown: our own commitment
+    /// landed while the engine check's result was lost, and its verdict
+    /// couldn't be recovered (see `WaitingForEngineCheck`). Snapshots store
+    /// a known vote as a plain boolean, so ones written before it was
+    /// optional still load.
     ///
     /// `self_revealed` is carried over from `CollectingVotes`: `finalize()`
     /// is submitted whether or not our own reveal landed, since the
@@ -91,7 +106,7 @@ pub enum SentinelRequestState {
     /// state after our own reveal, or from a total timeout that never reads
     /// it, so it defaults to `true`.
     WaitingForOutcome {
-        approve: bool,
+        approve: Option<bool>,
         slash_amount: U96,
         #[serde(default = "default_true")]
         self_revealed: bool,
@@ -100,7 +115,8 @@ pub enum SentinelRequestState {
     /// `handle_resolved` always claims once the arbitrator settles it,
     /// regardless of which side won, but `approve`/`slash_amount` are kept
     /// so it can also record whether *this* sentinel's vote matched the
-    /// arbitrated outcome and, if not, how much of its bond was slashed.
+    /// arbitrated outcome and, if not, how much of its bond was slashed. With
+    /// an unknown vote (`approve: None`), nothing is recorded.
     ///
     /// `arbitration_deadline` is `DisputeTriggered.deadline`: once it passes
     /// without a ruling, `handle_block_advance` submits the permissionless
@@ -108,7 +124,7 @@ pub enum SentinelRequestState {
     /// `Claiming`, rather than leaving the bond locked until someone else
     /// times it out.
     WaitingForDisputeResolution {
-        approve: bool,
+        approve: Option<bool>,
         slash_amount: U96,
         arbitration_deadline: u64,
     },
@@ -146,7 +162,9 @@ impl SentinelRequestState {
     /// `handle_dispute_triggered`/`handle_request_timed_out`/
     /// `handle_oracle_result`. Returns `None` for `WaitingForEngineCheck`/
     /// `WaitingForRequest` (our own logic never posts a bond that early --
-    /// voting hasn't opened yet, or we haven't committed) and for
+    /// voting hasn't opened yet, or we haven't committed), unless our own
+    /// commitment already landed while waiting for the engine check (its vote
+    /// is unknown, so `approve` is `None`), and for
     /// `CollectingCommitments` while `self_committed` is still `false` (the
     /// request is open and its terms are known, but our own `Commit` hasn't
     /// landed onchain yet) -- in every one of these there is nothing of
@@ -158,8 +176,13 @@ impl SentinelRequestState {
     ///
     /// `Claiming` returns `None` as well, but is never asked: our `Claim` is
     /// already queued, so the terminal handlers return before reaching it.
-    pub(crate) fn approve_and_slash_amount(&self) -> Option<(bool, U96)> {
+    pub(crate) fn approve_and_slash_amount(&self) -> Option<(Option<bool>, U96)> {
         match self {
+            Self::WaitingForEngineCheck {
+                request: Some(request),
+                self_committed: true,
+                ..
+            } => Some((None, request.slash_amount)),
             Self::WaitingForEngineCheck { .. }
             | Self::WaitingForRequest { .. }
             | Self::Claiming { .. } => None,
@@ -168,13 +191,13 @@ impl SentinelRequestState {
                 slash_amount,
                 self_committed,
                 ..
-            } => self_committed.then_some((*approve, *slash_amount)),
+            } => self_committed.then_some((Some(*approve), *slash_amount)),
             Self::CollectingVotes {
                 approve,
                 slash_amount,
                 ..
-            }
-            | Self::WaitingForOutcome {
+            } => Some((Some(*approve), *slash_amount)),
+            Self::WaitingForOutcome {
                 approve,
                 slash_amount,
                 ..
@@ -241,6 +264,7 @@ mod tests {
                 deadline: 10,
                 request: None,
                 committed_count: 0,
+                self_committed: false,
             }
             .approve_and_slash_amount(),
             None,
@@ -271,9 +295,26 @@ mod tests {
 
     #[test]
     fn approve_and_slash_amount_recovers_the_real_values_once_a_bond_could_exist() {
+        // Our own commitment landed while waiting for the engine check: the
+        // vote is unknown, but the slash amount is.
+        assert_eq!(
+            SentinelRequestState::WaitingForEngineCheck {
+                deadline: 10,
+                request: Some(Request {
+                    bond_target: U96::from(500),
+                    slash_amount: U96::from(400),
+                    commit_deadline: 20,
+                    reveal_deadline: 40,
+                }),
+                committed_count: 1,
+                self_committed: true,
+            }
+            .approve_and_slash_amount(),
+            Some((None, U96::from(400))),
+        );
         assert_eq!(
             collecting_commitments(20, 40).approve_and_slash_amount(),
-            Some((false, U96::from(500))),
+            Some((Some(false), U96::from(500))),
         );
         assert_eq!(
             SentinelRequestState::CollectingVotes {
@@ -287,25 +328,25 @@ mod tests {
                 self_revealed: true,
             }
             .approve_and_slash_amount(),
-            Some((true, U96::from(500))),
+            Some((Some(true), U96::from(500))),
         );
         assert_eq!(
             SentinelRequestState::WaitingForOutcome {
-                approve: true,
+                approve: Some(true),
                 slash_amount: U96::from(500),
                 self_revealed: false,
             }
             .approve_and_slash_amount(),
-            Some((true, U96::from(500))),
+            Some((Some(true), U96::from(500))),
         );
         assert_eq!(
             SentinelRequestState::WaitingForDisputeResolution {
-                approve: false,
+                approve: Some(false),
                 slash_amount: U96::from(500),
                 arbitration_deadline: 60,
             }
             .approve_and_slash_amount(),
-            Some((false, U96::from(500))),
+            Some((Some(false), U96::from(500))),
         );
     }
 
@@ -316,6 +357,7 @@ mod tests {
                 deadline: 10,
                 request: None,
                 committed_count: 0,
+                self_committed: false,
             }
             .self_revealed()
         );
@@ -330,7 +372,7 @@ mod tests {
         assert!(!collecting_commitments(20, 40).self_revealed());
         assert!(
             !SentinelRequestState::WaitingForOutcome {
-                approve: true,
+                approve: Some(true),
                 slash_amount: U96::from(500),
                 self_revealed: false,
             }
@@ -368,7 +410,7 @@ mod tests {
         );
         assert!(
             SentinelRequestState::WaitingForOutcome {
-                approve: true,
+                approve: Some(true),
                 slash_amount: U96::from(500),
                 self_revealed: true,
             }
@@ -389,7 +431,7 @@ mod tests {
     }
 
     /// Snapshots written before `WaitingForEngineCheck` tracked
-    /// `committed_count` still load, with no commits counted.
+    /// `committed_count`/`self_committed` still load, with no commits counted.
     #[test]
     fn waiting_for_engine_check_without_committed_count_deserializes() {
         let restored: SentinelRequestState =
@@ -402,6 +444,7 @@ mod tests {
                 deadline: 10,
                 request: None,
                 committed_count: 0,
+                self_committed: false,
             },
         );
     }
@@ -419,10 +462,41 @@ mod tests {
         assert_eq!(
             restored,
             SentinelRequestState::WaitingForOutcome {
-                approve: true,
+                approve: Some(true),
                 slash_amount: U96::from(500),
                 self_revealed: true,
             },
+        );
+    }
+
+    /// A known vote is stored as a plain boolean, as it was before `approve`
+    /// became optional, so snapshots load in both directions. Only an
+    /// unknown vote is stored as `null`.
+    #[test]
+    fn dispute_resolution_approve_keeps_the_snapshot_format() {
+        let known = SentinelRequestState::WaitingForDisputeResolution {
+            approve: Some(true),
+            slash_amount: U96::from(500),
+            arbitration_deadline: 60,
+        };
+        let json = r#"{"WaitingForDisputeResolution":{"approve":true,"slash_amount":"0x1f4","arbitration_deadline":60}}"#;
+
+        assert_eq!(serde_json::to_string(&known).unwrap(), json);
+        assert_eq!(
+            serde_json::from_str::<SentinelRequestState>(json).unwrap(),
+            known
+        );
+
+        let unknown = SentinelRequestState::WaitingForDisputeResolution {
+            approve: None,
+            slash_amount: U96::from(500),
+            arbitration_deadline: 60,
+        };
+        let json = serde_json::to_string(&unknown).unwrap();
+        assert!(json.contains(r#""approve":null"#));
+        assert_eq!(
+            serde_json::from_str::<SentinelRequestState>(&json).unwrap(),
+            unknown
         );
     }
 
@@ -439,6 +513,7 @@ mod tests {
                 deadline: 10,
                 request: None,
                 committed_count: 0,
+                self_committed: false,
             },
         );
         state.0.insert(
@@ -452,6 +527,7 @@ mod tests {
                     reveal_deadline: 40,
                 }),
                 committed_count: 0,
+                self_committed: false,
             },
         );
         state.0.insert(
