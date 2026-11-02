@@ -29,6 +29,9 @@ export default defineConfig({
 		__DEFAULT_ORACLES__: JSON.stringify([]),
 	},
 	test: {
+		// Node 25+ enables its own Web Storage API by default, which shadows jsdom's `localStorage`
+		// (and is non-functional without `--localstorage-file`), so disable it in test workers.
+		execArgv: ["--no-experimental-webstorage"],
 		coverage: {
 			provider: "v8",
 			include: ["src/**/*.ts", "src/**/*.tsx"],
