@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.30;
 
-import {Test} from "@forge-std/Test.sol";
+import {Test, Vm} from "@forge-std/Test.sol";
 import {Safenet7702Executor} from "@/Safenet7702Executor.sol";
 import {ISafenet7702Executor} from "@/interfaces/ISafenet7702Executor.sol";
 
@@ -34,6 +34,14 @@ contract MockTarget {
 
     function boom() external pure {
         revert Boom();
+    }
+
+    // Reverts with `size` bytes of revert data. Assembly keeps the callee's own cost down to the memory
+    // expansion for that data, all of which is paid from the gas the call was forwarded.
+    function revertWithData(uint256 size) external pure {
+        assembly ("memory-safe") {
+            revert(0, size)
+        }
     }
 
     function recordedLength() external view returns (uint256) {
@@ -205,6 +213,68 @@ contract Safenet7702ExecutorTest is Test {
         assertEq(targetA.recordedLength(), 2);
         assertEq(targetA.recorded(0), 11);
         assertEq(targetA.recorded(1), 33);
+    }
+
+    // Executes a two-call batch whose first call reverts and whose second records 22, both with a 100k gas limit,
+    // in a transaction with `txGas` gas. `largeRevertData` switches the first call's revert data between empty
+    // and as much as the call can produce from its own 100k limit.
+    function _executeAfterRevertingCall(bool largeRevertData, uint256 txGas)
+        internal
+        returns (bool success, bytes memory result)
+    {
+        uint256 revertDataSize = largeRevertData ? 180_000 : 0;
+
+        ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](2);
+        calls[0] = _call(address(targetA), 100_000, abi.encodeCall(MockTarget.revertWithData, (revertDataSize)));
+        calls[1] = _call(address(targetB), 100_000, abi.encodeCall(MockTarget.record, (22)));
+
+        vm.prank(eoa);
+        (success, result) = address(account).call{gas: txGas}(abi.encodeCall(Safenet7702Executor.execute, (calls)));
+    }
+
+    // Control for the test below: with empty revert data, a gas budget covering both calls' limits plus overhead
+    // is enough for the batch to carry on past the failing call and execute the second one.
+    function test_Execute_EmptyRevertData_SecondCallExecutes() public {
+        vm.expectEmit(eoa);
+        emit Safenet7702Executor.CallFailed(0, "");
+
+        (bool success,) = _executeAfterRevertingCall(false, 300_000);
+
+        assertTrue(success);
+        assertEq(targetB.recordedLength(), 1);
+        assertEq(targetB.recorded(0), 22);
+    }
+
+    // The first call stays within its 100k gas limit, but the revert data it returns is copied into the
+    // executor's memory and re-encoded into the {CallFailed} event, all paid from the batch's own gas rather than
+    // the call's. That cost is unbounded by the call's gas limit, so the same budget that suffices with empty
+    // revert data now runs the whole batch out of gas and the second call never executes.
+    function test_Execute_LargeRevertData_ConsumesGasBeyondCallLimit() public {
+        (bool success, bytes memory result) = _executeAfterRevertingCall(true, 300_000);
+
+        // An out-of-gas failure in the executor itself, not an {InsufficientGas} revert.
+        assertFalse(success);
+        assertEq(result, "");
+        assertEq(targetB.recordedLength(), 0);
+
+        // With ample gas the batch does complete, showing the first call itself fit its gas limit: it is only
+        // the executor's handling of its revert data that needs far more than both calls' limits combined.
+        vm.recordLogs();
+        uint256 gasBefore = gasleft();
+        (success,) = _executeAfterRevertingCall(true, 10_000_000);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        assertTrue(success);
+        assertEq(targetB.recordedLength(), 1);
+        assertGt(gasUsed, 1_000_000);
+
+        // The first call produced all of its revert data, rather than running out of gas within its own limit.
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 1);
+        assertEq(logs[0].emitter, eoa);
+        (uint256 index, bytes memory revertData) = abi.decode(logs[0].data, (uint256, bytes));
+        assertEq(index, 0);
+        assertEq(revertData.length, 180_000);
     }
 
     function test_Execute_ForwardsValueFromAccountBalance() public {
