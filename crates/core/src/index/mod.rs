@@ -8,10 +8,7 @@ mod clock;
 pub mod events;
 
 use crate::provider::Provider;
-use alloy::{
-    primitives::{Address, B256},
-    rpc::types::error::EthRpcErrorCode,
-};
+use alloy::primitives::{Address, B256};
 use blocks::BlockWatcher;
 use clock::Clock;
 use events::{EventWatcher, Events};
@@ -175,7 +172,7 @@ where
                 now >= at.saturating_add(timings.block_time)
             }
             _ => {
-                is_unknown_block(err)
+                events::is_unknown_block(err)
                     || now
                         >= (timestamp.saturating_mul(1000))
                             .saturating_add(timings.block_time)
@@ -183,27 +180,6 @@ where
             }
         }
     }
-}
-
-/// Whether an event watcher failure was caused by the node not knowing the
-/// requested block: a JSON-RPC "resource not found" error (see
-/// [EIP-1474](https://eips.ethereum.org/EIPS/eip-1474), as reported by Reth),
-/// or geth's "unknown block" error.
-///
-/// This is only a latency hint to revalidate an uncled block right away;
-/// unrecognized errors still revalidate once the next block is due.
-fn is_unknown_block(err: &events::Error) -> bool {
-    let events::Error::Rpc(rpc) = err else {
-        return false;
-    };
-    rpc.as_error_resp().is_some_and(|payload| {
-        payload.code == EthRpcErrorCode::ResourceNotFound.code() as i64
-            || (payload.code == EthRpcErrorCode::InvalidInput.code() as i64
-                && payload
-                    .message
-                    .to_ascii_lowercase()
-                    .contains("unknown block"))
-    })
 }
 
 #[cfg(test)]
