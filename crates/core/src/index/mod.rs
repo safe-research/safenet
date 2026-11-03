@@ -8,7 +8,7 @@ mod clock;
 pub mod events;
 
 use crate::provider::Provider;
-use alloy::{primitives::Address, rpc::types::error::EthRpcErrorCode};
+use alloy::primitives::Address;
 use blocks::BlockWatcher;
 use events::{EventWatcher, Events};
 use serde::Deserialize;
@@ -127,7 +127,7 @@ where
         // block it produced (once due) and make sure it is still canonical.
         match self
             .blocks
-            .revalidate_last_block_if_due(is_unknown_block(&err))
+            .revalidate_last_block_if_due(matches!(err, events::Error::UnknownBlock(_)))
             .await?
         {
             // It was uncled; tell the event watcher to move on.
@@ -146,27 +146,6 @@ where
             None => Err(err.into()),
         }
     }
-}
-
-/// Whether an event watcher failure was caused by the node not knowing the
-/// requested block: a JSON-RPC "resource not found" error (see
-/// [EIP-1474](https://eips.ethereum.org/EIPS/eip-1474), as reported by Reth),
-/// or geth's "unknown block" error.
-///
-/// This is only a latency hint to revalidate an uncled block right away; see
-/// [`BlockWatcher::revalidate_last_block_if_due`].
-fn is_unknown_block(err: &events::Error) -> bool {
-    let events::Error::Rpc(rpc) = err else {
-        return false;
-    };
-    rpc.as_error_resp().is_some_and(|payload| {
-        payload.code == EthRpcErrorCode::ResourceNotFound.code() as i64
-            || (payload.code == EthRpcErrorCode::InvalidInput.code() as i64
-                && payload
-                    .message
-                    .to_ascii_lowercase()
-                    .contains("unknown block"))
-    })
 }
 
 #[cfg(test)]
