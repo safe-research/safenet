@@ -12,6 +12,7 @@ use alloy::{primitives::Address, rpc::types::error::EthRpcErrorCode};
 use blocks::BlockWatcher;
 use events::{EventWatcher, Events};
 use serde::Deserialize;
+use std::time::Duration;
 
 pub use blocks::{BlockStatus, BlockUpdate};
 pub use events::{EventBlock, EventLog, EventUpdate};
@@ -96,6 +97,11 @@ where
         }
     }
 
+    /// Returns the expected time between blocks.
+    pub fn block_time(&self) -> Duration {
+        Duration::from_millis(self.blocks.block_time())
+    }
+
     /// Returns the block watcher's current view of the chain.
     pub fn block_status(&self) -> BlockStatus {
         self.blocks.status()
@@ -178,7 +184,6 @@ mod tests {
         sol_types::SolEvent,
         transports::mock::Asserter,
     };
-    use std::time::Duration;
 
     fn config() -> Config {
         Config {
