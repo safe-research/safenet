@@ -77,6 +77,15 @@ pub fn uncled_blocks_total() -> Counter {
     )
 }
 
+/// Number of consecutive failures to get the next update from the chain
+/// watcher; reset to 0 on success.
+pub fn watcher_consecutive_failures() -> Gauge {
+    metrics::gauge!(
+        description: "Number of consecutive failures to get the next update from the chain watcher.",
+        "safenet_core_watcher_consecutive_failures",
+    )
+}
+
 /// Number of calls in each transaction batch sent through the executor.
 pub fn transaction_batch_size() -> Histogram {
     metrics::histogram!(
@@ -100,6 +109,7 @@ pub fn initialize() {
         block_number(status).set(0.0);
     }
     uncled_blocks_total().absolute(0);
+    watcher_consecutive_failures().set(0.0);
 
     // Spawn a background task to collect and report metrics on the underlying
     // Tokio runtime.
