@@ -8,8 +8,12 @@ mod clock;
 pub mod events;
 
 use crate::provider::Provider;
-use alloy::{primitives::Address, rpc::types::error::EthRpcErrorCode};
+use alloy::{
+    primitives::{Address, B256},
+    rpc::types::error::EthRpcErrorCode,
+};
 use blocks::BlockWatcher;
+use clock::Clock;
 use events::{EventWatcher, Events};
 use serde::Deserialize;
 
@@ -58,6 +62,10 @@ pub enum Update<E> {
 pub struct Watcher<E> {
     blocks: BlockWatcher,
     events: EventWatcher<E>,
+    clock: Clock,
+    /// The hash of the in-flight block that was last revalidated after its
+    /// logs could not be fetched, and when (in Unix epoch milliseconds).
+    last_revalidation: Option<(B256, u64)>,
 }
 
 impl<E> Watcher<E>
@@ -75,7 +83,12 @@ where
     ) -> Result<Self, Error> {
         let blocks = BlockWatcher::new(provider.clone(), config.blocks, indexed).await?;
         let events = EventWatcher::new(provider, config.events, addresses);
-        Ok(Self { blocks, events })
+        Ok(Self {
+            blocks,
+            events,
+            clock: Clock::start(),
+            last_revalidation: None,
+        })
     }
 
     /// Produces the next watcher update.
@@ -104,41 +117,87 @@ where
     /// Fetches the next batch of logs, recovering from a node that exposed a
     /// block it then cannot serve logs for by checking whether it was uncled.
     async fn next_logs(&mut self) -> Result<Option<EventUpdate<E>>, Error> {
-        match self.events.next().await {
-            Ok(logs) => Ok(logs),
-            Err(err) if is_resource_not_found(&err) => {
-                // Some RPC nodes will see an uncled block but not support querying
-                // logs for it (for example, Reth). Ask the `BlockWatcher` to revalidate
-                // the last block it produced and make sure it is still canonical.
-                match self.blocks.revalidate_last_block().await? {
-                    // It was uncled; tell the event watcher to move on.
-                    Some(invalidated) => {
-                        tracing::debug!(
-                            number = invalidated.number,
-                            hash = %invalidated.hash,
-                            "logs unavailable for uncled block, skipping"
-                        );
-                        self.events.on_block_invalidated(invalidated.hash)?;
-                        Ok(None)
-                    }
-                    // It is still canonical; the logs just are not available yet.
-                    None => Err(err.into()),
-                }
+        let err = match self.events.next().await {
+            Ok(logs) => return Ok(logs),
+            Err(err) => err,
+        };
+
+        // Only a new block fetched by hash can be revalidated: the event
+        // watcher only accepts an invalidation of its in-flight block, and
+        // warps are beyond the max reorg depth anyway.
+        let Some((hash, timestamp)) = self.events.in_flight_block() else {
+            return Err(err.into());
+        };
+        if !self.revalidation_due(hash, timestamp, &err) {
+            return Err(err.into());
+        }
+
+        // The node may have exposed a block that was then uncled, and can no
+        // longer serve its logs. Ask the `BlockWatcher` to revalidate the last
+        // block it produced and make sure it is still canonical.
+        self.last_revalidation = Some((hash, self.clock.now_ms()));
+        match self.blocks.revalidate_last_block().await? {
+            // It was uncled; tell the event watcher to move on.
+            Some(invalidated) => {
+                tracing::debug!(
+                    number = invalidated.number,
+                    hash = %invalidated.hash,
+                    "logs unavailable for uncled block, skipping"
+                );
+                self.events.on_block_invalidated(invalidated.hash)?;
+                Ok(None)
             }
-            Err(err) => Err(err.into()),
+            // It is still canonical; the logs just are not available yet. They
+            // must never be skipped, so return the error and retry the block.
+            None => Err(err.into()),
+        }
+    }
+
+    /// Whether a failure to fetch the logs of the in-flight block `hash` mined
+    /// at `timestamp` (in seconds) should revalidate it.
+    ///
+    /// This is time-gated, so that a block whose logs keep failing costs at
+    /// most one extra request per block time: a recognized "unknown block"
+    /// error revalidates right away, any other error once the next block is
+    /// due (a reorg uncling the block is visible on the node by then), and
+    /// after that at most once per block time.
+    fn revalidation_due(&self, hash: B256, timestamp: u64, err: &events::Error) -> bool {
+        let timings = self.blocks.timings();
+        let now = self.clock.now_ms();
+        match self.last_revalidation {
+            Some((last_hash, at)) if last_hash == hash => {
+                now >= at.saturating_add(timings.block_time)
+            }
+            _ => {
+                is_unknown_block(err)
+                    || now
+                        >= (timestamp.saturating_mul(1000))
+                            .saturating_add(timings.block_time)
+                            .saturating_add(timings.block_propagation_delay)
+            }
         }
     }
 }
 
-/// Whether an event watcher failure was caused by a JSON-RPC "resource not
-/// found" error. See [EIP-1474](https://eips.ethereum.org/EIPS/eip-1474).
-fn is_resource_not_found(err: &events::Error) -> bool {
-    matches!(
-        err,
-        events::Error::Rpc(rpc)
-            if rpc.as_error_resp().is_some_and(|payload| payload.code
-                == EthRpcErrorCode::ResourceNotFound.code() as i64)
-    )
+/// Whether an event watcher failure was caused by the node not knowing the
+/// requested block: a JSON-RPC "resource not found" error (see
+/// [EIP-1474](https://eips.ethereum.org/EIPS/eip-1474), as reported by Reth),
+/// or geth's "unknown block" error.
+///
+/// This is only a latency hint to revalidate an uncled block right away;
+/// unrecognized errors still revalidate once the next block is due.
+fn is_unknown_block(err: &events::Error) -> bool {
+    let events::Error::Rpc(rpc) = err else {
+        return false;
+    };
+    rpc.as_error_resp().is_some_and(|payload| {
+        payload.code == EthRpcErrorCode::ResourceNotFound.code() as i64
+            || (payload.code == EthRpcErrorCode::InvalidInput.code() as i64
+                && payload
+                    .message
+                    .to_ascii_lowercase()
+                    .contains("unknown block"))
+    })
 }
 
 #[cfg(test)]
@@ -156,6 +215,7 @@ mod tests {
         sol_types::SolEvent,
         transports::mock::Asserter,
     };
+    use std::time::Duration;
 
     fn config() -> Config {
         Config {
@@ -401,6 +461,172 @@ mod tests {
         );
     }
 
+    /// A watcher (with `max_reorg_depth = 1`) that just emitted new block 1000,
+    /// whose logs it is now fetching.
+    async fn watcher_fetching_block_1000(asserter: &Asserter) -> Watcher<Weth::WethEvents> {
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(999));
+        let mut config = config();
+        config.blocks.max_reorg_depth = 1;
+        let mut watcher = watcher(asserter, config, None).await;
+        assert_eq!(watcher.next().await.unwrap(), new_block_update(1000));
+        watcher
+    }
+
+    fn unknown_block() -> ErrorPayload {
+        ErrorPayload {
+            code: -32000,
+            message: "Unknown Block".into(),
+            data: None,
+        }
+    }
+
+    fn internal_error() -> ErrorPayload {
+        ErrorPayload {
+            code: -32603,
+            message: "internal error".into(),
+            data: None,
+        }
+    }
+
+    fn uncled_block_1000() -> Block {
+        let mut block = block(1000);
+        block.header.hash = B256::repeat_byte(0x42);
+        block
+    }
+
+    /// Asserts that the next update fails with the event watcher's error, and
+    /// that every mocked response was consumed: an unexpected revalidation
+    /// fails with a block watcher error instead, and a missing one leaves its
+    /// response in the queue.
+    async fn assert_logs_error(watcher: &mut Watcher<Weth::WethEvents>, asserter: &Asserter) {
+        assert!(matches!(watcher.next().await, Err(Error::Events(_))));
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn revalidates_right_away_on_unknown_block_error() {
+        let asserter = Asserter::new();
+        let mut watcher = watcher_fetching_block_1000(&asserter).await;
+
+        asserter.push_failure(unknown_block());
+        asserter.push_success(&uncled_block_1000());
+        assert_eq!(
+            watcher.next().await.unwrap(),
+            Update::Block(BlockUpdate::Uncle { number: 1000 })
+        );
+
+        // The replacement block is fetched, along with its logs.
+        asserter.push_success(&uncled_block_1000());
+        assert_eq!(
+            watcher.next().await.unwrap(),
+            Update::Block(BlockUpdate::New {
+                number: 1000,
+                hash: B256::repeat_byte(0x42),
+                timestamp: block_timestamp(1000),
+                logs_bloom: block_bloom(1000),
+            })
+        );
+        asserter.push_success(&vec![log((1000, 0), weth_deposit(1))]);
+        assert_eq!(
+            watcher.next().await.unwrap(),
+            logs_update(1000..=1000, [weth_deposit(1)])
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn revalidates_on_unrecognized_error_once_the_next_block_is_due() {
+        let asserter = Asserter::new();
+        let mut watcher = watcher_fetching_block_1000(&asserter).await;
+
+        // The next block is due 2_000 + 500 ms after block 1000.
+        tokio::time::advance(Duration::from_millis(2_499)).await;
+        asserter.push_failure(internal_error());
+        assert_logs_error(&mut watcher, &asserter).await;
+
+        tokio::time::advance(Duration::from_millis(1)).await;
+        asserter.push_failure(internal_error());
+        asserter.push_success(&uncled_block_1000());
+        assert_eq!(
+            watcher.next().await.unwrap(),
+            Update::Block(BlockUpdate::Uncle { number: 1000 })
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn retries_logs_of_a_canonical_block_after_revalidating_it() {
+        let asserter = Asserter::new();
+        let mut watcher = watcher_fetching_block_1000(&asserter).await;
+
+        asserter.push_failure(unknown_block());
+        asserter.push_success(&block(1000));
+        assert_logs_error(&mut watcher, &asserter).await;
+
+        asserter.push_success(&vec![log((1000, 0), weth_deposit(1))]);
+        assert_eq!(
+            watcher.next().await.unwrap(),
+            logs_update(1000..=1000, [weth_deposit(1)])
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn revalidates_a_canonical_block_at_most_once_per_block_time() {
+        let asserter = Asserter::new();
+        let mut watcher = watcher_fetching_block_1000(&asserter).await;
+
+        asserter.push_failure(unknown_block());
+        asserter.push_success(&block(1000));
+        assert_logs_error(&mut watcher, &asserter).await;
+
+        // Neither a recognized error nor the next block being due revalidate
+        // again within a block time.
+        asserter.push_failure(unknown_block());
+        assert_logs_error(&mut watcher, &asserter).await;
+        tokio::time::advance(Duration::from_millis(1_999)).await;
+        asserter.push_failure(internal_error());
+        assert_logs_error(&mut watcher, &asserter).await;
+
+        tokio::time::advance(Duration::from_millis(1)).await;
+        asserter.push_failure(internal_error());
+        asserter.push_success(&block(1000));
+        assert_logs_error(&mut watcher, &asserter).await;
+
+        asserter.push_failure(internal_error());
+        assert_logs_error(&mut watcher, &asserter).await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn does_not_revalidate_on_warp_failures() {
+        let asserter = Asserter::new();
+        asserter.push_success(&block(1000));
+        asserter.push_success(&block(997));
+        asserter.push_success(&block(998));
+        asserter.push_success(&block(999));
+        let mut watcher = watcher(
+            &asserter,
+            config(),
+            Some(BlockStatus {
+                latest: 850,
+                safe: 847,
+            }),
+        )
+        .await;
+        assert_eq!(
+            watcher.next().await.unwrap(),
+            Update::Block(BlockUpdate::Uncle { number: 848 })
+        );
+        assert_eq!(
+            watcher.next().await.unwrap(),
+            Update::Block(BlockUpdate::Warp { from: 848, to: 997 })
+        );
+
+        asserter.push_failure(unknown_block());
+        assert_logs_error(&mut watcher, &asserter).await;
+    }
+
     fn block(number: u64) -> Block {
         Block::empty(Header {
             hash: block_hash(number),
@@ -421,8 +647,9 @@ mod tests {
         B256::from(bytes)
     }
 
+    /// Block 1000 is mined at the test clock's start, every 2 seconds.
     fn block_timestamp(number: u64) -> u64 {
-        number * 2
+        clock::TEST_SYSTEM_TIME_EPOCH_SECONDS + number * 2 - 2_000
     }
 
     fn block_bloom(number: u64) -> Bloom {
