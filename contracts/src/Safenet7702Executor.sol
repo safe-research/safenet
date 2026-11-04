@@ -56,14 +56,16 @@ contract Safenet7702Executor is ISafenet7702Executor {
      *      EIP-150's rule that a call receives at most 63/64 of the gas remaining, but deliberately does not
      *      model the `CALL`'s own base cost — cold account access, argument copy, memory expansion — which
      *      the EVM deducts before that rule applies. Those costs are repriced by hardforks, so hardcoding
-     *      them here would age badly for a bound that only needs to be approximately right. The caller is
-     *      expected to size its gas limit to cover each `gasLimit` plus any such EVM base deductions and
-     *      per-call overhead.
+     *      them here would age badly for a bound that only needs to be approximately right. As a result,
+     *      passing this check does NOT guarantee that the call receives its full `gasLimit`: a tightly funded
+     *      call can still be forwarded slightly less, and if that makes it fail, the failure is reported as
+     *      an ordinary {CallFailed} and the batch completes. The caller is expected to size its gas limit to
+     *      cover each `gasLimit` plus any such EVM base deductions and per-call overhead.
      *
-     *      Without this check an underfunded transaction would truncate a call, swallow the resulting
-     *      out-of-gas failure as an ordinary {CallFailed}, and still report success, silently dropping the
-     *      call. It would also make `eth_estimateGas` converge on a gas limit at which nothing executes,
-     *      since the transaction succeeds there.
+     *      Without this check a grossly underfunded transaction would truncate a call, swallow the
+     *      resulting out-of-gas failure as an ordinary {CallFailed}, and still report success, silently
+     *      dropping the call. It would also make `eth_estimateGas` converge on a gas limit at which nothing
+     *      executes, since the transaction succeeds there.
      * @param index The position within the `calls` array of the call that could not be funded.
      */
     error InsufficientGas(uint256 index);
@@ -84,22 +86,25 @@ contract Safenet7702Executor is ISafenet7702Executor {
      *      is paid from the account's own balance. A call whose `value` exceeds the remaining balance fails
      *      like any other call, emitting {CallFailed}, and the batch carries on.
      *
-     *      Each call is preceded by a best-effort check that enough gas remains to forward it its whole
-     *      `gasLimit`, so an underfunded batch reverts (see {InsufficientGas}) rather than truncating its
-     *      calls and reporting success. The transaction therefore reverts on exactly two conditions: the
-     *      self-call guard (see {OnlySelf}) and an underfunded call. Since that check does not model the
-     *      EVM's own per-call deductions, the caller must supply a gas limit covering the sum of every
-     *      `gasLimit` in the batch plus that overhead, even though calls typically consume far less than
-     *      they reserve.
+     *      Each call is preceded by a best-effort check that 63/64 of the remaining gas covers its
+     *      `gasLimit`, so a grossly underfunded batch reverts (see {InsufficientGas}) rather than truncating
+     *      its calls and reporting success. The transaction therefore reverts on exactly two conditions: the
+     *      self-call guard (see {OnlySelf}) and a call failing that check. The check does not model the
+     *      executor's or the EVM's own per-call costs, so it does not guarantee full forwarding: a call that
+     *      passes it may still receive somewhat less than its `gasLimit`, and fail as an ordinary
+     *      {CallFailed} if it needed all of it. The caller must therefore supply a gas limit covering the sum
+     *      of every `gasLimit` in the batch plus that overhead, even though calls typically consume far less
+     *      than they reserve.
      */
     function execute(Call[] calldata calls) external override(ISafenet7702Executor) {
         require(msg.sender == address(this), OnlySelf());
         for (uint256 i = 0; i < calls.length; ++i) {
             Call calldata call = calls[i];
 
-            // Refuse to make a call that EIP-150 would truncate: a truncated call that runs out of gas is
-            // indistinguishable from one that reverted, so it would be swallowed below and the batch would
-            // report success having silently dropped it.
+            // Refuse to make a call that EIP-150 would clearly truncate: a truncated call that runs out of gas
+            // is indistinguishable from one that reverted, so it would be swallowed below and the batch would
+            // report success having silently dropped it. This is approximate (see {InsufficientGas}): the
+            // gas spent making the call is not modelled, so a tightly funded call may still be truncated.
             require(gasleft() * 63 / 64 >= call.gasLimit, InsufficientGas(i));
 
             // Make the call in assembly so that none of its return data is copied back: Solidity copies all of it
