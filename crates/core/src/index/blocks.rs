@@ -435,6 +435,11 @@ impl BlockWatcher {
         }
     }
 
+    /// Returns the watcher's resolved timings.
+    pub fn timings(&self) -> &Timings {
+        &self.timings
+    }
+
     /// Retrieves the next block update from the watcher. This will block and
     /// wait for a new block to be produced if there is no update available.
     pub async fn next(&mut self) -> Result<BlockUpdate, Error> {

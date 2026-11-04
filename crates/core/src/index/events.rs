@@ -309,6 +309,19 @@ where
         }
     }
 
+    /// Returns the hash and timestamp (in seconds) of the new block whose logs
+    /// are being fetched, or `None` while idle or warping.
+    pub fn in_flight_block(&self) -> Option<(B256, u64)> {
+        match self.step {
+            Step::Block {
+                block_hash,
+                block_timestamp,
+                ..
+            } => Some((block_hash, block_timestamp)),
+            _ => None,
+        }
+    }
+
     /// Fetches the next batch of logs, advancing the state machine.
     ///
     /// Returns `None` once the current work is complete and the watcher is idle,
