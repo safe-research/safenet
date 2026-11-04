@@ -44,6 +44,13 @@ contract MockTarget {
         }
     }
 
+    // Like {revertWithData}, but succeeds, returning `size` bytes of return data.
+    function returnData(uint256 size) external pure {
+        assembly ("memory-safe") {
+            return(0, size)
+        }
+    }
+
     function recordedLength() external view returns (uint256) {
         return recorded.length;
     }
@@ -215,17 +222,19 @@ contract Safenet7702ExecutorTest is Test {
         assertEq(targetA.recorded(1), 33);
     }
 
-    // Executes a two-call batch whose first call reverts and whose second records 22, both with a 100k gas limit,
-    // in a transaction with `txGas` gas. `largeRevertData` switches the first call's revert data between empty
-    // and as much as the call can produce from its own 100k limit.
-    function _executeAfterRevertingCall(bool largeRevertData, uint256 txGas)
+    // Executes a two-call batch whose second call records 22, both with a 100k gas limit, in a transaction with
+    // `txGas` gas. The first call returns `dataSize` bytes, reverting with them if `reverts` is set. 180,000 bytes
+    // is about as much as the call can produce from its own 100k limit.
+    function _executeAfterCall(bool reverts, uint256 dataSize, uint256 txGas)
         internal
         returns (bool success, bytes memory result)
     {
-        uint256 revertDataSize = largeRevertData ? 180_000 : 0;
+        bytes memory data = reverts
+            ? abi.encodeCall(MockTarget.revertWithData, (dataSize))
+            : abi.encodeCall(MockTarget.returnData, (dataSize));
 
         ISafenet7702Executor.Call[] memory calls = new ISafenet7702Executor.Call[](2);
-        calls[0] = _call(address(targetA), 100_000, abi.encodeCall(MockTarget.revertWithData, (revertDataSize)));
+        calls[0] = _call(address(targetA), 100_000, data);
         calls[1] = _call(address(targetB), 100_000, abi.encodeCall(MockTarget.record, (22)));
 
         vm.prank(eoa);
@@ -238,7 +247,7 @@ contract Safenet7702ExecutorTest is Test {
         vm.expectEmit(eoa);
         emit Safenet7702Executor.CallFailed(0, "");
 
-        (bool success,) = _executeAfterRevertingCall(false, 300_000);
+        (bool success,) = _executeAfterCall(true, 0, 220_000);
 
         assertTrue(success);
         assertEq(targetB.recordedLength(), 1);
@@ -250,7 +259,7 @@ contract Safenet7702ExecutorTest is Test {
     // the call's. That cost is unbounded by the call's gas limit, so the same budget that suffices with empty
     // revert data now runs the whole batch out of gas and the second call never executes.
     function test_Execute_LargeRevertData_ConsumesGasBeyondCallLimit() public {
-        (bool success, bytes memory result) = _executeAfterRevertingCall(true, 300_000);
+        (bool success, bytes memory result) = _executeAfterCall(true, 180_000, 220_000);
 
         // An out-of-gas failure in the executor itself, not an {InsufficientGas} revert.
         assertFalse(success);
@@ -261,7 +270,7 @@ contract Safenet7702ExecutorTest is Test {
         // the executor's handling of its revert data that needs far more than both calls' limits combined.
         vm.recordLogs();
         uint256 gasBefore = gasleft();
-        (success,) = _executeAfterRevertingCall(true, 10_000_000);
+        (success,) = _executeAfterCall(true, 180_000, 10_000_000);
         uint256 gasUsed = gasBefore - gasleft();
 
         assertTrue(success);
@@ -275,6 +284,34 @@ contract Safenet7702ExecutorTest is Test {
         (uint256 index, bytes memory revertData) = abi.decode(logs[0].data, (uint256, bytes));
         assertEq(index, 0);
         assertEq(revertData.length, 180_000);
+    }
+
+    // Control for the test below: with empty return data, the same gas budget is enough for both calls.
+    function test_Execute_EmptyReturnData_SecondCallExecutes() public {
+        (bool success,) = _executeAfterCall(false, 0, 220_000);
+
+        assertTrue(success);
+        assertEq(targetB.recordedLength(), 1);
+        assertEq(targetB.recorded(0), 22);
+    }
+
+    // A successful call's return data is also copied into the executor's memory, paid from the batch's own gas
+    // rather than the call's, so that cost is not bounded by the call's gas limit either: with the budget that
+    // suffices with empty return data, copying it leaves too little gas to fund the second call.
+    function test_Execute_LargeReturnData_ConsumesGasBeyondCallLimit() public {
+        (bool success, bytes memory result) = _executeAfterCall(false, 180_000, 220_000);
+
+        assertFalse(success);
+        assertEq(result, abi.encodeWithSelector(Safenet7702Executor.InsufficientGas.selector, uint256(1)));
+        assertEq(targetB.recordedLength(), 0);
+
+        // With ample gas the batch completes without a {CallFailed}, showing the first call itself fit its gas
+        // limit and returned all of its data.
+        vm.recordLogs();
+        (success,) = _executeAfterCall(false, 180_000, 10_000_000);
+        assertTrue(success);
+        assertEq(targetB.recordedLength(), 1);
+        assertEq(vm.getRecordedLogs().length, 0);
     }
 
     function test_Execute_ForwardsValueFromAccountBalance() public {
