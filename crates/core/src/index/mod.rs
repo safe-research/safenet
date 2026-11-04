@@ -16,6 +16,7 @@ use blocks::BlockWatcher;
 use clock::Clock;
 use events::{EventWatcher, Events};
 use serde::Deserialize;
+use std::time::Duration;
 
 pub use blocks::{BlockStatus, BlockUpdate};
 pub use events::{EventBlock, EventLog, EventUpdate};
@@ -107,6 +108,11 @@ where
             self.events.on_block_update(update.clone())?;
             Ok(Update::Block(update))
         }
+    }
+
+    /// Returns the expected time between blocks.
+    pub fn block_time(&self) -> Duration {
+        Duration::from_millis(self.blocks.timings().block_time)
     }
 
     /// Returns the block watcher's current view of the chain.
@@ -215,7 +221,6 @@ mod tests {
         sol_types::SolEvent,
         transports::mock::Asserter,
     };
-    use std::time::Duration;
 
     fn config() -> Config {
         Config {
