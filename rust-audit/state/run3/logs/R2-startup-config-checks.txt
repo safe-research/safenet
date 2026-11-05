@@ -1,0 +1,59 @@
+# R2: validator binary startup checks (run 3, audit commit 361aaf3)
+# Binary: $RUN/target-base/debug/validator built from wt/base at 361aaf3 (mtime 2026-10-08 22:40:47.972826918 +0530)
+# worktree HEAD: 361aaf3b25e12d2e04f296184c326830968f3727
+# Command per config: holdtarget timeout 20 $BIN --config-file <config>
+# No network: the bad-scheme case fails in alloy's connection-string parser (local IPC path check); the typo cases fail at config parse.
+
+=== rpc-bad-scheme.toml
+rpc = "htps://gnosis.rpc.example.invalid/v3/R2-FAKE-API-KEY-0123456789"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+--- output
+{"timestamp":"2026-10-08T17:14:29.458427Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:37453"},"target":"safenet_core::observability"}
+Error: Transport(Custom("failed to read IPC path htps://gnosis.rpc.example.invalid/v3/R2-FAKE-API-KEY-0123456789: No such file or directory (os error 2)"))
+exit=1
+
+=== typo-index.toml
+rpc = "http://127.0.0.1:9"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+
+[index]
+use_client_filter = true
+--- output
+Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `use_client_filter`", input: None, keys: [], span: Some(0..0) } })
+exit=1
+
+=== typo-toplevel.toml
+rpc = "http://127.0.0.1:9"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+
+[transaction]
+max_in_flight_transactions = 4
+--- output
+Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `transaction`", input: None, keys: [], span: Some(0..0) } })
+exit=1
+
+=== typo-transactions.toml
+rpc = "http://127.0.0.1:9"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite::memory:"
+
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+
+[transactions]
+max_in_flight_transaction = 4
+--- output
+Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `max_in_flight_transaction`, expected one of `max_in_flight_transactions`, `executor`, `max_batch_gas`, `blocks_before_resubmit`, `priority_fee_cap_percentage`", input: None, keys: [], span: Some(0..0) } })
+exit=1

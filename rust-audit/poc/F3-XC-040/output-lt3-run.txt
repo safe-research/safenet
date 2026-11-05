@@ -1,0 +1,16 @@
+=================== c-val (validator) exit=1 marker_hits=0
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+=================== v1-key-in-blocks_per_epoch (validator) exit=1 marker_hits=4
+Error: Parse(ParseError { position: Some((7, 20)), inner: Error { message: "invalid type: string \"0xfeedfacecafebeeffeedfacecafebeeffeedfacecafebeeffeedfacecafebeef\", expected a nonzero u64", input: None, keys: ["validator", "blocks_per_epoch"], span: Some(306..374) } })
+=================== v2-key-in-key_gen_timeout (validator) exit=1 marker_hits=4
+Error: Parse(ParseError { position: Some((7, 19)), inner: Error { message: "invalid type: string \"0xfeedfacecafebeeffeedfacecafebeeffeedfacecafebeeffeedfacecafebeef\", expected a nonzero u64", input: None, keys: ["validator", "key_gen_timeout"], span: Some(305..373) } })
+=================== c-sen (sentinel) exit=1 marker_hits=0
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+=================== s1-key-in-voting_window (sentinel) exit=1 marker_hits=4
+Error: Parse(ParseError { position: Some((8, 17)), inner: Error { message: "invalid type: string \"0xfeedfacecafebeeffeedfacecafebeeffeedfacecafebeeffeedfacecafebeef\", expected u64", input: None, keys: ["sentinel", "voting_window"], span: Some(329..397) } })
+=================== s2-bare-hex-in-engine (sentinel) exit=1 marker_hits=4
+Error: Parse(ParseError { position: Some((9, 10)), inner: Error { message: "relative URL without a base: \"feedfacecafebeeffeedfacecafebeeffeedfacecafebeeffeedfacecafebeef\"", input: None, keys: ["sentinel", "engine"], span: Some(340..406) } })
+=================== s3-0x-hex-in-engine (sentinel) exit=1 marker_hits=4
+Error: Parse(ParseError { position: Some((9, 10)), inner: Error { message: "relative URL without a base: \"0xfeedfacecafebeeffeedfacecafebeeffeedfacecafebeeffeedfacecafebeef\"", input: None, keys: ["sentinel", "engine"], span: Some(340..408) } })
+=================== s4-key-in-fee_token (sentinel) exit=1 marker_hits=0
+Error: Parse(ParseError { position: Some((7, 13)), inner: Error { message: "invalid string length", input: None, keys: ["sentinel", "fee_token"], span: Some(268..336) } })

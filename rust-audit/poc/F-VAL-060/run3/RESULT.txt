@@ -1,0 +1,5 @@
+$ cargo test -p validator --bins state::keygen:: -- --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3, PoC modules wired into crates/validator/src/state/keygen.rs, reverted afterwards)
+test state::keygen::poc_f_val_060_run3::forged_complaints_from_an_oracle_address_leak_the_polynomial ... 2 forged complaints from 0x00000000000000000000000000000000000BAd00 answered; f_me(0)*G matches c_me[0]: true
+ok
+
+(full run) test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.28s

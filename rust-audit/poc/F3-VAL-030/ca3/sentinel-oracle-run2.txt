@@ -1,0 +1,39 @@
+==> Anvil on 31400, 2s blocks
+    coordinator 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1 consensus 0x706f3533B199078F30BE5520b183d130a5cbb17F
+==> Fee token (MyToken) and SentinelOracle with the Aegis parameters
+    fee token 0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80
+    SentinelOracle 0xb1f7a2b5bBd80d29714f2A09710CC5e2661C20F4 fee=400000 bondMultiplier=2000
+==> Mining the 51840-block governance delay
+    head 51857, S1 active at 51847
+==> Starting validators (max_reorg_depth 5, default signing_timeout/oracle_timeout)
+==> Waiting for genesis confirmation
+    genesis group 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000
+==> Proposing an oracle-backed transaction (oracle = SentinelOracle)
+    Sign events since the proposal start: 1
+    request 0x8732885efe7c462779ff475b4f8cf216279ab15ed1d7dda2fba136189b215dc4 proposed in block T=51865; commitDeadline 51871, revealDeadline 51877; fork block T+5=51870
+    signature id 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000001
+==> S1 commits approve
+    S1 commit block 51866 (T+1) status 0x1
+==> Branch A: waiting for the commit deadline block 51871 (mined without S2's commit), then S1 reveals
+    branch A: OracleResult(approved=true) in block o=51872 (T+7)
+==> Waiting for both validators' SignShared on branch A
+    branch A: shares mined in blocks 51874,51874; head 51874; attestation id on A 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000001
+==> Reorg of depth 4 (blocks 51871..51874 replaced): S2's deny commit in block T+6=51871, both reveals in T+7
+    head after reorg 51874
+==> Waiting for the validators' resent shares to attest on the canonical branch
+
+=== CANONICAL CHAIN (branch B) ===
+Committed for request         : 2 (0x90f79bf6eb2c4f870365e785982e1f101e93b906@51866 0x15d34aaf54267db7d7c367839aaf71a00a2c6a65@51871)
+Revealed for request          : 2 (0x90f79bf6eb2c4f870365e785982e1f101e93b906@51872 0x15d34aaf54267db7d7c367839aaf71a00a2c6a65@51872)
+DisputeTriggered for request  : 1 (block 51872)
+OracleResult for request      : 0
+request state (2 = FROZEN)    : 2
+TransactionAttested events    : 1 (block 51876)
+attestation id for message    : 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000001
+branch-A shares               : 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc@51874 0x70997970c51812dc3a010c7d01b50e0d17dc79c8@51874
+SignCompleted root (canonical): 0x3689a9024ee225d55b72ac4295b75cb19a71d2cf2b469bec8ed80aca2858940d
+sum(branch-A z_i) vs canonical z: 0x131153dbad756d1aae9397913534cde60ade7138d5d82974c25d3de9dd4956da MATCH
+validator log lines:
+  [va] 1 x 'unexpected signing state'; 38 uncle/reorg lines; 0 deep-reorg lines
+  [vb] 1 x 'unexpected signing state'; 38 uncle/reorg lines; 0 deep-reorg lines
+REPRODUCED: the canonical chain attested a transaction whose SentinelOracle request is FROZEN (DisputeTriggered, no OracleResult); reorg depth 4 within max_reorg_depth 5.

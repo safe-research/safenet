@@ -1,0 +1,7 @@
+$ cargo test -p validator --bins state::keygen:: -- --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3, PoC modules wired into crates/validator/src/state/keygen.rs, reverted afterwards)
+test state::keygen::poc_f2_val_004_run3::late_setup_derives_a_different_share_deadline ... share deadline: normal path Some(32) (12 + 20), late-setup path Some(50) (30 + 20)
+ok
+test state::keygen::poc_f2_val_004_run3::share_seen_before_late_setup_is_dropped_and_its_sender_excluded ... share timeout at 50: rollover after excluding honest PEER1 = EpochSkipped { next_epoch: 2 }
+ok
+
+(full run) test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.28s

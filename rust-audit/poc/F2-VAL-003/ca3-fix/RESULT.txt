@@ -1,0 +1,70 @@
+CA3-FIX (2026-10-09), worktree wt/rv-xc at 361aaf3, PoC modules wired with #[cfg(test)] #[path] and reverted afterwards.
+Command: cargo test -p validator --bins --locked --offline -- <filters> --nocapture --test-threads=1
+Re-run of rv-val's run3 warp_boundary.rs (4 tests), then the CA3-FIX warp variants x1 (page splits) and x2 (long downtime, share round inside the warp: the F3-VAL-062 path).
+
+--- from r3-CA3FIX-val-existing.log (filters: poc_f2_val_003_run3, warp 96, restart from snapshot, after warp 96)
+test state::keygen::poc_f2_val_003_run3::restart_warp_after_boundary_keeps_peer_commitments ... restart from snapshot 97, warp 98..=110: snapshot at 110, epoch-2 commitments held = Some(2)
+test state::keygen::poc_f2_val_003_run3::stale_state_still_drops_commitment ... ok
+test state::keygen::poc_f2_val_003_run3::warp_over_boundary_keeps_peer_commitments ... warp 96..=110: snapshot at 110, epoch-2 commitments held = Some(2), KeyGenSetup for gid2 emitted 1x
+test state::keygen::poc_f2_val_003_run3::warp_over_deadline_restarts_at_the_deadline_block ... after warp 96..=130: restarted group excludes PEER3 = true, new deadline = Some(140) (expected Some(140))
+test result: FAILED. 19 passed; 4 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.67s
+
+--- from r3-CA3FIX-val-new.log (filters: ca3fix_f2_val_003, x1 pages, x2 )
+test state::keygen::ca3fix_f2_val_003::x1_warp_pages_split_at_the_boundary_keep_commitments ... x1 pages 96..=99 and 100..=110: snapshot 110, commitments held = Some(2), KeyGenSetup emitted 1x
+x1 pages 96..=100 and 101..=110: snapshot 110, commitments held = Some(2), KeyGenSetup emitted 1x
+x1 pages 96..=101 and 102..=110: snapshot 110, commitments held = Some(2), KeyGenSetup emitted 1x
+test state::keygen::ca3fix_f2_val_003::x2_long_downtime_warp_covering_the_share_round ... x2 live order: CollectingConfirmations(group=0xf083945e759015a0b7f6338417385cb3f07bf229393dffd60000000000000000)
+x2 warp page 98..=110 (before the setup resumes): CollectingCommitments(group=0xf083945e759015a0b7f6338417385cb3f07bf229393dffd60000000000000000, commitments=3, setup_done=false, deadline=Some(120))
+x2 after block 111: CollectingShares(group=0xf083945e759015a0b7f6338417385cb3f07bf229393dffd60000000000000000, shared={}, deadline=Some(140))
+x2 after block 140: EpochSkipped { next_epoch: 2 }
+x2 result: epoch-2 group 0xf083945e759015a0b7f6338417385cb3f07bf229393dffd60000000000000000 reached confirmations after the restart = false
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.33s
+
+--- mutation run (validator): python3 mutate.py <wt> pop droparm warpnb nonceover setinput, then cargo test -p validator --bins -- <filters>; reverted with git checkout
+
+--- from r3-CA3FIX-mut-val.log (filters: applied , ca3fix_, poc_f_val_001, poc_f2_val_001, poc_f_val_032_run3, poc_f2_val_003_run3, class mutation)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.10s
+applied pop to crates/validator/src/frost/ecdh.rs
+applied droparm to crates/validator/src/state/sign.rs
+applied warpnb to crates/core/src/state/mod.rs
+applied nonceover to crates/validator/src/secrets/store.rs
+applied setinput to crates/core/src/config.rs
+test config::ca3fix_config_echo::ca3fix_f2_xc_001_config_errors_never_echo_the_key ... FAILED
+test frost::ca3fix_f_val_001::w0_original_route_at_aegis_size_rejected ... FAILED
+test frost::ca3fix_f_val_001::w1_victim_pok_as_pop_rejected ... FAILED
+test frost::ca3fix_f_val_001::w2_full_commitment_copy_rejected ... ok
+test frost::ca3fix_f_val_001::w3_victim_polynomial_copy_rejected ... ok
+test frost::poc_f2_val_001_run3::poc_f2_val_001_copied_q_recovers_full_share ... ok
+test frost::poc_f_val_001::impostor_recovers_victim_signing_share ... ok
+test frost::poc_f_val_001::impostor_share_verifies_and_group_finalizes ... ok
+test frost::poc_f_val_001::pad_opens_two_recipients_slots ... ok
+test frost::poc_f_val_001_run3::v1_copy_q_keep_own_pop_rejected ... FAILED
+test frost::poc_f_val_001_run3::v2_copy_q_and_pop_verbatim_rejected ... FAILED
+test frost::poc_f_val_001_run3::v3_scalar_related_q_rejected ... FAILED
+test frost::poc_f_val_001_run3::v4_additive_related_q_rejected ... FAILED
+test frost::poc_f_val_001_run3::v5_negated_q_rejected ... FAILED
+test frost::poc_f_val_001_run3::v6_random_pop_rejected ... FAILED
+test frost::poc_f_val_001_run3::v7_identity_q_trivial_pop_rejected ... ok
+test frost::poc_f_val_001_run3::v8_owned_key_harvest_opens_no_victim_slot ... ok
+test service::effect::ca3fix_f_val_030::w1_replayed_generate_nonces_never_yields_a_fresh_or_reused_pair ... FAILED
+test state::keygen::ca3fix_f2_val_003::x1_warp_pages_split_at_the_boundary_keep_commitments ... FAILED
+test state::keygen::ca3fix_f2_val_003::x2_long_downtime_warp_covering_the_share_round ... FAILED
+test state::keygen::ca3fix_f_val_001_state::w4_copied_q_never_enters_the_commitment_map ... FAILED
+test state::keygen::ca3fix_f_val_001_state::w5_copied_whole_commitment_never_enters_the_commitment_map ... ok
+test state::keygen::poc_f2_val_003_run3::restart_warp_after_boundary_keeps_peer_commitments ... FAILED
+test state::keygen::poc_f2_val_003_run3::stale_state_still_drops_commitment ... ok
+test state::keygen::poc_f2_val_003_run3::warp_over_boundary_keeps_peer_commitments ... FAILED
+test state::keygen::poc_f2_val_003_run3::warp_over_deadline_restarts_at_the_deadline_block ... FAILED
+test state::sign::ca3fix_f_val_032::w1_attacker_sign_before_responsible_on_pending_oracle ... ok
+test state::sign::ca3fix_f_val_032::w2_sign_before_the_proposal_is_seen ... ok
+test state::sign::ca3fix_f_val_032::w3_approved_transaction_packet_survives_foreign_sign ... FAILED
+test state::sign::ca3fix_f_val_032::w4_sequence_burn_while_waiting_for_the_oracle ... ok
+test state::sign::poc_f_val_032_run3::v1_foreign_group_sign_keeps_pending_session ... FAILED
+test state::sign::poc_f_val_032_run3::v2_legitimate_sign_after_foreign_sign_advances ... FAILED
+test state::sign::poc_f_val_032_run3::v3_foreign_sign_against_every_other_state ... ok
+test state::sign::poc_f_val_032_run3::v4_sequence_burn_does_not_affect_the_real_request ... ok
+test state::sign::poc_f_val_032_run3::v5_post_timeout_window ... FAILED
+test state::sign::poc_f_val_032_run3::v6_untracked_message_on_legitimate_group ... ok
+[CA3-FIX F2-XC-001 validator] class mutation: 174108 documents, 27979 rejected, 27979 echo the key
+test result: FAILED. 16 passed; 20 failed; 0 ignored; 0 measured; 42 filtered out; finished in 139.89s
+

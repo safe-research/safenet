@@ -1,0 +1,4 @@
+== sentinel A ==
+{"timestamp":"2026-10-08T19:25:35.511793Z","level":"WARN","fields":{"message":"ignoring unexpected commitment","request_id":"0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b","state":"waiting_for_engine_check"},"target":"sentinel::service"}
+== sentinel B ==
+{"timestamp":"2026-10-08T19:25:35.512180Z","level":"WARN","fields":{"message":"ignoring unexpected commitment","request_id":"0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b","state":"waiting_for_engine_check"},"target":"sentinel::service"}

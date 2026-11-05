@@ -1,0 +1,61 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+   Compiling validator v0.2.0 (/home/shebin.guest/safe/safenet/crates/validator)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.27s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/validator-3a1b46af57fe89be)
+
+running 5 tests
+
+=== Effect::StartNonceGeneration ===
+StartNonceGeneration { group_id: 0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1, key_share: KeyShare(KeyPackage { header: Header { version: 0, ciphersuite: (), phantom: PhantomData<frost_secp256k1::Secp256K1Sha256> }, identifier: Identifier("0000000000000000000000000000000000000000000000000000000000000001"), signing_share: SigningShare("<redacted>"), verifying_share: VerifyingShare("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), verifying_key: VerifyingKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), min_signers: 1 }) }
+
+
+thread '
+service::poc_f_val_062::effect_debug_does_not_leak_the_signing_share=== Effect::ReconcileGroupSecrets ===
+' (ReconcileGroupSecrets { groups: {0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1: Some(KeyShare(KeyPackage { header: Header { version: 0, ciphersuite: (), phantom: PhantomData<frost_secp256k1::Secp256K1Sha256> }, identifier: Identifier("0000000000000000000000000000000000000000000000000000000000000001"), signing_share: SigningShare("<redacted>"), verifying_share: VerifyingShare("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), verifying_key: VerifyingKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), min_signers: 1 })), 0xb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2: None} }
+
+79586) panicked at crates/validator/src/service/../../../../rust-audit/poc/F-VAL-062/debug_redaction.rs:57:9:
+F-VAL-062 CONFIRMED: the Debug rendering of Effect::StartNonceGeneration contains "0000000000000000000000000000000000000000000000000000000000000001", i.e. the secret scalar. This value is printed at `warn` by `crates/validator/src/service/effect.rs:249`. Full rendering:
+StartNonceGeneration { group_id: 0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1, key_share: KeyShare(KeyPackage { header: Header { version: 0, ciphersuite: (), phantom: PhantomData<frost_secp256k1::Secp256K1Sha256> }, identifier: Identifier("0000000000000000000000000000000000000000000000000000000000000001"), signing_share: SigningShare("<redacted>"), verifying_share: VerifyingShare("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), verifying_key: VerifyingKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), min_signers: 1 }) }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'service::poc_f_val_062::reconcile_effect_debug_does_not_leak_the_signing_share' (79589) panicked at crates/validator/src/service/../../../../rust-audit/poc/F-VAL-062/debug_redaction.rs:57:9:
+F-VAL-062 CONFIRMED: the Debug rendering of Effect::ReconcileGroupSecrets contains "0000000000000000000000000000000000000000000000000000000000000001", i.e. the secret scalar. This value is printed at `warn` by `crates/validator/src/service/effect.rs:249`. Full rendering:
+ReconcileGroupSecrets { groups: {0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1: Some(KeyShare(KeyPackage { header: Header { version: 0, ciphersuite: (), phantom: PhantomData<frost_secp256k1::Secp256K1Sha256> }, identifier: Identifier("0000000000000000000000000000000000000000000000000000000000000001"), signing_share: SigningShare("<redacted>"), verifying_share: VerifyingShare("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), verifying_key: VerifyingKey("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"), min_signers: 1 })), 0xb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2: None} }
+test service::poc_f_val_062::effect_debug_does_not_leak_the_signing_share ... FAILED
+
+=== isolated fields ===
+identifier    -> Identifier("0000000000000000000000000000000000000000000000000000000000000001")
+signing_share -> SigningShare("<redacted>")
+test service::poc_f_val_062::reconcile_effect_debug_does_not_leak_the_signing_share ... FAILED
+test service::poc_f_val_062::signing_share_field_alone_is_redacted ... ok
+
+=== Resume::Nonce ===
+Nonce { message: 0x1111111111111111111111111111111111111111111111111111111111111111, nonces: Nonces { signing_nonces: "<redacted>", proof: [] } }
+
+test service::poc_f_val_062::hand_written_redactions_work ... ok
+
+=== Resume::Setup (run 1) ===
+Setup { group_id: 0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1, secrets: Secrets { encryption_key: EncryptionKey("redacted"), secret_package: SecretPackage { identifier: Identifier("d6e4a68ad6c418bb8cdbe0379873f5774dc4d6ecc5e3f373d4c18cec2a4f3c17"), coefficients: "<redacted>", commitment: VerifiableSecretSharingCommitment([CoefficientCommitment("02de5f61229c76fdc7f3cecaeee794ad620fca8cdf3b04030120a736a8b1a9f9b0"), CoefficientCommitment("02d7221dc0e7a6a748bad688a42a58a75435559cd6b6880cb8db1ac863c062941e")]), min_signers: 2, max_signers: 3 }, proof_of_knowledge: Signature { R: "03bcda4991c7b850cb99ea7e8c3bda512dfe29b4f6ac1bbfdb62f040b285f347c8", z: "83d768d1597d5fb2f1f8abff94e55cd786ac2f01b99ba6ab0f9ab3be8e71f322" } } }
+
+=== Resume::Setup (run 2) ===
+Setup { group_id: 0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1, secrets: Secrets { encryption_key: EncryptionKey("redacted"), secret_package: SecretPackage { identifier: Identifier("d6e4a68ad6c418bb8cdbe0379873f5774dc4d6ecc5e3f373d4c18cec2a4f3c17"), coefficients: "<redacted>", commitment: VerifiableSecretSharingCommitment([CoefficientCommitment("023679f9559d3c66fc18c363070e58841e783483ff7115f0bfaa9607cfdac03fa7"), CoefficientCommitment("022465632b53cddd6477a9b8ff1f3655c723d0ecfbdb21e057be7bf235fb935d1e")]), min_signers: 2, max_signers: 3 }, proof_of_knowledge: Signature { R: "03e45d57ac7c958f37dfaca6229304d55a6ac281bca5b784d8edffb68e9e143415", z: "51f87bae73d03fcd257f51a95b56271e6b0f51b574b7ecff027785775ceb9395" } } }
+
+Any substring that differs between the two runs is freshly sampled material. If the two renderings are identical apart from the proof-of-knowledge, nothing secret is printed.
+test service::poc_f_val_062::print_the_resume_setup_debug_rendering_for_inspection ... ok
+
+failures:
+
+failures:
+    service::poc_f_val_062::effect_debug_does_not_leak_the_signing_share
+    service::poc_f_val_062::reconcile_effect_debug_does_not_leak_the_signing_share
+
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 35 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p validator --bin validator`
+exit=101

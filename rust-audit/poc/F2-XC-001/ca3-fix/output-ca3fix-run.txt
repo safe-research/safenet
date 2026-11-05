@@ -1,0 +1,33 @@
+=================== w01-latin1 (validator) exit=1
+    Error: Io(Error { kind: InvalidData, message: "stream did not contain valid UTF-8" })
+
+    marker-hex=0 token=0 input-Some=0
+=================== w02-utf16 (validator) exit=1
+    Error: Io(Error { kind: InvalidData, message: "stream did not contain valid UTF-8" })
+
+    marker-hex=0 token=0 input-Some=0
+=================== w03-directory (validator) exit=1
+    Error: Io(Os { code: 21, kind: IsADirectory, message: "Is a directory" })
+
+    marker-hex=0 token=0 input-Some=0
+=================== w03-missing (validator) exit=1
+    Error: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+
+    marker-hex=0 token=0 input-Some=0
+=================== w04-key-in-integer (validator) exit=1
+    Error: Parse(ParseError { position: Some((6, 20)), inner: Error { message: "invalid type: string \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\", expected a nonzero u64", input: None, keys: ["validator", "blocks_per_epoch"], span: Some(222..290) } })
+
+    marker-hex=1 token=0 input-Some=0
+=================== w05-engine-url-no-scheme (sentinel) exit=1
+    Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+
+    marker-hex=0 token=0 input-Some=0
+=================== w06-key-in-voting-window (sentinel) exit=1
+    Error: Parse(ParseError { position: Some((8, 17)), inner: Error { message: "invalid type: string \"0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\", expected u64", input: None, keys: ["sentinel", "voting_window"], span: Some(329..397) } })
+
+    marker-hex=1 token=0 input-Some=0
+=================== w07-rpc-url-no-scheme (sentinel) exit=1
+    Error: Transport(Custom("failed to read IPC path rpc.internal:8545/v3/SECRETTOKEN0123456789: No such file or directory (os error 2)"))
+
+    marker-hex=0 token=1 input-Some=0
+# done

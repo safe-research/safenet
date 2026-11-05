@@ -1,0 +1,32 @@
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+account: address 0xa39C8952827e16264Bd94F3904f7693A5050af61
+
+== Logs ==
+  Safenet7702Executor deployed at: 0xa39C8952827e16264Bd94F3904f7693A5050af61
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 100
+
+Estimated gas price: 0.725533339 gwei
+
+Estimated total gas used for script: 591566
+
+Estimated amount required: 0.000429200855218874 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/build/broadcast/DeploySafenet7702Executor.s.sol/100/run-latest.json
+
+Sensitive values saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/build/cache/DeploySafenet7702Executor.s.sol/100/run-latest.json
+

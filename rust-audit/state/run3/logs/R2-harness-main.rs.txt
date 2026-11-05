@@ -1,0 +1,473 @@
+//! R2 scratch checks against safenet-core at the audit commit (361aaf3).
+//!
+//! Modes:
+//! - `restart <head>`: run 1 indexes blocks 1000..=1006 through the real
+//!   `StateMachine` with the driver's prune rule (snapshots 1001..=1006 kept),
+//!   then run 2 restarts the real `Driver` against a mocked RPC whose latest
+//!   block is `<head>`. Prints the driver's logs.
+//! - `fuzz <iterations>`: inserts non-ASCII characters into a config document
+//!   and checks whether a TOML error span can start off a char boundary
+//!   (which would make `config::ParseError::new` slice-panic and print the
+//!   document head in the panic message).
+
+use alloy::{
+    primitives::{Address, B256, keccak256},
+    rpc::types::{Block, Header, Log},
+    transports::mock::Asserter,
+};
+use safenet_core::{
+    driver::{ActionEncoder, Config as DriverConfig, Driver, Service},
+    effects::EffectHandler,
+    index::{BlockUpdate, EventUpdate, Update},
+    provider::Provider,
+    state::{Commands, Message, StateMachine, StateTransition},
+    tx::{Signer, Transaction},
+    utils,
+};
+use serde::{Deserialize, Serialize};
+use sqlx::sqlite::SqliteConnectOptions;
+use std::{str::FromStr, time::Duration};
+
+alloy::sol! {
+    #[derive(Debug)]
+    contract Dummy {
+        event Ping(uint256 value);
+    }
+}
+safenet_core::watcher_events!(Dummy::DummyEvents);
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct TestState {
+    blocks: Vec<u64>,
+    /// Set by an event that emits an effect, cleared by that effect's resume
+    /// (like a validator `CollectingCommitments { secrets: None }` waiting for
+    /// `Resume::Setup`, or a sentinel request in `WaitingForEngineCheck`).
+    waiting_for_resume: bool,
+}
+
+struct TestTransition;
+
+impl StateTransition<TestState> for TestTransition {
+    type Event = Dummy::DummyEvents;
+    type Action = u64;
+    type Effect = ();
+    type Resume = ();
+
+    fn apply_transition(
+        &self,
+        mut state: TestState,
+        message: Message<Self::Event, Self::Resume>,
+    ) -> (TestState, Commands<TestState, Self>) {
+        match message {
+            Message::NewBlock(n) => {
+                state.blocks.push(n);
+                (state, vec![])
+            }
+            Message::Event(_) => {
+                state.waiting_for_resume = true;
+                (state, vec![safenet_core::state::Command::Effect(())])
+            }
+            Message::Resume(()) => {
+                state.waiting_for_resume = false;
+                (state, vec![])
+            }
+        }
+    }
+}
+
+static EFFECTS_PERFORMED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+struct NoEffects;
+
+impl EffectHandler<(), ()> for NoEffects {
+    async fn perform_effect(&self, _effect: ()) {
+        EFFECTS_PERFORMED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+struct NoActions;
+
+impl ActionEncoder<u64> for NoActions {
+    fn encode_action(&self, _action: u64) -> (Transaction, Option<u64>) {
+        (Transaction::default(), None)
+    }
+}
+
+struct TestService;
+
+impl Service for TestService {
+    type State = TestState;
+    type Event = Dummy::DummyEvents;
+    type Action = u64;
+    type Effect = ();
+    type Resume = ();
+    type Transition = TestTransition;
+    type Effects = NoEffects;
+    type Actions = NoActions;
+
+    fn components(self) -> (TestTransition, NoEffects, NoActions) {
+        (TestTransition, NoEffects, NoActions)
+    }
+}
+
+fn block_hash(number: u64) -> B256 {
+    keccak256(format!("block{number}"))
+}
+
+/// A header chain where block `n` has parent `n - 1`, 5 s apart, far in the
+/// past so the block watcher never sleeps waiting for it.
+fn block(number: u64) -> Block {
+    Block::empty(Header {
+        hash: block_hash(number),
+        inner: alloy::consensus::Header {
+            parent_hash: block_hash(number - 1),
+            number,
+            timestamp: 1_000_000 + number * 5,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+}
+
+const MAX_REORG_DEPTH: u64 = 5;
+
+async fn restart(head: u64) {
+    let options = SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
+    let pool = utils::connect_sqlite(options).await.unwrap();
+
+    // Run 1: what `Driver::update` does per live block - apply the block,
+    // apply its (empty) logs, then prune to the watcher's safe block.
+    {
+        let mut machine = StateMachine::<TestState, TestTransition>::new(TestTransition, pool.clone())
+            .await
+            .unwrap();
+        for n in 1000..=1006u64 {
+            machine
+                .handle_update(Update::Block(BlockUpdate::New {
+                    number: n,
+                    hash: block_hash(n),
+                    timestamp: 1_000_000 + n * 5,
+                    logs_bloom: Default::default(),
+                }))
+                .await
+                .unwrap();
+            machine
+                .handle_update(Update::Logs(EventUpdate {
+                    blocks: (n..=n).into(),
+                    logs: vec![],
+                }))
+                .await
+                .unwrap();
+            machine.prune(n.saturating_sub(MAX_REORG_DEPTH)).await.unwrap();
+        }
+        println!(
+            "run 1 done: persisted snapshot range {:?}",
+            machine.block_status().await.unwrap()
+        );
+    }
+
+    // Run 2: restart the real driver against an RPC whose head is `head`.
+    let asserter = Asserter::new();
+    let safe = head.saturating_sub(MAX_REORG_DEPTH);
+    asserter.push_success(&block(head)); // initialize: latest
+    for n in safe..head {
+        asserter.push_success(&block(n)); // initialize: range scan
+    }
+    // Responses for whatever the driver asks next, in order: the logs of
+    // every `New` queued at initialization (recent blocks after the oldest
+    // retained snapshot 1001), then alternating live headers and logs.
+    let queued_new = (head.saturating_sub(MAX_REORG_DEPTH - 1)..=head)
+        .filter(|n| *n >= 1002)
+        .count();
+    for _ in 0..queued_new {
+        asserter.push_success(&Vec::<Log>::new());
+    }
+    for n in head + 1..=head + 4 {
+        asserter.push_success(&block(n));
+        asserter.push_success(&Vec::<Log>::new());
+    }
+    let provider = Provider::mocked_with_chain(&asserter, 100);
+    let signer =
+        Signer::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+            .unwrap();
+    let driver = Driver::new(
+        TestService,
+        provider,
+        signer,
+        pool.clone(),
+        vec![Address::ZERO],
+        DriverConfig::default(),
+    )
+    .await
+    .unwrap();
+    println!("run 2: driver created with RPC head {head}; running");
+    match tokio::time::timeout(Duration::from_secs(5), driver.run()).await {
+        Ok(()) => println!("run 2: Driver::run returned (the binary's main would now exit)"),
+        Err(_) => println!("run 2: Driver::run still running after 5 s (no fatal error)"),
+    }
+    let rows = sqlx::query_as::<_, (i64,)>("SELECT block_number FROM snapshots ORDER BY 1")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    println!(
+        "run 2: snapshots left: {:?}",
+        rows.into_iter().map(|(n,)| n).collect::<Vec<_>>()
+    );
+}
+
+/// Run 1 indexes 1000..=1006 like the driver does, with one effect-emitting
+/// event in block `event_block`; the effect resumes after that block's
+/// snapshot is committed, as `Driver::update` spawns effects only after
+/// `handle_update` returns. Run 2 restarts the real `Driver` against an
+/// up-to-date mocked RPC (head 1006) and reports whether the effect is
+/// performed again and whether the state still waits for its resume.
+async fn lost_effect(event_block: u64) {
+    use safenet_core::{
+        index::{EventBlock, EventLog},
+        state::Command,
+    };
+    use std::sync::atomic::Ordering;
+
+    let options = SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
+    let pool = utils::connect_sqlite(options).await.unwrap();
+    {
+        let mut machine = StateMachine::<TestState, TestTransition>::new(TestTransition, pool.clone())
+            .await
+            .unwrap();
+        for n in 1000..=1006u64 {
+            machine
+                .handle_update(Update::Block(BlockUpdate::New {
+                    number: n,
+                    hash: block_hash(n),
+                    timestamp: 1_000_000 + n * 5,
+                    logs_bloom: Default::default(),
+                }))
+                .await
+                .unwrap();
+            let logs = if n == event_block {
+                vec![EventLog {
+                    block: EventBlock {
+                        number: n,
+                        timestamp: 1_000_000 + n * 5,
+                    },
+                    index: 0,
+                    address: Address::ZERO,
+                    data: Dummy::DummyEvents::Ping(Dummy::Ping {
+                        value: alloy::primitives::U256::from(1),
+                    }),
+                }]
+            } else {
+                vec![]
+            };
+            let commands = machine
+                .handle_update(Update::Logs(EventUpdate {
+                    blocks: (n..=n).into(),
+                    logs,
+                }))
+                .await
+                .unwrap();
+            // What the driver does next: spawn the effects (after the
+            // snapshot for `n` was committed) and later apply their resumes.
+            for command in commands {
+                if let Command::Effect(effect) = command {
+                    NoEffects.perform_effect(effect).await;
+                    machine.handle_resume(()).await.unwrap();
+                }
+            }
+            machine.prune(n.saturating_sub(MAX_REORG_DEPTH)).await.unwrap();
+        }
+        println!(
+            "run 1 done: effect-emitting event in block {event_block}; effects performed: {}; persisted snapshot range {:?}",
+            EFFECTS_PERFORMED.load(Ordering::SeqCst),
+            machine.block_status().await.unwrap()
+        );
+    }
+    let print_snapshots = |label: &'static str, pool: sqlx::SqlitePool| async move {
+        let rows = sqlx::query_as::<_, (i64, String)>(
+            "SELECT block_number, state FROM snapshots ORDER BY block_number",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        for (n, state) in rows {
+            let state: TestState = serde_json::from_str(&state).unwrap();
+            println!(
+                "{label}: snapshot {n}: waiting_for_resume = {}",
+                state.waiting_for_resume
+            );
+        }
+    };
+    print_snapshots("after run 1", pool.clone()).await;
+
+    let before = EFFECTS_PERFORMED.load(Ordering::SeqCst);
+    let head = 1006u64;
+    let asserter = Asserter::new();
+    asserter.push_success(&block(head));
+    for n in head - MAX_REORG_DEPTH..head {
+        asserter.push_success(&block(n));
+    }
+    // Logs of the queued `New` blocks: the chain still has the event, so a
+    // replayed block that contains it returns it again.
+    for n in 1002..=head {
+        let logs = if n == event_block {
+            use alloy::sol_types::SolEvent as _;
+            let event = Dummy::Ping {
+                value: alloy::primitives::U256::from(1),
+            };
+            vec![Log {
+                inner: alloy::primitives::Log {
+                    address: Address::ZERO,
+                    data: event.encode_log_data(),
+                },
+                block_hash: Some(block_hash(n)),
+                block_number: Some(n),
+                block_timestamp: Some(1_000_000 + n * 5),
+                transaction_hash: Some(B256::repeat_byte(0x11)),
+                transaction_index: Some(0),
+                log_index: Some(0),
+                removed: false,
+            }]
+        } else {
+            vec![]
+        };
+        asserter.push_success(&logs);
+    }
+    for n in head + 1..=head + 2 {
+        asserter.push_success(&block(n));
+        asserter.push_success(&Vec::<Log>::new());
+    }
+    let provider = Provider::mocked_with_chain(&asserter, 100);
+    let signer =
+        Signer::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+            .unwrap();
+    let driver = Driver::new(
+        TestService,
+        provider,
+        signer,
+        pool.clone(),
+        vec![Address::ZERO],
+        DriverConfig::default(),
+    )
+    .await
+    .unwrap();
+    let _ = tokio::time::timeout(Duration::from_secs(3), driver.run()).await;
+    println!(
+        "run 2: effects performed after the restart: {}",
+        EFFECTS_PERFORMED.load(Ordering::SeqCst) - before
+    );
+    print_snapshots("after run 2", pool.clone()).await;
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct FuzzConfig {
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
+    rpc: url::Url,
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
+    signer: Signer,
+    #[serde(with = "safenet_core::serialization::from_str_with_env")]
+    database: SqliteConnectOptions,
+    validator: FuzzValidator,
+    #[serde(default)]
+    observability: safenet_core::observability::Config,
+    #[serde(default, flatten)]
+    driver: DriverConfig,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct FuzzValidator {
+    consensus: Address,
+    #[serde(default)]
+    oracles: Vec<Address>,
+    #[serde(default)]
+    blocks_per_epoch: Option<u64>,
+}
+
+const DOC: &str = r#"rpc = "https://rpc.gnosischain.com/v3/abcdef"
+signer = "0x0000000000000000000000000000000000000000000000000000000000000001"
+database = "sqlite:/var/lib/safenet/validator/data/storage.db"
+
+[validator]
+consensus = "0x0000000000000000000000000000000000000000"
+oracles = ["0x1111111111111111111111111111111111111111"]
+blocks_per_epoch = 1440
+
+[observability]
+log_filter = "info"
+
+[index]
+max_reorg_depth = 5
+block_time = "auto"
+use_client_filtering = true
+
+[transactions]
+max_in_flight_transactions = 16
+priority_fee_cap_percentage = 95.0
+"#;
+
+fn fuzz(iterations: u64) {
+    let inserts = ["é", "中", "😀", "\u{a0}", "ß", "\u{2028}", "é\"", "\"中", "=é", "[中", "]😀"];
+    let mut seed: u64 = 0x5afe_5afe_5afe_5afe;
+    let mut next = || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    let mut errors = 0u64;
+    let mut off_boundary = 0u64;
+    for _ in 0..iterations {
+        let mut doc = DOC.to_owned();
+        for _ in 0..(1 + next() % 3) {
+            let boundaries = doc
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain([doc.len()])
+                .collect::<Vec<_>>();
+            let at = boundaries[(next() % boundaries.len() as u64) as usize];
+            let insert = inserts[(next() % inserts.len() as u64) as usize];
+            if next() % 4 == 0 && at < doc.len() {
+                // replace the char at `at`
+                let end = doc[at..].chars().next().map_or(at, |c| at + c.len_utf8());
+                doc.replace_range(at..end, insert);
+            } else {
+                doc.insert_str(at, insert);
+            }
+        }
+        if let Err(err) = toml::from_str::<FuzzConfig>(&doc) {
+            errors += 1;
+            if let Some(span) = err.span() {
+                let start = span.start.min(doc.len());
+                if !doc.is_char_boundary(start) {
+                    off_boundary += 1;
+                    if off_boundary <= 3 {
+                        println!("OFF-BOUNDARY span {:?} for message {:?}", span, err.message());
+                        println!("document: {doc:?}");
+                    }
+                }
+            }
+        }
+    }
+    println!("fuzz: {iterations} documents, {errors} parse errors, {off_boundary} spans starting off a char boundary");
+}
+
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,safenet_core=info".into()),
+        )
+        .with_ansi(false)
+        .init();
+    let args = std::env::args().collect::<Vec<_>>();
+    match args.get(1).map(String::as_str) {
+        Some("restart") => restart(args[2].parse().unwrap()).await,
+        Some("fuzz") => fuzz(args[2].parse().unwrap()),
+        Some("lost-effect") => lost_effect(args[2].parse().unwrap()).await,
+        _ => eprintln!("usage: r2-poc restart <head> | fuzz <iterations> | lost-effect <event block>"),
+    }
+}

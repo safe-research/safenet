@@ -1,0 +1,13 @@
+# rv-xc: RPC URL residuals next to F2-XC-001 (the #1046 RPC leg); validator built at 361aaf3; stderr only
+=== c02: rpc = "http://127.0.0.1:9/v3/APIKEYSECRET"
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+--- exit=1
+=== c03: rpc = "ftp://127.0.0.1:9/v3/APIKEYSECRET"
+Error: Transport(Custom("failed to read IPC path ftp://127.0.0.1:9/v3/APIKEYSECRET: No such file or directory (os error 2)"))
+--- exit=1
+=== c04: rpc = "http://127.0.0.1:99999/v3/APIKEYSECRET"
+Error: Parse(ParseError { position: Some((1, 7)), inner: Error { message: "invalid port number", input: None, keys: ["rpc"], span: Some(6..46) } })
+--- exit=1
+=== c05: rpc = "${RV_XC_RPC}" with RV_XC_RPC=ftp://127.0.0.1:9/v3/APIKEYSECRET
+Error: Transport(Custom("failed to read IPC path ftp://127.0.0.1:9/v3/APIKEYSECRET: No such file or directory (os error 2)"))
+--- exit=1

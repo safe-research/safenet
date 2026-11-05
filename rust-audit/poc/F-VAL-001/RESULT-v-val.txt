@@ -1,0 +1,14 @@
+    Blocking waiting for file lock on build directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.14s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/validator-3a1b46af57fe89be)
+
+running 3 tests
+test frost::poc_f_val_001::impostor_recovers_victim_signing_share ... ok
+test frost::poc_f_val_001::impostor_share_verifies_and_group_finalizes ... ok
+test frost::poc_f_val_001::pad_opens_two_recipients_slots ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 38 filtered out; finished in 0.97s
+
+exit=0

@@ -1,0 +1,27 @@
+running 2 tests
+test service::tests::poc_f_sen_015_unknown_verdict_on_replay_drops_an_already_committed_request ... FAILED
+test service::tests::poc_f_sen_015_replayed_verdict_overwrites_the_committed_reason ... FAILED
+
+failures:
+
+---- service::tests::poc_f_sen_015_unknown_verdict_on_replay_drops_an_already_committed_request stdout ----
+
+thread 'service::tests::poc_f_sen_015_unknown_verdict_on_replay_drops_an_already_committed_request' (81246) panicked at crates/sentinel/src/service.rs:2684:5:
+handle_engine_check_result removed the entry at service.rs:156 and the Unknown arm returned without re-inserting it (:176-179) — the request is now untracked despite 500 being bonded onchain
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- service::tests::poc_f_sen_015_replayed_verdict_overwrites_the_committed_reason stdout ----
+
+thread 'service::tests::poc_f_sen_015_replayed_verdict_overwrites_the_committed_reason' (81245) panicked at crates/sentinel/src/service.rs:2580:5:
+assertion `left == right` failed: the reveal carries the SECOND verdict's reason, not the one the onchain commitment was built from — reveal() will recompute a hash != 0xbb6eb0492cf1b45887d128721e93a2b8097de56b808f711a786b5146b64d7dbb and revert InvalidReveal(), leaving the commitment PENDING and slashing slashAmount (500)
+  left: [Action(SentinelAction { kind: Reveal { id: 0x0eab17c7e938b286dc3d6b87bf7148fc1ba91634767ec4cba43d522b3ef616b7, approve: false, salt: 0x4fb53d5570ddb192c92d5923bbd4469036aad4be28d0711d70b3981b94aee12c, reason: "R-3.4" }, expires_at: Some(40) })]
+ right: [Action(SentinelAction { kind: Reveal { id: 0x0eab17c7e938b286dc3d6b87bf7148fc1ba91634767ec4cba43d522b3ef616b7, approve: false, salt: 0x4fb53d5570ddb192c92d5923bbd4469036aad4be28d0711d70b3981b94aee12c, reason: "R-2.1" }, expires_at: Some(40) })]
+
+
+failures:
+    service::tests::poc_f_sen_015_replayed_verdict_overwrites_the_committed_reason
+    service::tests::poc_f_sen_015_unknown_verdict_on_replay_drops_an_already_committed_request
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p sentinel --bin sentinel`

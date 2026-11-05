@@ -1,0 +1,20 @@
+diff --git a/crates/core/src/index/events.rs b/crates/core/src/index/events.rs
+index 8209fdb..56e5e14 100644
+--- a/crates/core/src/index/events.rs
++++ b/crates/core/src/index/events.rs
+@@ -464,6 +464,15 @@ where
+         };
+ 
+         let result = self.fetch_logs(fetch).await.and_then(|logs| {
++            // QA3 bite check (F3-CORE-002 remediation 2, unbounded): the
++            // per-event fallback has no integrity check, so an empty answer
++            // for a block whose header bloom may hold a watched log is suspect.
++            if matches!(fetch, Fetch::MultipleQueries(_))
++                && logs.is_empty()
++                && bloom::may_contain_log(&logs_bloom, &self.addresses, &self.topics)
++            {
++                return Err(Error::IncompleteLogs { block_hash });
++            }
+             // The block watcher already fetched the block's header, so its timestamp
+             // fills in for logs the node returns without one, without an additional
+             // RPC request.

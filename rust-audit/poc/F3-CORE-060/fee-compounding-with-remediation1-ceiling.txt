@@ -1,0 +1,14 @@
+== harness: real Driver and queue for 60 s through the swallowing proxy
+transaction queue config: Config { mode: Direct { max_in_flight_transactions: 16 }, blocks_before_resubmit: 2, priority_fee_cap_percentage: None }
+harness stopped after 60 s
+submissions logged by the queue: 29
+== swallowed submissions (decoded with cast decode-tx)
+submission   0 at +  0.0 s: nonce 0 tip       1000000000 wei (    1.00x first) max fee       1084000000 wei; 21000 gas x max fee = 0.000022764 native
+submission   1 at +  2.0 s: nonce 0 tip       1100000000 wei (    1.10x first) max fee       1192400000 wei; 21000 gas x max fee = 0.000025040 native
+submission   2 at +  4.0 s: nonce 0 tip       1210000000 wei (    1.21x first) max fee       1311640000 wei; 21000 gas x max fee = 0.000027544 native
+submission  10 at + 21.1 s: nonce 0 tip       2593742461 wei (    2.59x first) max fee       2811616829 wei; 21000 gas x max fee = 0.000059044 native
+submission  20 at + 41.1 s: nonce 0 tip       3000000000 wei (    3.00x first) max fee       3001056180 wei; 21000 gas x max fee = 0.000063022 native
+submission  28 at + 58.1 s: nonce 0 tip       3000000000 wei (    3.00x first) max fee       3000109128 wei; 21000 gas x max fee = 0.000063002 native
+== land the last swallowed transaction on Anvil
+published: 0xb0260d301c7dd5efd68a5b456289f9b12426e1682693ddc958ea8a3b1ef5bf59
+landed in block 61: status 0x1, effectiveGasPrice 3000013926 wei, base fee 13926 wei, tip paid 3000000000 wei = 3.0x the first submission tip; fee paid 0.000063000 native for 21000 gas

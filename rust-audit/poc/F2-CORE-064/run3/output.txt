@@ -1,0 +1,17 @@
+Run 3 re-validation output (rv-core-b, 2026-10-08), audit commit 361aaf3.
+Worktree: detached at 361aaf3, PoC tests appended to the crate's `mod tests`, reverted afterwards.
+Toolchain: cargo 1.96.0 / rustc 1.96.0 (aarch64).
+Command: cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1
+Long batch calldata is shortened as 0x<20 bytes>...(<n> bytes). Polarity: run-1 PoCs and
+run-3 F-CORE-060/067 variants assert the healthy behaviour (FAILED = defect reproduced);
+run-2 PoCs and the F-CORE-065/068 tests assert the defect (ok = defect reproduced);
+the F-CORE-069 tests assert the absence of a gap (ok = no gap).
+
+test tx::tests::rv3_f2_core_064_batched_variant_expired_batch_is_broadcast ... batched block 14: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0xc0\",\"gas\":21000}", Some(12), Some(0), Some(14), None, Some("{\"to\":\"0x788fee89f44d471abe4b90787161bdc1e66c4564\",\"value\":\"0x0\",\"data\":\"0x398f365300000000000000000000000000000000...(516 bytes)\",\"gas\":86924,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}")), (2, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0xc1\",\"gas\":21000}", Some(12), Some [line truncated]
+ok
+
+test tx::tests::rv3_f2_core_064_never_accepted_row_is_broadcast_after_its_expiry ... block 11: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0xc0\",\"gas\":21000}", Some(12), Some(0), None, None, Some("{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0xc0\",\"gas\":21000}"))]
+block 14: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0xc0\",\"gas\":21000}", Some(12), Some(0), Some(14), None, Some("{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0xc0\",\"gas\":21000,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}"))]
+ok
+
+Summary of the whole run (all rv3_ tests of this crate): test result: FAILED. 18 passed; 9 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.67s

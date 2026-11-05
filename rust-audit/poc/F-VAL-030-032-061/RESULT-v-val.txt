@@ -1,0 +1,27 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/validator-3a1b46af57fe89be)
+
+running 6 tests
+test state::poc_f_val_030_032_061::a_linked_sequence_is_served_normally ... ok
+test state::poc_f_val_030_032_061::a_permissionless_sign_at_an_unlinked_sequence_grieves_a_healthy_validator ... ok
+test state::poc_f_val_030_032_061::a_phantom_reservation_is_counted_as_capacity_and_never_retried ... ok
+test state::poc_f_val_030_032_061::an_unlinked_sequence_discards_the_signing_session ... ok
+test state::poc_f_val_030_032_061::resume_noop_is_indistinguishable_from_success ... ok
+test state::poc_f_val_030_032_061::the_phantom_clears_only_after_a_full_chunk_of_sequences ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 38 filtered out; finished in 0.00s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/validator-3a1b46af57fe89be)
+
+running 3 tests
+test service::poc_f_val_061::nonce_tree_without_a_generator_stream_resumes_as_noop ... ok
+test service::poc_f_val_061::reconciling_first_makes_the_same_effect_succeed ... ok
+test service::poc_f_val_061::use_nonce_on_a_missing_nonce_resumes_as_noop ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.49s
+

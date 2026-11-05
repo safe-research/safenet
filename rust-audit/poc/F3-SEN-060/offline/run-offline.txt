@@ -1,0 +1,415 @@
+# F3-SEN-060 contract half, re-derived with no network (OFF3, run 3)
+# Date: 2026-10-08T23:07:40Z. forge 1.5.1-v1.5.1 (b0a9dd9), solc 0.8.30+commit.73712a01.
+# Where: detached worktree wt/lt3 at 361aaf3b25e12d2e04f296184c326830968f3727, in the same relative
+#   folder rust-audit/poc/F3-SEN-060/offline, so the ../../../../contracts remappings in foundry.toml
+#   resolve to the audit-commit sources. `git status` in wt/lt3 lists only this untracked folder.
+# Network: every command below ran under `integ` (podman unshare + unshare -n), a private network
+#   namespace with a loopback device and no route. No fork, no rpc_endpoints, offline = true.
+# Setup for each command:
+#   RUN=/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3
+#   source $RUN/env/lt3.sh && cd $RUN/wt/lt3/rust-audit/poc/F3-SEN-060/offline
+
+## 0. The namespace has no network
+
+$ integ bash -c 'ip -o link show | cut -d" " -f1-3; echo "routes: [$(ip route show)]"'
+1: lo: <LOOPBACK,UP,LOWER_UP>
+routes: []
+
+## 1. USDC.e code and storage from the Foundry RPC cache (reads a local file, no RPC call)
+
+$ integ python3 -I scripts/extract_usdc.py ~/.foundry/cache/rpc/xdai/48635154 src/UsdcCode.sol
+cache /home/sj.guest/.foundry/cache/rpc/xdai/48635154 sha256 6842f62b8c3b5e7ce7c4ae42fa3565da66a39d996317a7ba02b6911c5140301c
+block 48635154 hosts ['rpc.gnosischain.com']
+proxy len 1852 code_hash 0xad30d819dbc47814b7e6cb837fd7cc57fcb591479a38596ee93de4fc52e8c435
+impl len 23464 code_hash 0xaada1fda4d1c1b638e3ed53169a42e70647b824a8f6ace10326fd33fd216deb4
+proxy storage slots 14
+  0x0000000000000000000000000000000000000000000000000000000000000001 = 0x000000000000000000000000458cd345b4c05e8df39d0a07220feb4ec19f5e6f
+  0x0000000000000000000000000000000000000000000000000000000000000002 = 0x000000000000000000000000458cd345b4c05e8df39d0a07220feb4ec19f5e6f
+  0x10d6a54a4754c8869d6886b5f5d7fbfa5b4522237ea5c60d11bc4e7a1ff9390b = 0x0000000000000000000000007a48dac683da91e4faa5ab13d91ab5fd170875bd
+  0x1b192e360a256ccb848eb2ae9f8e98489b578e20b6c76b2b22ea4f5ab3270d6e = 0x0000000000000000000000000000000000000000000000000000000000000000
+  0x3a39650d2888ae31f5447787690553c0fdc381fa3b7f83c35f2bd7d1d45aedea = 0x0000000000000000000000000000000000000000000000000000000000000000
+  0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3 = 0x000000000000000000000000107cf7fb73ea48d1d200989b156ce1894d7afec7
+  0x8e316a6f243a0e7892c8d9c8b100c8e9d9d648cbab0a378ff6d0d7af7f387417 = 0x0000000000000000000000000000000000000000000000000000000000000000
+  0x8ee66bb4b291286b3564b898bdab442e1abd891044a75bad83476aaf688d1891 = 0x0000000000000000000000000000000000000000000000000000000000000000
+  0x9b56c9bfd55b018b8aec8d12f313f468b7b211ea852e07d9c3ada0b2f336ce4b = 0x0000000000000000000000000000000000000000000000000000000000000000
+  0xd3f6d44f6ac0df455b5b97f659c014a7429114a4d4398f40d419e1030c08b199 = 0x0000000000000000000000000000000000000000000000000000000000000000
+  0xd54290537f315ab758f46cea695c305eb81c8ed3912e392e40f7bcd9cb8c9ea3 = 0x0000000000000000000000000000000000000000000000000000000000000000
+  0xd5a3747ee31d3fd63e41cb739b082a09bdc30756b64987e2144484efdf2892c3 = 0x0000000000000000000000000000000000000000000000000000000000000000
+  0xe0fcc4d7b4932d2fc1d27391fbfe3b855c3e25b636f6d0ed58ead2b532eb3aac = 0x0000000000000000000000000000000000000000000000000000000000000000
+  0xe9f4cd6af232cf3e45ecfc7f5f4e63e3e8c53a7d29273211538ee6a155b5d791 = 0x0000000000000000000000000000000000000000000000000000000000000000
+# Run again into a scratch path: same output, and both files have sha256
+# c1d7d701b482b155ede71f2dfa256b476bf1bf9fe75639e692f43604fa1e1177.
+
+## 2. Build and test
+
+$ integ forge build --force
+Compiling 37 files with Solc 0.8.30
+Solc 0.8.30 finished in 4.70s
+Compiler run successful!
+
+$ integ forge test -vv
+No files changed, compilation skipped
+
+Ran 3 tests for test/BlacklistedSponsorOffline.t.sol:BlacklistedSponsorOfflineTest
+[PASS] test_blacklistedSponsorLocksFrozenBondsUntilUnblacklisted() (gas: 577526)
+Logs:
+  USDC.e held by the oracle for the frozen request (raw) 2400400000
+  arbitrationDeadline 49170841
+  block of the sentinels' timeoutArbitration and claim 49170842
+
+[PASS] test_controlWithoutBlacklistEveryClaimSucceeds() (gas: 509496)
+[PASS] test_etchedUsdcMatchesCache() (gas: 29043)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 2.33ms (1.39ms CPU time)
+
+Ran 1 test suite in 2.64ms (2.33ms CPU time): 3 tests passed, 0 failed, 0 skipped (3 total tests)
+
+## 3. Trace of the main test (trimmed; omitted ranges are marked)
+
+$ integ forge test --match-test test_blacklistedSponsorLocksFrozenBondsUntilUnblacklisted -vvvv
+No files changed, compilation skipped
+
+Ran 1 test for test/BlacklistedSponsorOffline.t.sol:BlacklistedSponsorOfflineTest
+[PASS] test_blacklistedSponsorLocksFrozenBondsUntilUnblacklisted() (gas: 577526)
+Logs:
+  USDC.e held by the oracle for the frozen request (raw) 2400400000
+  arbitrationDeadline 49170841
+  block of the sentinels' timeoutArbitration and claim 49170842
+
+Traces:
+  [688226] BlacklistedSponsorOfflineTest::test_blacklistedSponsorLocksFrozenBondsUntilUnblacklisted()
+    [... trace lines 12-35 omitted: GOVERNANCE addSentinel x3 (activeAtBlock 48686994), roll to 48686994, sponsor approves the 400000 fee ...]
+    ├─ [0] VM::prank(consensus: [0x8C14305312a1afC67A7568EaEd174e1F14C3885D])
+    │   └─ ← [Return]
+    ├─ [114678] SentinelOracle::postRequest(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 0x)
+    │   ├─ emit NewRequest(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, sponsor: sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], fee: 400000 [4e5], bondTarget: 800000000 [8e8], daoFeeShare: 0, slashAmount: 400000 [4e5], commitDeadline: 48687000 [4.868e7], revealDeadline: 48687006 [4.868e7])
+    │   ├─ [33128] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transferFrom(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], 400000 [4e5])
+    │   │   ├─ [32454] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transferFrom(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], 400000 [4e5]) [delegatecall]
+    │   │   │   ├─ emit Transfer(from: sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], to: SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], value: 400000 [4e5])
+    │   │   │   └─ ← [Return] true
+    │   │   └─ ← [Return] true
+    │   └─ ← [Stop]
+    [... trace lines 46-102 omitted: each sentinel approves and commits; each commit pulls its 800000000 bond with transferFrom ...]
+    ├─ [0] VM::roll(48687001 [4.868e7])
+    │   └─ ← [Return]
+    [... trace lines 105-114 omitted: sentinel0 and sentinel1 reveal approve ...]
+    ├─ [0] VM::prank(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1])
+    │   └─ ← [Return]
+    ├─ [12417] SentinelOracle::reveal(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, false, 0x0000000000000000000000000000000000000000000000000000000000000001, "")
+    │   ├─ emit Revealed(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, sentinel: sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1], approved: false, bondAmount: 800000000 [8e8], reason: "")
+    │   ├─ emit DisputeTriggered(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, deadline: 49170841 [4.917e7])
+    │   └─ ← [Stop]
+    ├─ [3356] SentinelOracle::getRequest(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca) [staticcall]
+    │   └─ ← [Return] T({ terms: Terms({ commitDeadline: 48687000 [4.868e7], daoFeeShare: 0, revealDeadline: 48687006 [4.868e7], bondTarget: 800000000 [8e8], _padding: 0, sponsor: 0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6, slashAmount: 400000 [4e5] }), progress: Progress({ state: 2, fee: 400000 [4e5], arbitrationDeadline: 49170841 [4.917e7], committedCount: 3, revealedCount: 3, approveSentinelCount: 2, denySentinelCount: 1, _padding: 0 }) })
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f]) [delegatecall]
+    │   │   └─ ← [Return] 2400400000 [2.4e9]
+    │   └─ ← [Return] 2400400000 [2.4e9]
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f]) [delegatecall]
+    │   │   └─ ← [Return] 2400400000 [2.4e9]
+    │   └─ ← [Return] 2400400000 [2.4e9]
+    ├─ [0] console::log("USDC.e held by the oracle for the frozen request (raw)", 2400400000 [2.4e9]) [staticcall]
+    │   └─ ← [Stop]
+    ├─ [0] console::log("arbitrationDeadline", 49170841 [4.917e7]) [staticcall]
+    │   └─ ← [Stop]
+    ├─ [3097] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::blacklister() [staticcall]
+    │   ├─ [2403] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::blacklister() [delegatecall]
+    │   │   └─ ← [Return] 0x458cD345B4C05e8DF39d0A07220feb4Ec19F5e6f
+    │   └─ ← [Return] 0x458cD345B4C05e8DF39d0A07220feb4Ec19F5e6f
+    ├─ [0] VM::prank(0x458cD345B4C05e8DF39d0A07220feb4Ec19F5e6f)
+    │   └─ ← [Return]
+    ├─ [2734] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::blacklist(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6])
+    │   ├─ [2040] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::blacklist(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6]) [delegatecall]
+    │   │   ├─  emit topic 0: 0xffa4e6181777692565cf28528fc88fd1516ea86b56da075235fa575af6a4b855
+    │   │   │        topic 1: 0x000000000000000000000000eb42ea4654c82b0dd20e908457099a7ed41deda6
+    │   │   │           data: 0x
+    │   │   └─ ← [Stop]
+    │   └─ ← [Return]
+    ├─ [1305] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::isBlacklisted(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6]) [staticcall]
+    │   ├─ [608] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::isBlacklisted(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6]) [delegatecall]
+    │   │   └─ ← [Return] true
+    │   └─ ← [Return] true
+    ├─ [0] VM::prank(0xc89Ae48382edc81287AcEf0881E88DEacAD58348)
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xf28dceb3:  %Blacklistable: account is blacklisted)
+    │   └─ ← [Return]
+    ├─ [5087] SentinelOracle::resolveDispute(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, true, "ruling")
+    │   ├─ [1777] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5])
+    │   │   ├─ [1058] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5]) [delegatecall]
+    │   │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   └─ ← [Revert] Blacklistable: account is blacklisted
+    ├─ [0] VM::prank(0xc89Ae48382edc81287AcEf0881E88DEacAD58348)
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xf28dceb3:  %Blacklistable: account is blacklisted)
+    │   └─ ← [Return]
+    ├─ [3635] SentinelOracle::markOutOfScope(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, "out of scope")
+    │   ├─ [1777] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5])
+    │   │   ├─ [1058] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5]) [delegatecall]
+    │   │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   └─ ← [Revert] Blacklistable: account is blacklisted
+    ├─ [0] VM::roll(49170842 [4.917e7])
+    │   └─ ← [Return]
+    ├─ [0] console::log("block of the sentinels' timeoutArbitration and claim", 49170842 [4.917e7]) [staticcall]
+    │   └─ ← [Stop]
+    ├─ [0] VM::prank(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xf28dceb3:  %Blacklistable: account is blacklisted)
+    │   └─ ← [Return]
+    ├─ [3482] SentinelOracle::timeoutArbitration(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ [1777] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5])
+    │   │   ├─ [1058] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5]) [delegatecall]
+    │   │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   └─ ← [Revert] Blacklistable: account is blacklisted
+    ├─ [0] VM::prank(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xc31eb0e0: ef69e9d800000000000000000000000000000000000000000000000000000000)
+    │   └─ ← [Return]
+    ├─ [1287] SentinelOracle::claim(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   └─ ← [Revert] RequestNotResolved()
+    ├─ [0] VM::prank(sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xf28dceb3:  %Blacklistable: account is blacklisted)
+    │   └─ ← [Return]
+    ├─ [3482] SentinelOracle::timeoutArbitration(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ [1777] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5])
+    │   │   ├─ [1058] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5]) [delegatecall]
+    │   │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   └─ ← [Revert] Blacklistable: account is blacklisted
+    ├─ [0] VM::prank(sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xc31eb0e0: ef69e9d800000000000000000000000000000000000000000000000000000000)
+    │   └─ ← [Return]
+    ├─ [1287] SentinelOracle::claim(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   └─ ← [Revert] RequestNotResolved()
+    ├─ [0] VM::prank(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xf28dceb3:  %Blacklistable: account is blacklisted)
+    │   └─ ← [Return]
+    ├─ [3482] SentinelOracle::timeoutArbitration(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ [1777] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5])
+    │   │   ├─ [1058] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5]) [delegatecall]
+    │   │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   └─ ← [Revert] Blacklistable: account is blacklisted
+    ├─ [0] VM::prank(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xc31eb0e0: ef69e9d800000000000000000000000000000000000000000000000000000000)
+    │   └─ ← [Return]
+    ├─ [1287] SentinelOracle::claim(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   └─ ← [Revert] RequestNotResolved()
+    ├─ [3356] SentinelOracle::getRequest(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca) [staticcall]
+    │   └─ ← [Return] T({ terms: Terms({ commitDeadline: 48687000 [4.868e7], daoFeeShare: 0, revealDeadline: 48687006 [4.868e7], bondTarget: 800000000 [8e8], _padding: 0, sponsor: 0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6, slashAmount: 400000 [4e5] }), progress: Progress({ state: 2, fee: 400000 [4e5], arbitrationDeadline: 49170841 [4.917e7], committedCount: 3, revealedCount: 3, approveSentinelCount: 2, denySentinelCount: 1, _padding: 0 }) })
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f]) [delegatecall]
+    │   │   └─ ← [Return] 2400400000 [2.4e9]
+    │   └─ ← [Return] 2400400000 [2.4e9]
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C]) [delegatecall]
+    │   │   └─ ← [Return] 200000000 [2e8]
+    │   └─ ← [Return] 200000000 [2e8]
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb]) [delegatecall]
+    │   │   └─ ← [Return] 200000000 [2e8]
+    │   └─ ← [Return] 200000000 [2e8]
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1]) [delegatecall]
+    │   │   └─ ← [Return] 200000000 [2e8]
+    │   └─ ← [Return] 200000000 [2e8]
+    ├─ [0] VM::prank(0x458cD345B4C05e8DF39d0A07220feb4Ec19F5e6f)
+    │   └─ ← [Return]
+    ├─ [2698] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::unBlacklist(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6])
+    │   ├─ [2036] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::unBlacklist(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6]) [delegatecall]
+    │   │   ├─  emit topic 0: 0x117e3210bb9aa7d9baff172026820255c6f6c30ba8999d1c2fd88e2848137c4e
+    │   │   │        topic 1: 0x000000000000000000000000eb42ea4654c82b0dd20e908457099a7ed41deda6
+    │   │   │           data: 0x
+    │   │   └─ ← [Stop]
+    │   └─ ← [Return]
+    ├─ [0] VM::expectEmit(true, false, false, false, SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f])
+    │   └─ ← [Return]
+    ├─ emit ArbitrationTimedOut(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    ├─ [0] VM::prank(anyone: [0x022a70D64AD71E7Cb615a0df171A916987a6b372])
+    │   └─ ← [Return]
+    ├─ [8224] SentinelOracle::timeoutArbitration(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ [5363] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5])
+    │   │   ├─ [4663] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5]) [delegatecall]
+    │   │   │   ├─ emit Transfer(from: SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], to: sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], value: 400000 [4e5])
+    │   │   │   └─ ← [Return] true
+    │   │   └─ ← [Return] true
+    │   ├─ emit ArbitrationTimedOut(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   └─ ← [Stop]
+    ├─ [3356] SentinelOracle::getRequest(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca) [staticcall]
+    │   └─ ← [Return] T({ terms: Terms({ commitDeadline: 48687000 [4.868e7], daoFeeShare: 0, revealDeadline: 48687006 [4.868e7], bondTarget: 800000000 [8e8], _padding: 0, sponsor: 0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6, slashAmount: 400000 [4e5] }), progress: Progress({ state: 5, fee: 0, arbitrationDeadline: 49170841 [4.917e7], committedCount: 3, revealedCount: 3, approveSentinelCount: 2, denySentinelCount: 1, _padding: 0 }) })
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6]) [delegatecall]
+    │   │   └─ ← [Return] 10000000 [1e7]
+    │   └─ ← [Return] 10000000 [1e7]
+    ├─ [0] VM::prank(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C])
+    │   └─ ← [Return]
+    ├─ [10418] SentinelOracle::claim(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ [5363] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C], 800000000 [8e8])
+    │   │   ├─ [4663] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C], 800000000 [8e8]) [delegatecall]
+    │   │   │   ├─ emit Transfer(from: SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], to: sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C], value: 800000000 [8e8])
+    │   │   │   └─ ← [Return] true
+    │   │   └─ ← [Return] true
+    │   ├─ emit Claimed(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, sentinel: sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C], bondReturn: 800000000 [8e8], feeReward: 0)
+    │   └─ ← [Stop]
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C]) [delegatecall]
+    │   │   └─ ← [Return] 1000000000 [1e9]
+    │   └─ ← [Return] 1000000000 [1e9]
+    ├─ [0] VM::prank(sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb])
+    │   └─ ← [Return]
+    ├─ [10418] SentinelOracle::claim(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ [5363] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb], 800000000 [8e8])
+    │   │   ├─ [4663] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb], 800000000 [8e8]) [delegatecall]
+    │   │   │   ├─ emit Transfer(from: SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], to: sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb], value: 800000000 [8e8])
+    │   │   │   └─ ← [Return] true
+    │   │   └─ ← [Return] true
+    │   ├─ emit Claimed(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, sentinel: sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb], bondReturn: 800000000 [8e8], feeReward: 0)
+    │   └─ ← [Stop]
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(sentinel1: [0xC130DA8446433B9cDD88338979c8ab3DBfE810fb]) [delegatecall]
+    │   │   └─ ← [Return] 1000000000 [1e9]
+    │   └─ ← [Return] 1000000000 [1e9]
+    ├─ [0] VM::prank(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1])
+    │   └─ ← [Return]
+    ├─ [10486] SentinelOracle::claim(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ [5363] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1], 800000000 [8e8])
+    │   │   ├─ [4663] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1], 800000000 [8e8]) [delegatecall]
+    │   │   │   ├─ emit Transfer(from: SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], to: sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1], value: 800000000 [8e8])
+    │   │   │   └─ ← [Return] true
+    │   │   └─ ← [Return] true
+    │   ├─ emit Claimed(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, sentinel: sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1], bondReturn: 800000000 [8e8], feeReward: 0)
+    │   └─ ← [Stop]
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(sentinel2: [0x39D542b4aED6B9015C93bB6Cf604E53dd8a688e1]) [delegatecall]
+    │   │   └─ ← [Return] 1000000000 [1e9]
+    │   └─ ← [Return] 1000000000 [1e9]
+    ├─ [1250] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::balanceOf(SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f]) [staticcall]
+    │   ├─ [553] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::balanceOf(SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f]) [delegatecall]
+    │   │   └─ ← [Return] 0
+    │   └─ ← [Return] 0
+    └─ ← [Return]
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.61ms (1.02ms CPU time)
+
+Ran 1 test suite in 3.29ms (2.61ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
+
+## 4. The oracle under test is the production build of the audit commit
+
+# ../../../../contracts/build/out is `forge build` in wt/lt3/contracts with the repo's own
+# foundry.toml (optimizer 1,000,000 runs, via IR, prague). The comparison drops the CBOR metadata,
+# which encodes source paths. cmp_bytecode.py is a scratch script; its full text follows the output.
+$ integ python3 -I cmp_bytecode.py out/SentinelOracle.sol/SentinelOracle.json \
+    ../../../../contracts/build/out/SentinelOracle.sol/SentinelOracle.json
+poc build    runtime bytes without metadata 16759
+contracts/   runtime bytes without metadata 16759
+identical without metadata: True
+metadata identical: False
+
+--- cmp_bytecode.py
+import json, sys
+def runtime(path):
+    code = bytes.fromhex(json.load(open(path))["deployedBytecode"]["object"].removeprefix("0x"))
+    cut = int.from_bytes(code[-2:], "big") + 2  # CBOR metadata length plus its 2-byte length field
+    return code[:-cut], code[-cut:]
+a, ma = runtime(sys.argv[1])
+b, mb = runtime(sys.argv[2])
+print("poc build    runtime bytes without metadata", len(a))
+print("contracts/   runtime bytes without metadata", len(b))
+print("identical without metadata:", a == b)
+print("metadata identical:", ma == mb)
+---
+
+## 5. Every USDC.e proxy slot the tests read is in the cache
+
+# Scratch copy of this folder with absolute remappings and this patch to the test:
+--- BlacklistedSponsorOffline.t.sol
++++ BlacklistedSponsorOffline.t.sol
+@@ -55,6 +55,7 @@
+     address[3] sentinels;
+ 
+     function setUp() public {
++        vm.record();
+         vm.chainId(100);
+         vm.roll(UsdcCode.BLOCK);
+         vm.etch(UsdcCode.PROXY, UsdcCode.proxyCode());
+@@ -217,4 +218,34 @@
+         assertEq(TOKEN.balanceOf(sponsor), SPONSOR_FUNDS);
+         assertEq(TOKEN.balanceOf(address(oracle)), 0);
+     }
++
++    function _uncachedReads() internal returns (uint256 reads, uint256 uncached) {
++        (bytes32[] memory readSlots,) = vm.accesses(UsdcCode.PROXY);
++        (bytes32[] memory keys,) = UsdcCode.slots();
++        reads = readSlots.length;
++        for (uint256 i = 0; i < readSlots.length; i++) {
++            bool found;
++            for (uint256 j = 0; j < keys.length; j++) {
++                if (readSlots[i] == keys[j]) found = true;
++            }
++            if (!found) {
++                uncached++;
++                console.logBytes32(readSlots[i]);
++            }
++        }
++    }
++
++    function test_diag_mainReadsOnlyCachedProxySlots() public {
++        test_blacklistedSponsorLocksFrozenBondsUntilUnblacklisted();
++        (uint256 reads, uint256 uncached) = _uncachedReads();
++        console.log("proxy storage reads", reads);
++        console.log("reads of slots missing from the cache", uncached);
++    }
++
++    function test_diag_controlReadsOnlyCachedProxySlots() public {
++        test_controlWithoutBlacklistEveryClaimSucceeds();
++        (uint256 reads, uint256 uncached) = _uncachedReads();
++        console.log("proxy storage reads", reads);
++        console.log("reads of slots missing from the cache", uncached);
++    }
+ }
+
+$ integ forge test --match-test diag -vv
+Ran 2 tests for test/BlacklistedSponsorOffline.t.sol:BlacklistedSponsorOfflineTest
+[PASS] test_diag_controlReadsOnlyCachedProxySlots() (gas: 1055677)
+Logs:
+  proxy storage reads 158
+  reads of slots missing from the cache 0
+
+[PASS] test_diag_mainReadsOnlyCachedProxySlots() (gas: 1312111)
+Logs:
+  USDC.e held by the oracle for the frozen request (raw) 2400400000
+  arbitrationDeadline 49170841
+  block of the sentinels' timeoutArbitration and claim 49170842
+  proxy storage reads 214
+  reads of slots missing from the cache 0
+
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.42ms (3.27ms CPU time)
+
+Ran 1 test suite in 3.67ms (3.42ms CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+
+# A second scratch variant counted the reads of each cached slot (same patch, plus a loop that
+# logs the count per key). Names: mapping entries from `cast index` (FiatTokenV2_2 keeps
+# balanceAndBlacklistStates at slot 9 and allowed at slot 10) for the test's makeAddr accounts and
+# its oracle, the same accounts the original fork run used. The receiver balance was cached by
+# another test of the original file and is not read here.
+slot         value                                       reads main/control  meaning
+0x1          0x458cd345b4c05e8df39d0a07220feb4ec19f5e6f    17/12             slot 1: pauser, paused = false
+0x2          0x458cd345b4c05e8df39d0a07220feb4ec19f5e6f     3/0              slot 2: blacklister
+0x10d6a54a.. 0x7a48dac683da91e4faa5ab13d91ab5fd170875bd    36/22             keccak256("org.zeppelinos.proxy.admin")
+0x1b192e36.. 0                                             15/14             balanceAndBlacklistStates[sentinel2]
+0x3a39650d.. 0                                             20/10             balanceAndBlacklistStates[sponsor]
+0x7050c9e0.. 0x107cf7fb73ea48d1d200989b156ce1894d7afec7    36/22             keccak256("org.zeppelinos.proxy.implementation")
+0x8e316a6f.. 0                                              0/0              balanceAndBlacklistStates[receiver]
+0x8ee66bb4.. 0                                              4/4              allowed[sponsor][oracle]
+0x9b56c9bf.. 0                                              4/4              allowed[sentinel1][oracle]
+0xd3f6d44f.. 0                                              4/4              allowed[sentinel0][oracle]
+0xd5429053.. 0                                              4/4              allowed[sentinel2][oracle]
+0xd5a3747e.. 0                                             49/42             balanceAndBlacklistStates[oracle]
+0xe0fcc4d7.. 0                                             11/10             balanceAndBlacklistStates[sentinel0]
+0xe9f4cd6a.. 0                                             11/10             balanceAndBlacklistStates[sentinel1]

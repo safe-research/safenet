@@ -1,0 +1,25 @@
+fee token 0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80, test consensus 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0, oracle 0x0e228cd9Af086366230319995b3a4EB7e30Ceca2
+sentinel A (lagging-backend RPC) 0x144d77d5Ec83483A0b3617a155C21A4fEc882dAd, sentinel B (direct RPC) 0x583d51bd576E27cec138DEd3A17927Adbe356AB2, sponsor 0xf3467BA1a6f22352DEaba0C61eaEcA3fF5b4d861
+request 0x285e06a53f6535ea7d459f606e883d2c44a377cb2f167ecc589cbd7e2d0649a6 opened in block P=18 (commit deadline P+6, reveal deadline P+12)
+== onchain after block P+20
+request progress (state, fee, arbitrationDeadline, committed, revealed, approve, deny, ...): [3,400000,0,2,2,2,0,0]
+sentinel A commitment (hash, bond, vote, claimed): ["0x560ab44cd49ee3f4cd2365b1da7b47d7c4e0a9596ec297175b247166a1269886",800000000,2,true]
+sentinel B commitment (hash, bond, vote, claimed): ["0x677972afc946537d973e671429a9166a10c25ac2eab32d5ca53976814aeffd0b",800000000,2,true]
+fee token balance change: A 200000, B 200000, oracle holds 0
+== proxy injections
+{"armed_for_block": 19, "trigger_block": 18, "t": 1791489714.028}
+{"method": "eth_getLogs", "number": 19, "injected": "-32001 (lagging backend)", "t": 1791489715.072}
+{"method": "eth_getBlockByNumber", "number": 19, "injected": "null (lagging backend)", "t": 1791489715.115}
+== sentinel A log (selected lines)
+20:01:54.128 DEBUG submitting transaction {'nonce': 0, 'block': 18, 'hash': '0x621e4f7aeac418a38a83f8dc2a1970e9a22e23cc04bae27d3378c71c0a88cdf3'}
+20:01:54.182 DEBUG submitting transaction {'nonce': 1, 'block': 18, 'hash': '0x4f89d4c3b75cf0d876479bf9c69e7ea91cf759be0a5f663f253bb35d85e2923b'}
+20:02:00.184 DEBUG submitting transaction {'nonce': 2, 'block': 24, 'hash': '0xf01b1e8f619bf584f33550bbee27fb850852e74324477eb9d0f22f52f9888510'}
+20:02:01.141 DEBUG submitting transaction {'nonce': 3, 'block': 25, 'hash': '0x1047b01d04adc5c93093f0fc34dede55b98106bd16dab78d9bec579ec4af86b0'}
+20:02:01.188 DEBUG submitting transaction {'nonce': 4, 'block': 25, 'hash': '0x92ac2829c20b16c33bcd34c10ae24b14cf6fcadf60ebcae43d57c3a20e6b2aaa'}
+== sentinel B log (selected lines)
+20:01:54.053 DEBUG submitting transaction {'nonce': 0, 'block': 18, 'hash': '0x0b0bf7af80f59c33ed4b170a2667551f0346bf28d2fe8d2dd4684d08d9e9bfdb'}
+20:01:54.057 DEBUG submitting transaction {'nonce': 1, 'block': 18, 'hash': '0x79cf0625ce4cf18befd25b75aab84042485814560a255dc7578c7cd1df953231'}
+20:02:00.047 DEBUG submitting transaction {'nonce': 2, 'block': 24, 'hash': '0x6d37655d8aec152eac123b8a0351dee448167ce44f4c08e14b5920e2474d0c18'}
+20:02:01.023 DEBUG submitting transaction {'nonce': 3, 'block': 25, 'hash': '0x390da363021483c117245dc2fc505b9a6185e6d536dbcc7729726e12915a6eda'}
+20:02:01.027 DEBUG submitting transaction {'nonce': 4, 'block': 25, 'hash': '0x37398ec6abda1d1ec633e8fc56479d383bb3e275deb950f59d5ba912e3ccacb1'}
+artifacts in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/QA3-CORE/f160-inject-fix-1791489695

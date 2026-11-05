@@ -1,0 +1,17 @@
+
+running 4 tests
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_live_reorg_control_without_the_store_mismatches ... [CA3-FIX F-SEN-015 live reorg, clear_store=true] replayed check resumed with Denied(RuleId(3, 4))
+[CA3-FIX F-SEN-015 control, verdict cleared] reveal reason = Some("R-3.4"), committed hash 0xaa83f556333b964acaa404f1c4b8bc074a717ebf6e5cef48ff43cae990d6a860
+ok
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_live_reorg_reveals_the_committed_reason ... [CA3-FIX F-SEN-015 live reorg, clear_store=false] replayed check resumed with Denied(RuleId(2, 1))
+[CA3-FIX F-SEN-015 live reorg] reveal reason = Some("R-2.1"), committed hash 0xf0fc0edb4828b71466be9464efe6a115fec180ca228aa0bc04ef36ebbdc72f53
+ok
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_warp_housekeeping_race ... [CA3-FIX F-SEN-015 warp race] gap 0 us: verdict lost to the prune in 278 of 300 replays
+[CA3-FIX F-SEN-015 warp race] gap 1000 us: verdict lost to the prune in 0 of 300 replays
+ok
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_warp_race_with_the_driver_snapshot_prune ... [CA3-FIX F-SEN-015 warp race, driver work] 1 check(s) per page: verdict lost to the prune in 217 of 300 replays
+[CA3-FIX F-SEN-015 warp race, driver work] 4 check(s) per page: verdict lost to the prune in 471 of 1200 replays
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 79 filtered out; finished in 6.89s
+

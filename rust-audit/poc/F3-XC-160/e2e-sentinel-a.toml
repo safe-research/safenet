@@ -1,0 +1,18 @@
+rpc = "http://127.0.0.1:31205"
+signer = "<throwaway key generated for the local Anvil run, redacted>"
+database = "sqlite:/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/QA3-CORE/f160-inject-1791489633/sentinel-a.db?mode=rwc"
+oracle = "0x0e228cd9Af086366230319995b3a4EB7e30Ceca2"
+consensus = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+
+[sentinel]
+fee_token = "0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80"
+voting_window = 6
+engine = "http://127.0.0.1:31206"
+
+[observability]
+log_filter = "info,safenet_core::index=debug,safenet_core::tx=debug,sentinel=debug"
+
+[index]
+block_time = 1000
+block_propagation_delay = 0
+block_retry_delays = []

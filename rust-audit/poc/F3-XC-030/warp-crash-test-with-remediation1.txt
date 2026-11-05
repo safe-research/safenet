@@ -1,0 +1,26 @@
+[review-cargo] 1 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a; rebuilding them
+test driver::qa3_warp_crash_tests::qa3_crash_after_a_warp_page_prune_loses_its_actions ... [control: warp, no crash] run 0 stopped after the time limit; snapshots [988, 989, 990, 991, 992, 993]
+[control: warp, no crash] downtime 15 s, head now 1009; event in block 997
+[control: warp, no crash] run 1 stopped after the time limit; snapshots [1009, 1010, 1011, 1012, 1013, 1014]; queued rows 1
+[control: warp, no crash] run 2 stopped after the time limit; snapshots [1013, 1014, 1015, 1016, 1017, 1018]; queued rows ["{\"to\":\"0xacacacacacacacacacacacacacacacacacacacac\",\"value\":\"0x0\",\"data\":\"0x00000000000003e5\",\"gas\":21000}"]
+[control: live block, crash] run 0 stopped after the time limit; snapshots [988, 989, 990, 991, 992, 993]
+[control: live block, crash] downtime 0 s, head now 994; event in block 996
+thread 'tokio-rt-worker' (314790) panicked at crates/core/src/driver.rs:290:17:
+QA3: simulated crash before the queue insert
+[control: live block, crash] run 1 crashed; snapshots [991, 992, 993, 994, 995, 996]; queued rows 0
+[control: live block, crash] run 2 stopped after the time limit; snapshots [994, 995, 996, 997, 998, 999]; queued rows ["{\"to\":\"0xacacacacacacacacacacacacacacacacacacacac\",\"value\":\"0x0\",\"data\":\"0x00000000000003e4\",\"gas\":21000}"]
+[warp page, crash] run 0 stopped after the time limit; snapshots [988, 989, 990, 991, 992, 993]
+[warp page, crash] downtime 15 s, head now 1009; event in block 997
+thread 'tokio-rt-worker' (314790) panicked at crates/core/src/driver.rs:290:17:
+QA3: simulated crash before the queue insert
+[warp page, crash] run 1 crashed; snapshots [988, 1004]; queued rows 0
+[warp page, crash] run 2 stopped after the time limit; snapshots [1007, 1008, 1009, 1010, 1011, 1012]; queued rows ["{\"to\":\"0xacacacacacacacacacacacacacacacacacacacac\",\"value\":\"0x0\",\"data\":\"0x00000000000003e5\",\"gas\":21000}"]
+thread 'driver::qa3_warp_crash_tests::qa3_crash_after_a_warp_page_prune_loses_its_actions' (314788) panicked at crates/core/src/driver.rs:684:9:
+assertion `left == right` failed
+  left: 1
+ right: 0
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 151 filtered out; finished in 32.12s
+error: test failed, to rerun pass `-p safenet-core --lib`
+--- whole core suite with remediation 1:
+test effects::tests::skips_panicked_tasks_without_losing_successful_resumes ... ok
+test result: ok. 151 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.09s

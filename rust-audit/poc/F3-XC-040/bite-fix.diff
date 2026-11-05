@@ -1,0 +1,49 @@
+diff --git a/crates/core/src/config.rs b/crates/core/src/config.rs
+index cf239b6..142d2ac 100644
+--- a/crates/core/src/config.rs
++++ b/crates/core/src/config.rs
+@@ -26,7 +26,25 @@ pub enum Error {
+ #[derive(Debug)]
+ pub struct ParseError {
+     position: Option<(usize, usize)>,
+-    inner: toml::de::Error,
++    // LT3 bite fix: a redacted message instead of the raw `toml` error.
++    message: String,
++}
++
++fn lt3_redact(text: &str) -> String {
++    let mut out = String::new();
++    let mut quoted = false;
++    let mut escaped = false;
++    for ch in text.chars() {
++        if quoted {
++            if escaped { escaped = false; continue; }
++            if ch == '\\' { escaped = true; continue; }
++            if ch == '"' { quoted = false; out.push_str("<redacted>\""); }
++            continue;
++        }
++        if ch == '"' { quoted = true; }
++        out.push(ch);
++    }
++    out
+ }
+ 
+ impl ParseError {
+@@ -44,7 +62,7 @@ impl ParseError {
+                 + 1;
+             (line, column)
+         });
+-        Self { position, inner }
++        Self { position, message: lt3_redact(inner.to_string().trim_end()) }
+     }
+ }
+ 
+@@ -53,7 +71,7 @@ impl Display for ParseError {
+         if let Some((line, column)) = self.position {
+             writeln!(f, "TOML parse error at line {line}, column {column}")?;
+         }
+-        write!(f, "{}", self.inner.to_string().trim_end())
++        write!(f, "{}", self.message)
+     }
+ }
+ 

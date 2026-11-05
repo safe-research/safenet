@@ -1,0 +1,23 @@
+# rv-xc run 3: first execution of the F-XC-051 PoC, adapted to 361aaf3 (qa_xc_051_run3.rs in this folder), appended to crates/validator/src/frost/keygen.rs in worktree wt/rv-xc, reverted with git checkout afterwards
+# command: cargo test --offline --locked -p validator --bins frost::keygen::qa_xc_051 -- --nocapture --test-threads=1
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.73s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-xc/debug/deps/validator-dd9411993fa56ac3)
+
+running 6 tests
+test frost::keygen::qa_xc_051::qa_xc_051_a_single_coefficient_where_the_threshold_is_two ... single-coefficient c (threshold 2) -> accepted = true
+group_commitments with the short commitment sorted last -> Err(Unexpected(IncorrectNumberOfCommitments))
+group_commitments with the short commitment sorted first -> Ok, group commitment length 1
+ok
+test frost::keygen::qa_xc_051::qa_xc_051_control_the_unmodified_commitment_verifies ... control (c.len() = 2) -> ok = true
+ok
+test frost::keygen::qa_xc_051::qa_xc_051_empty_commitment_vector_returns_an_error_and_does_not_panic ... empty c -> Err(Participant { cause: MissingCommitment, culprit: 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266 })
+ok
+test frost::keygen::qa_xc_051::qa_xc_051_identity_coefficients_are_rejected ... identity c (all) -> Err(Participant { cause: GroupError(InvalidIdentityElement), culprit: 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266 })
+ok
+test frost::keygen::qa_xc_051::qa_xc_051_identity_constant_term_is_rejected ... identity c[0] -> Err(Participant { cause: GroupError(InvalidIdentityElement), culprit: 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266 })
+ok
+test frost::keygen::qa_xc_051::qa_xc_051_identity_higher_coefficient_is_accepted ... identity c[1] (valid pok for c[0]) -> accepted = true
+ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.05s
+

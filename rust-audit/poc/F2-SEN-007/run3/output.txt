@@ -1,0 +1,26 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins qa2_sen::f2_sen_007 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::qa2_sen::f2_sen_007a_arbitration_timeout_claims_without_a_bond ... [F2-SEN-007a] from WaitingForRequest: ArbitrationTimedOut → [Action(SentinelAction { kind: Claim { id: 0xf1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1 }, expires_at: None })]; RequestTimedOut → []; OracleResult → []
+
+thread 'service::tests::qa2_sen::f2_sen_007a_arbitration_timeout_claims_without_a_bond' (219196) panicked at crates/sentinel/src/service.rs:4018:13:
+F2-SEN-007 reproduced: ArbitrationTimedOut from WaitingForRequest emits Claim (reverts NothingToClaim, Commitments.sol:42) while the sibling handlers emit nothing
+FAILED
+test service::tests::qa2_sen::f2_sen_007b_depth1_reorg_replays_reveal ... [F2-SEN-007b] first block 120 → [Action(SentinelAction { kind: Reveal { id: 0xde6dd5467b1a7f644539f250db8b834d5823842dcc8dd40d4ca88e3a25112ebe, approve: true, salt: 0x3d5afd417882fb0d34cd286b5ab6bd7277f3061b8bb2aa9a9ea471e1af285f1c, reason: "" }, expires_at: Some(130) })]
+[F2-SEN-007b] replacement block 120 → [Action(SentinelAction { kind: Reveal { id: 0xde6dd5467b1a7f644539f250db8b834d5823842dcc8dd40d4ca88e3a25112ebe, approve: true, salt: 0x3d5afd417882fb0d34cd286b5ab6bd7277f3061b8bb2aa9a9ea471e1af285f1c, reason: "" }, expires_at: Some(130) })]
+
+thread 'service::tests::qa2_sen::f2_sen_007b_depth1_reorg_replays_reveal' (219197) panicked at crates/sentinel/src/service.rs:4051:13:
+F2-SEN-007 reproduced: a second Reveal row is emitted for the replacement block 120; the first is still queued or in flight, so the second reverts AlreadyRevealed (Commitments.sol:117)
+FAILED
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3::f_sen_006 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::rv_sen_run3::f_sen_006_run3_restart_re_emits_the_reveal ... [F-SEN-006 run3] before restart → [Action(SentinelAction { kind: Reveal { id: 0xc7eb2c2c992b3c075e158e582af4fefb3711b17461124cde0053a337d8de6371, approve: true, salt: 0xc48373faefd98eb161dd13390e923c96e23b370208510860bd27ffed63acc95d, reason: "" }, expires_at: Some(112) })]; Reveal rows emitted again after restart: 1
+
+thread 'service::tests::rv_sen_run3::f_sen_006_run3_restart_re_emits_the_reveal' (219300) panicked at crates/sentinel/src/service.rs:5315:13:
+assertion `left == right` failed: a second Reveal row is queued for the same request (no idempotency key)
+  left: 1
+ right: 0
+FAILED

@@ -1,0 +1,4 @@
+$ cargo test -p validator --bins state::keygen:: -- --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3, PoC modules wired into crates/validator/src/state/keygen.rs, reverted afterwards)
+test state::keygen::qa2_val_b::f2_val_063_lost_key_gen_setup_is_never_re_issued ... ok
+
+(full run) test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.28s

@@ -1,0 +1,9 @@
+QA3_OUTAGE_MS = None
+A fixed window 10 per 150 ms: processed up to None of head 1030; eth_getLogs sent 3683 (122 per s), ok 1980, 429 1700, 502 3
+B control: A with block_single_query_retry_count 1000: processed up to Some(1030) of head 1030; eth_getLogs sent 38 (1 per s), ok 35, 429 0, 502 3
+C at most 8 requests in flight: processed up to None of head 1030; eth_getLogs sent 3683 (122 per s), ok 1840, 429 1840, 502 3
+D token bucket 12, 100 per s: processed up to None of head 1030; eth_getLogs sent 3683 (122 per s), ok 2760, 429 920, 502 3
+E token bucket 20, 50 per s, first per-event attempt in the outage: processed up to None of head 1030; eth_getLogs sent 3683 (122 per s), ok 1473, 429 2181, 502 29
+G control: E with the outage over before the first per-event attempt: processed up to Some(1030) of head 1030; eth_getLogs sent 53 (1 per s), ok 50, 429 0, 502 3
+F restart warp from 800, A's window, 1 s outage: processed up to Some(800) of head 1030; eth_getLogs sent 3623 (120 per s), ok 1940, 429 1676, 502 7
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 30.16s

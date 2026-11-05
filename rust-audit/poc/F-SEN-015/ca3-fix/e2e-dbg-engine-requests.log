@@ -1,0 +1,6 @@
+{"t": 1791488538.0365117, "request_id": "0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b", "mode": "gated", "event": "arrived"}
+{"t": 1791488539.0463035, "request_id": "0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488550.0345798, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "gated", "event": "arrived"}
+{"t": 1791488551.0804017, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "gated", "event": "answered", "status": 200, "body": "{\"verdict\": \"insecure\", \"rule\": \"R-2.1\"}"}
+{"t": 1791488552.11332, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "down", "event": "arrived"}
+{"t": 1791488552.1133523, "request_id": "0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c", "mode": "down", "event": "answered", "status": 503, "body": "starting"}

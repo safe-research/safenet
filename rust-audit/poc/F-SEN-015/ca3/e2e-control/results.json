@@ -1,0 +1,50 @@
+[
+ {
+  "iter": 0,
+  "P": 19,
+  "C": 21,
+  "restart_head": 24,
+  "commit_deadline": 25,
+  "reveal_deadline": 31,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0x46da9c581059374edc67eda45a54d2e38b99877727a0f7e2544a6f877d23825b, 4000, 3, true)"
+ },
+ {
+  "iter": 1,
+  "P": 34,
+  "C": 36,
+  "restart_head": 39,
+  "commit_deadline": 40,
+  "reveal_deadline": 46,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0x647aaca7ff71291faa6512342c2b69ee6aeb5a20740ec63da8a8951c99a0bd3b, 4000, 3, true)"
+ },
+ {
+  "iter": 2,
+  "P": 49,
+  "C": 51,
+  "restart_head": 54,
+  "commit_deadline": 55,
+  "reveal_deadline": 61,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0x1f7681d96608eeb79420ab1efc0206ee6b97fb52081c17eede890a68142fb6c1, 4000, 3, true)"
+ },
+ {
+  "iter": 3,
+  "P": 64,
+  "C": 66,
+  "restart_head": 69,
+  "commit_deadline": 70,
+  "reveal_deadline": 76,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0xd1ade470eb1c737175b7a9b4d0411530bf7390950c97b784580351c72f68749f, 4000, 3, true)"
+ }
+]

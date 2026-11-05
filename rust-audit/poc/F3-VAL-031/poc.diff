@@ -1,0 +1,193 @@
+diff --git a/crates/validator/src/frost/keygen.rs b/crates/validator/src/frost/keygen.rs
+index 2281e84..a467aaa 100644
+--- a/crates/validator/src/frost/keygen.rs
++++ b/crates/validator/src/frost/keygen.rs
+@@ -451,6 +451,19 @@ impl KeyShare {
+         ))
+     }
+ 
++    /// F3-VAL-031 PoC helper (temporary): a dummy key share with a chosen signing
++    /// threshold, used to exercise the share-round restart rule.
++    #[cfg(test)]
++    pub(crate) fn dummy_with_threshold(min_signers: u16) -> Self {
++        KeyShare(frost_secp256k1::keys::KeyPackage::new(
++            frost_secp256k1::Identifier::try_from(1).unwrap(),
++            frost_secp256k1::keys::SigningShare::new(k256::Scalar::ONE),
++            frost_secp256k1::keys::VerifyingShare::new(k256::ProjectivePoint::GENERATOR),
++            frost_secp256k1::VerifyingKey::new(k256::ProjectivePoint::GENERATOR),
++            min_signers,
++        ))
++    }
++
+     /// Returns the signing threshold for the group.
+     pub fn group_threshold(&self) -> u16 {
+         *self.0.min_signers()
+diff --git a/crates/validator/src/state/sign.rs b/crates/validator/src/state/sign.rs
+index f9764a7..313ed08 100644
+--- a/crates/validator/src/state/sign.rs
++++ b/crates/validator/src/state/sign.rs
+@@ -834,3 +834,164 @@ impl Packet {
+         }
+     }
+ }
++
++// F3-VAL-031 PoC (temporary): the share-round restart rule. At the share
++// deadline, `handle_signing_timeouts` keeps only the largest selection that
++// reaches the group threshold and otherwise drops the ceremony for everyone. A
++// 1-block reorg at the nonce-commitment deadline can split the honest shares
++// across two selection roots (shown here as a 2+2 split at threshold 3); since
++// neither root reaches the threshold, the ceremony is dropped rather than
++// restarted. A selection that does reach the threshold restarts instead. (How
++// the reorg produces the split -- an early nonce burn on a non-final block --
++// is traced in the finding, not driven here.)
++#[cfg(test)]
++mod poc_f3_val_031 {
++    use super::*;
++    use crate::{
++        bindings::Coordinator,
++        config::{Participant, ValidatorConfig},
++        consensus::{group, hashing::ConsensusDomain},
++        service::Event,
++    };
++    use alloy::primitives::{Address, Bytes, address};
++    use safenet_core::{
++        index::{EventBlock, EventLog},
++        state::{Message, StateTransition},
++    };
++    use std::{collections::BTreeSet, num::NonZeroU64, sync::Arc};
++
++    const A: Address = address!("0x1000000000000000000000000000000000000001");
++    const B: Address = address!("0x2000000000000000000000000000000000000002");
++    const C: Address = address!("0x3000000000000000000000000000000000000003");
++    const D: Address = address!("0x4000000000000000000000000000000000000004");
++    const M: Address = address!("0x5000000000000000000000000000000000000005");
++    const CONSENSUS: Address = address!("0x00000000000000000000000000000000000000c0");
++    const MESSAGE: B256 = B256::repeat_byte(0x11);
++    const SID: B256 = B256::repeat_byte(0x22);
++    const GID: B256 = B256::repeat_byte(0x33);
++    const R1: B256 = B256::repeat_byte(0xa1);
++    const R2: B256 = B256::repeat_byte(0xb2);
++
++    fn transition(account: Address) -> Transition {
++        let participants = [A, B, C, D, M]
++            .into_iter()
++            .map(|address| Participant {
++                address,
++                active_from: 0,
++                active_before: None,
++            })
++            .collect::<Vec<_>>();
++        let config = ValidatorConfig {
++            consensus: CONSENSUS,
++            staker: None,
++            participants,
++            oracles: BTreeSet::new(),
++            genesis_salt: B256::ZERO,
++            blocks_per_epoch: NonZeroU64::new(1440).unwrap(),
++            key_gen_timeout: NonZeroU64::new(120).unwrap(),
++            signing_timeout: NonZeroU64::new(6).unwrap(),
++            oracle_timeout: NonZeroU64::new(24).unwrap(),
++        };
++        let genesis =
++            group::participants_set(&config.participants, group::Epoch::Genesis { salt: B256::ZERO })
++                .unwrap();
++        Transition {
++            account,
++            genesis,
++            consensus: ConsensusDomain::new(100, CONSENSUS),
++            config,
++        }
++    }
++
++    // A signing session that has reached the signature-share round, with a
++    // group threshold of 3 of 5.
++    fn collecting_shares() -> State {
++        let mut state = State::default();
++        state.signing.insert(
++            MESSAGE,
++            SigningState::CollectSigningShares {
++                key_share: Arc::new(crate::frost::keygen::KeyShare::dummy_with_threshold(3)),
++                group_id: GID,
++                signature_id: SID,
++                committed: BTreeMap::new(),
++                selections: BTreeMap::new(),
++                packet: Packet::Transaction {
++                    epoch: EpochId::Genesis,
++                    oracle: Address::ZERO,
++                    oracle_data: Bytes::new(),
++                    transaction: Box::new(bindings::SafeTransaction::default()),
++                },
++                signers: BTreeSet::from([A, B, C, D, M]),
++                deadline: 100,
++            },
++        );
++        state.signature_id_to_message.insert(SID, MESSAGE);
++        state
++    }
++
++    fn share_log(root: B256, participant: Address) -> EventLog<Event> {
++        EventLog {
++            block: EventBlock {
++                number: 50,
++                timestamp: 50,
++            },
++            index: 0,
++            address: Address::ZERO,
++            data: Event::Coordinator(Coordinator::CoordinatorEvents::SignShared(
++                Coordinator::SignShared {
++                    sid: SID,
++                    selectionRoot: root,
++                    participant,
++                    z: alloy::primitives::U256::ZERO,
++                },
++            )),
++        }
++    }
++
++    #[test]
++    fn split_shares_drop_the_ceremony() {
++        let t = transition(A);
++        let mut state = collecting_shares();
++        // Honest shares split 2 + 2 across two roots, neither reaching 3.
++        for (root, who) in [(R1, A), (R1, B), (R2, C), (R2, D)] {
++            (state, _) = t.apply_transition(state, Message::Event(share_log(root, who)));
++        }
++        let (state, commands) = t.apply_transition(state, Message::NewBlock(100));
++
++        // No selection reached the threshold, so the ceremony is dropped for
++        // everyone: the session is gone, its signature id is unlinked, and no
++        // restart `Sign` action is emitted.
++        assert!(
++            state.signing.get(&MESSAGE).is_none(),
++            "expected the split ceremony to be dropped"
++        );
++        assert!(state.signature_id_to_message.get(&SID).is_none());
++        assert!(
++            !commands
++                .iter()
++                .any(|c| matches!(c, Command::Action(Action::Sign { .. }))),
++            "a dropped ceremony must not restart"
++        );
++    }
++
++    #[test]
++    fn threshold_selection_restarts_instead_of_dropping() {
++        // Control: when one selection reaches the threshold (3 of 5), the
++        // ceremony restarts rather than dropping.
++        let t = transition(A);
++        let mut state = collecting_shares();
++        for (root, who) in [(R1, A), (R1, B), (R1, C), (R2, D)] {
++            (state, _) = t.apply_transition(state, Message::Event(share_log(root, who)));
++        }
++        let (state, _c) = t.apply_transition(state, Message::NewBlock(100));
++
++        assert!(
++            matches!(
++                state.signing.get(&MESSAGE),
++                Some(SigningState::WaitingForRequest { .. })
++            ),
++            "expected a restart (WaitingForRequest), got {:?}",
++            state.signing.get(&MESSAGE)
++        );
++    }
++}

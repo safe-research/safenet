@@ -1,0 +1,28 @@
+[
+ {
+  "iter": 0,
+  "P": 19,
+  "C": 21,
+  "restart_head": 25,
+  "commit_deadline": 25,
+  "reveal_deadline": 31,
+  "engine_asked_again": 0,
+  "replay_modes": [],
+  "revealed_reason": "R-2.1",
+  "commitment": "(0xa8f9b6ef0c8a2e2f2fbfb08b7a3fb5d011ca627358ae9d757520b5b81b2b114a, 4000, 3, true)"
+ },
+ {
+  "iter": 1,
+  "P": 34,
+  "C": 36,
+  "restart_head": 40,
+  "commit_deadline": 40,
+  "reveal_deadline": 46,
+  "engine_asked_again": 1,
+  "replay_modes": [
+   "down"
+  ],
+  "revealed_reason": null,
+  "commitment": "(0x775514cbef03048414f8b0e0a9dd0a5bb1737cd2fb0975c74fce4ce81e719f85, 4000, 1, false)"
+ }
+]

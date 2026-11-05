@@ -1,0 +1,324 @@
+# R6: keygen setup resume ordered after a share event (restart warp order) vs live order, 2026-10-08
+# Scratch copy of crates/core and crates/validator at 361aaf3 (copied from wt/base, checked clean) with the test module below appended to crates/validator/src/state/keygen.rs; nothing in the repository or worktree changed.
+# command: bash run_warp_test.sh  (cargo test --offline -p validator --bins r6_ -- --nocapture --test-threads=1, CARGO_TARGET_DIR=<run>/scratch/R6/target)
+
+scratch keygen.rs: 1714 lines (1447 at 361aaf3 plus the appended test)
+[review-cargo] 60 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R6/target; rebuilding them
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 03s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R6/target/debug/deps/validator-dd9411993fa56ac3)
+
+running 2 tests
+test state::keygen::r6_warp_order::r6_live_order_counts_every_share ... live: after commitments: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=0, deadline=Some(1561))
+live: after share from 0x1000000000000000000000000000000000000001: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=1, deadline=Some(1561))
+live: after share from 0x2000000000000000000000000000000000000002: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=2, deadline=Some(1561))
+live: after share from 0x3000000000000000000000000000000000000003: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=3, deadline=Some(1561))
+live: after share from 0x4000000000000000000000000000000000000004: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=4, deadline=Some(1561))
+live: after share from 0x5000000000000000000000000000000000000005: CollectingConfirmations(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000)
+ok
+test state::keygen::r6_warp_order::r6_warp_order_drops_a_share_seen_before_setup ... warp: after commitments: CollectingCommitments(commitments=5, secrets=false, deadline=Some(1560))
+warp: after share from 0x2000000000000000000000000000000000000002 (same page): CollectingCommitments(commitments=5, secrets=false, deadline=Some(1560))
+warp: after Resume::Setup: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=0, deadline=Some(1680))
+warp: after share from 0x1000000000000000000000000000000000000001: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=1, deadline=Some(1680))
+warp: after share from 0x3000000000000000000000000000000000000003: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=2, deadline=Some(1680))
+warp: after share from 0x4000000000000000000000000000000000000004: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=3, deadline=Some(1680))
+warp: after share from 0x5000000000000000000000000000000000000005: CollectingShares(group=0x09d03456f704902446834310aad6661c9af7fee2ca7ba0090000000000000000, shared=4, deadline=Some(1680))
+warp: after NewBlock(1680): CollectingCommitments(commitments=0, secrets=false, deadline=Some(1800))
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.22s
+
+exit=0
+
+## run_warp_test.sh
+#!/usr/bin/env bash
+# R6: run the scratch warp-order test against a scratch copy of the workspace
+# (crates/core and crates/validator at 361aaf3, plus the workspace manifests).
+# Nothing in the repository or the shared worktree is modified.
+set -euo pipefail
+source /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/env/base.sh
+R6="$SAFENET_REVIEW_ROOT/scratch/R6"
+WS="$R6/ws"
+mkdir -p "$WS/crates"
+cd "$WT"
+test "$(git rev-parse HEAD)" = 361aaf3b25e12d2e04f296184c326830968f3727
+test -z "$(git status --short -- crates Cargo.toml Cargo.lock)"
+cp Cargo.toml Cargo.lock "$WS/"
+cp -r crates/core crates/validator "$WS/crates/"
+K="$WS/crates/validator/src/state/keygen.rs"
+cmp -s "$K" "$WT/crates/validator/src/state/keygen.rs"
+cat "$R6/r6_warp_test.rs" >> "$K"
+grep -q 'mod r6_warp_order' "$K"
+echo "scratch keygen.rs: $(wc -l < "$K") lines (1447 at 361aaf3 plus the appended test)"
+export CARGO_TARGET_DIR="$R6/target"
+export SAFENET_REVIEW_TARGET_LOCK="$SAFENET_REVIEW_ROOT/locks/target-R6.lock"
+cd "$WS"
+cargo test --offline -p validator --bins r6_ -- --nocapture --test-threads=1
+
+## appended test module (r6_warp_test.rs)
+
+// ---------------------------------------------------------------------------
+// R6 scratch test (rust audit run 3), appended to a scratch copy of
+// crates/validator/src/state/keygen.rs at 361aaf3. Not part of the repository.
+//
+// A warp page applies `NewBlock` and every log of up to 100 blocks in one
+// `StateMachine::handle_update` call (crates/core/src/state/mod.rs:225-244),
+// and effects only start after the update returns (crates/core/src/driver.rs:
+// 272-280). So after a restart that replays an epoch's key generation start,
+// the `Resume::Setup` of the re-emitted `Effect::KeyGenSetup` is applied after
+// every commitment and share event of that page. These tests feed the same
+// message order straight into `Transition::apply_transition`.
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod r6_warp_order {
+    use super::*;
+    use crate::{
+        config::{Participant, ValidatorConfig},
+        consensus::hashing::ConsensusDomain,
+        frost::keygen as fk,
+        service::{Event, Resume},
+    };
+    use alloy::primitives::{Address, address};
+    use safenet_core::{
+        index::{EventBlock, EventLog},
+        state::{Message, StateTransition as _},
+    };
+
+    const PARTICIPANTS: [Address; 5] = [
+        address!("0x1000000000000000000000000000000000000001"),
+        address!("0x2000000000000000000000000000000000000002"),
+        address!("0x3000000000000000000000000000000000000003"),
+        address!("0x4000000000000000000000000000000000000004"),
+        address!("0x5000000000000000000000000000000000000005"),
+    ];
+
+    fn transition(account: Address) -> Transition {
+        let config = ValidatorConfig {
+            consensus: address!("0xc855761D619f6002923507cE68B84d7689C2aa96"),
+            staker: None,
+            participants: PARTICIPANTS
+                .iter()
+                .map(|&address| Participant {
+                    address,
+                    active_from: 0,
+                    active_before: None,
+                })
+                .collect(),
+            oracles: BTreeSet::new(),
+            genesis_salt: B256::ZERO,
+            blocks_per_epoch: NonZeroU64::new(1440).unwrap(),
+            key_gen_timeout: NonZeroU64::new(120).unwrap(),
+            signing_timeout: NonZeroU64::new(6).unwrap(),
+            oracle_timeout: NonZeroU64::new(24).unwrap(),
+        };
+        let genesis = group::participants_set(
+            &config.participants,
+            group::Epoch::Genesis {
+                salt: config.genesis_salt,
+            },
+        )
+        .unwrap();
+        let consensus = ConsensusDomain::new(100, config.consensus);
+        Transition {
+            account,
+            genesis,
+            consensus,
+            config,
+        }
+    }
+
+    fn log(block: u64, index: u64, data: Event) -> Message<Event, Resume> {
+        Message::Event(EventLog {
+            block: EventBlock {
+                number: block,
+                timestamp: 0,
+            },
+            index,
+            address: Address::ZERO,
+            data,
+        })
+    }
+
+    struct Dkg {
+        group_id: B256,
+        secrets: BTreeMap<Address, Secrets>,
+        shares: BTreeMap<Address, crate::bindings::KeyGenSecretShare>,
+    }
+
+    /// Epoch 2's key generation starts at block 1440 (`next_number(1440) = 2`).
+    fn start(t: &Transition) -> (State, Dkg) {
+        let state = State {
+            rollover: RolloverState::EpochSkipped {
+                next_epoch: NonZeroU64::new(1).unwrap(),
+            },
+            ..Default::default()
+        };
+        let (state, commands) = t.apply_transition(state, Message::NewBlock(1440));
+        let (group_id, count, threshold) = commands
+            .iter()
+            .find_map(|command| match command {
+                Command::Effect(Effect::KeyGenSetup {
+                    group_id,
+                    count,
+                    threshold,
+                }) => Some((*group_id, *count, *threshold)),
+                _ => None,
+            })
+            .expect("NewBlock(1440) emits Effect::KeyGenSetup");
+        assert_eq!((count, threshold), (5, 3));
+
+        let mut rng = rand::thread_rng();
+        let secrets = PARTICIPANTS
+            .iter()
+            .map(|&p| (p, fk::setup(&mut rng, p, count, threshold).unwrap()))
+            .collect::<BTreeMap<_, _>>();
+        let verified = PARTICIPANTS
+            .iter()
+            .map(|&p| (p, fk::verify_commitment(p, &secrets[&p].commitment()).unwrap()))
+            .collect::<BTreeMap<_, _>>();
+        let shares = PARTICIPANTS
+            .iter()
+            .map(|&p| {
+                let (_, share) =
+                    fk::generate_secret_shares(secrets[&p].clone(), verified.clone()).unwrap();
+                (p, share)
+            })
+            .collect();
+        (
+            state,
+            Dkg {
+                group_id,
+                secrets,
+                shares,
+            },
+        )
+    }
+
+    fn commit_all(t: &Transition, mut state: State, dkg: &Dkg) -> State {
+        // Every member, this validator included, committed in block 1441.
+        for (i, &p) in PARTICIPANTS.iter().enumerate() {
+            let event = Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenCommitted(
+                Coordinator::KeyGenCommitted {
+                    gid: dkg.group_id,
+                    participant: p,
+                    commitment: dkg.secrets[&p].commitment(),
+                    committed: i + 1 == PARTICIPANTS.len(),
+                },
+            ));
+            (state, _) = t.apply_transition(state, log(1441, i as u64, event));
+        }
+        state
+    }
+
+    fn share(t: &Transition, state: State, dkg: &Dkg, from: Address, block: u64) -> State {
+        let event = Event::Coordinator(Coordinator::CoordinatorEvents::KeyGenSecretShared(
+            Coordinator::KeyGenSecretShared {
+                gid: dkg.group_id,
+                participant: from,
+                share: dkg.shares[&from].clone(),
+                shared: false,
+            },
+        ));
+        t.apply_transition(state, log(block, 0, event)).0
+    }
+
+    fn setup(t: &Transition, state: State, dkg: &Dkg, me: Address) -> State {
+        let resume = Message::Resume(Resume::Setup {
+            group_id: dkg.group_id,
+            secrets: Box::new(dkg.secrets[&me].clone()),
+        });
+        t.apply_transition(state, resume).0
+    }
+
+    fn describe(state: &State) -> String {
+        match &state.rollover {
+            RolloverState::CollectingCommitments {
+                commitments,
+                deadline,
+                secrets,
+                ..
+            } => format!(
+                "CollectingCommitments(commitments={}, secrets={}, deadline={deadline:?})",
+                commitments.len(),
+                matches!(
+                    secrets,
+                    KeyGenCommitment::Participating {
+                        secrets: Some(_),
+                        ..
+                    }
+                )
+            ),
+            RolloverState::CollectingShares {
+                group,
+                shared,
+                deadline,
+                ..
+            } => format!(
+                "CollectingShares(group={}, shared={}, deadline={deadline:?})",
+                group.id(),
+                shared.len()
+            ),
+            RolloverState::CollectingConfirmations { group, .. } => {
+                format!("CollectingConfirmations(group={})", group.id())
+            }
+            RolloverState::EpochSkipped { next_epoch } => format!("EpochSkipped({next_epoch})"),
+            _ => "other".to_owned(),
+        }
+    }
+
+    /// Live order: the setup resumes before the commitments land.
+    #[test]
+    fn r6_live_order_counts_every_share() {
+        let me = PARTICIPANTS[0];
+        let t = transition(me);
+        let (state, dkg) = start(&t);
+        let state = setup(&t, state, &dkg, me);
+        let mut state = commit_all(&t, state, &dkg);
+        println!("live: after commitments: {}", describe(&state));
+        for (i, &p) in PARTICIPANTS.iter().enumerate() {
+            state = share(&t, state, &dkg, p, 1443 + i as u64);
+            println!("live: after share from {p}: {}", describe(&state));
+        }
+        assert!(matches!(
+            state.rollover,
+            RolloverState::CollectingConfirmations { .. }
+        ));
+    }
+
+    /// Restart warp order: NewBlock(1440), every commitment (own included) and
+    /// one peer share are applied in one page, then the setup resumes.
+    #[test]
+    fn r6_warp_order_drops_a_share_seen_before_setup() {
+        let me = PARTICIPANTS[0];
+        let dropped = PARTICIPANTS[1];
+        let t = transition(me);
+        let (state, dkg) = start(&t);
+        let state = commit_all(&t, state, &dkg);
+        println!("warp: after commitments: {}", describe(&state));
+        let state = share(&t, state, &dkg, dropped, 1443);
+        println!("warp: after share from {dropped} (same page): {}", describe(&state));
+        let mut state = setup(&t, state, &dkg, me);
+        println!("warp: after Resume::Setup: {}", describe(&state));
+
+        // Every other share arrives live afterwards.
+        for (i, &p) in PARTICIPANTS.iter().enumerate().filter(|(_, p)| **p != dropped) {
+            state = share(&t, state, &dkg, p, 1444 + i as u64);
+            println!("warp: after share from {p}: {}", describe(&state));
+        }
+        let RolloverState::CollectingShares { shared, deadline, .. } = &state.rollover else {
+            panic!("expected CollectingShares, got {}", describe(&state));
+        };
+        assert_eq!(shared.len(), 4, "the share applied before the setup resumed is lost");
+        assert!(!shared.contains(&dropped));
+        assert_eq!(*deadline, Some(1440 + 120 + 120));
+
+        // At this validator's own deadline it restarts without the peer whose
+        // share it dropped, into a group the other members never join.
+        let before = dkg.group_id;
+        let (state, _) = t.apply_transition(state, Message::NewBlock(1680));
+        println!("warp: after NewBlock(1680): {}", describe(&state));
+        if let RolloverState::CollectingCommitments { group, .. } = &state.rollover {
+            assert_ne!(group.id(), before);
+            assert!(!group.participants().contains(&dropped));
+        }
+    }
+}

@@ -1,0 +1,17 @@
+# rv-core-a run 3 re-run, audit commit 361aaf3 (worktree wt/rv-core-a), 2026-10-08
+# command: cargo test -p safenet-core --lib -- --nocapture --test-threads=1 index::events::tests::poc_f_core_002 index::events::tests::qa_f2_core_002 index::events::tests::rv3_
+# sources: the rv-core-a-*.rs files in this folder (and the sibling run3 folders of the same batch), injected into the mod tests of crates/core/src/index/events.rs; reverted afterwards with git checkout
+# excerpt: only this finding's tests are shown; the batch ran 10 tests (8 passed, 2 failed by design: the run-1 PoC tests fail at their key assertion when the defect is present)
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.23s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/safenet_core-1a555efd99e0fbb6)
+running 10 tests
+test index::events::tests::rv3_f_core_012_client_filtered_path_skips_check_logs_limit ... ClientFiltered, cap 1, node serves 2 logs: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [EventLog { block: EventBlock { number: 1337, timestamp: 1700016044 }, index: 0, address: 0x1111111111111111111111111111111111111111, data: Transfer(Transfer { from: 0x0000000000000000000000000000000000000000, to: 0x0000000000000000000000000000000000000000, amount: 1 }) }, EventLog { block: EventBlock { number: 1337, timestamp: 1700016044 }, index: 1, address: 0x1111111111111111111111111111111111111111, data: Transfer(Transfer { from: 0x0000000000000000000000000000000000000000, to: 0x0000000000000000000000000000000000000000, amount: 2 }) }] }))
+SingleQuery (control), cap 1, node serves 2 logs: Err(TooManyLogs)
+ok
+test index::events::tests::rv3_f_core_012_repeated_shape_log_loss_passes_the_bloom_check ... ClientFiltered, node serves 1 of 2 same-shape logs: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [EventLog { block: EventBlock { number: 1337, timestamp: 1700016044 }, index: 0, address: 0x1111111111111111111111111111111111111111, data: Transfer(Transfer { from: 0x0000000000000000000000000000000000000000, to: 0x0000000000000000000000000000000000000000, amount: 1 }) }] }))
+ok
+
+failures:
+failures:
+test result: FAILED. 8 passed; 2 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s

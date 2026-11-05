@@ -1,0 +1,34 @@
+# rv-core-a run 3, audit commit 361aaf3 (worktree wt/rv-core-a), 2026-10-08
+# command: integ bash rust-audit/poc/F-CORE-001/run3/rv-core-a-deep_reorg_restart.sh OUTDIR (private network namespace, loopback only)
+# excerpt: build and forge deployment output dropped; the script's own lines and both validator logs follow
+
+1:rpc = "http://127.0.0.1:8549"
+18:metrics_address = "127.0.0.1:9464"
+25:max_reorg_depth = 2
+validator pid 182246
+health while indexing: OK
+reorging 5 blocks, deeper than max_reorg_depth (2)
+health while the validator processes the reorg: OK
+validator exit status: 0
+ExceededMaxReorgDepth lines in the log: 1
+"message":"unrecoverable watcher error; exiting"
+restarting the validator against the same database
+restarted validator still running after 15 s
+health after the restart: OK
+restart log: 3 lines, 0 WARN, 0 ERROR, 0 ExceededMaxReorgDepth
+"message":"initializing block watcher","latest":7,"safe":5,"resume":"Some(BlockStatus { latest: 3, safe: 3 
+REPRODUCED: after the deliberate exit (status 0) the restarted validator resumed silently
+
+--- validator_logs.txt (first run, complete)
+{"timestamp":"2026-10-08T17:25:15.757055Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:9464"},"target":"safenet_core::observability"}
+{"timestamp":"2026-10-08T17:25:15.791914Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":2,"safe":0,"resume":"None"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T17:25:15.797429Z","level":"INFO","fields":{"message":"starting validator service"},"target":"validator"}
+{"timestamp":"2026-10-08T17:25:20.004390Z","level":"DEBUG","fields":{"message":"reorg detected, uncling block","number":5},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T17:25:20.010965Z","level":"DEBUG","fields":{"message":"reorg detected, uncling block","number":4},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T17:25:20.013658Z","level":"ERROR","fields":{"message":"unrecoverable watcher error; exiting","err":"Blocks(ExceededMaxReorgDepth(2))"},"target":"safenet_core::driver"}
+
+--- validator_restart_logs.txt (restart against the same database, complete; the last line is the test's own cleanup stopping it)
+{"timestamp":"2026-10-08T17:25:20.776224Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:9464"},"target":"safenet_core::observability"}
+{"timestamp":"2026-10-08T17:25:20.803472Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":7,"safe":5,"resume":"Some(BlockStatus { latest: 3, safe: 3 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T17:25:20.804723Z","level":"INFO","fields":{"message":"starting validator service"},"target":"validator"}
+{"timestamp":"2026-10-08T17:25:35.785735Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}

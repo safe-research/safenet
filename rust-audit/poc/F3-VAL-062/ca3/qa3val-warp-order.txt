@@ -1,0 +1,19 @@
+[review-cargo] 3 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-val; rebuilding them
+   Compiling validator v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-val/crates/validator)
+warning: function `vectors` is never used
+  --> crates/validator/src/frost/mod.rs:35:19
+   |
+35 |     pub(crate) fn vectors(
+   |                   ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `validator` (bin "validator" test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.29s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-val/debug/deps/validator-dd9411993fa56ac3)
+
+running 1 test
+test state::keygen::poc_f3_val_062::warp_order_drops_peer_share_and_delays_deadline ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.15s
+

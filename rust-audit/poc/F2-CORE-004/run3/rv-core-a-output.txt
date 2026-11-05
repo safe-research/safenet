@@ -1,0 +1,12 @@
+# rv-core-a run 3 re-run, audit commit 361aaf3 (worktree wt/rv-core-a), 2026-10-08
+# command: cargo test -p validator --bins -- --nocapture --test-threads=1 qa_xc_002 qa2_cov_7_6
+# sources: rv-core-a-append-to-keygen.rs (appended to crates/validator/src/frost/keygen.rs) and ../../F2-CORE-004/run3/rv-core-a-qa2_cov_7_6_test.rs (mod tests of crates/validator/src/secrets/store.rs); reverted afterwards with git checkout
+# every test passes; a pass means the value renders without secret material
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.82s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/validator-dd9411993fa56ac3)
+running 5 tests
+test secrets::store::tests::qa2_cov_7_6::out_of_range_operation_in_transaction_proposed_decodes_to_invalid_not_an_error ... operation byte 2 decoded to __Invalid
+ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.01s

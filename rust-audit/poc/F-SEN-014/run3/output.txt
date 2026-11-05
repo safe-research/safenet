@@ -1,0 +1,16 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3::f_sen_014 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::rv_sen_run3::f_sen_014_run3_finalize_after_auto_finalize ... [F-SEN-014 run3] Revealed(self) → []; last Revealed(OTHER) → [Action(SentinelAction { kind: Finalize { id: 0xa31709017f4dab40e2a1ae48bbd55cb7687ba16e6d4f90adc024f89bd4567677 }, expires_at: None })]; OracleResult (same tx) → [Action(SentinelAction { kind: Claim { id: 0xa31709017f4dab40e2a1ae48bbd55cb7687ba16e6d4f90adc024f89bd4567677 }, expires_at: None })]; tracked=false
+
+thread 'service::tests::rv_sen_run3::f_sen_014_run3_finalize_after_auto_finalize' (219306) panicked at crates/sentinel/src/service.rs:5213:13:
+a Finalize is emitted for a request the oracle already finalized in the same transaction; it reverts RequestNotPending (#964's own test)
+FAILED
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3::f2_sen_010_run3_a (Finalize then Claim on the auto-finalized request) -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::rv_sen_run3::f2_sen_010_run3_a_live_deadline_block_commit_is_tallied ... [F2-SEN-010 run3 a] after Revealed(self)@107: commands=[] entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[F2-SEN-010 run3 a] Revealed(OTHER) + OracleResult@108 → [Action(SentinelAction { kind: Finalize { id: 0xda031202cb8d7b4a7b9488e2d0f8fe690a34fc045194fefc4c988f2c9012df05 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0xda031202cb8d7b4a7b9488e2d0f8fe690a34fc045194fefc4c988f2c9012df05 }, expires_at: None })]
+ok

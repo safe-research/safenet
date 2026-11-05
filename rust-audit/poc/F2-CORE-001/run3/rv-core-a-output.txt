@@ -1,0 +1,17 @@
+# rv-core-a run 3 re-run, audit commit 361aaf3 (worktree wt/rv-core-a), 2026-10-08
+# command: cargo test -p safenet-core --lib -- --nocapture --test-threads=1 poc_f_core_001 qa_f2_core_001 qa_f2_core_011 qa_f2_core_030 qa_f2_core_005 rv3_ revalidate_invalidates_a_block_missing_from_rpc supports_no_reorg_protection safe_block_without_reorg_protection_is_the_last_indexed_block skips_panicked_tasks_without_losing_successful_resumes kdf::tests
+# sources: the rv-core-a-*.rs files in the run3 folders of this batch, injected into the mod tests of crates/core/src/index/{blocks,mod}.rs and crates/core/src/state/{mod,storage}.rs; reverted afterwards with git checkout
+# excerpt: only this finding's tests are shown; the batch ran 25 tests (22 passed, 3 failed by design: the run-1 F-CORE-001 PoC tests fail at their key assertion when the defect is present). Lines over 500 characters are truncated.
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.45s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/safenet_core-1a555efd99e0fbb6)
+running 25 tests
+test index::blocks::tests::qa_f2_core_001_exceeded_max_reorg_depth_exit_does_not_survive_a_restart ... steady state: store Some(BlockStatus { latest: 1000, safe: 998 })
+watcher: Err(ExceededMaxReorgDepth(2))  [driver.rs:213-217 returns it; run() logs "unrecoverable watcher error; exiting"]
+at exit: store Some(BlockStatus { latest: 998, safe: 998 }), tip 998 = QaState { blocks: [900, 901, 902, 903, 904, 905, 906, 907, 908, 909, 910, 911, 912, 913, 914, 915, 916, 917, 918, 919, 920, 921, 922, 923, 924, 925, 926, 927, 928, 929, 930, 931, 932, 933, 934, 935, 936, 937, 938, 939, 940, 941, 942, 943, 944, 945, 946, 947, 948, 949, 950, 951, 952, 953, 954, 955, 956, 957, 958, 959, 960, 961, 962, 963, 964, 965, 966, 967, 968, 969, 970, 971, 972, 973, 974, 975, 976, 977, 978, 979, 980, 981,  ...[line truncated by rv-core-a: long logs_bloom hex]
+restart updates: [Warp { from: 999, to: 1002 }, New { number: 1003, hash: 0x3fc489f05f4bf2fa1d04251bc0c4e2de6205444fc57977040117943a3d9b3af8, timestamp: 1, logs_bloom: 0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 ...[line truncated by rv-core-a: long logs_bloom hex]
+after restart: tip 1004 = QaState { blocks: [900, 901, 902, 903, 904, 905, 906, 907, 908, 909, 910, 911, 912, 913, 914, 915, 916, 917, 918, 919, 920, 921, 922, 923, 924, 925, 926, 927, 928, 929, 930, 931, 932, 933, 934, 935, 936, 937, 938, 939, 940, 941, 942, 943, 944, 945, 946, 947, 948, 949, 950, 951, 952, 953, 954, 955, 956, 957, 958, 959, 960, 961, 962, 963, 964, 965, 966, 967, 968, 969, 970, 971, 972, 973, 974, 975, 976, 977, 978, 979, 980, 981, 982, 983, 984, 985, 986, 987, 988, 989, 990,  ...[line truncated by rv-core-a: long logs_bloom hex]
+ok
+failures:
+failures:
+test result: FAILED. 22 passed; 3 failed; 0 ignored; 0 measured; 143 filtered out; finished in 0.04s

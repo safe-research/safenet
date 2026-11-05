@@ -1,0 +1,15 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-b/debug/deps/validator-dd9411993fa56ac3)
+
+running 2 tests
+test state::keygen::qa2a_val062_all_shares_dropped::qa2a_live_order_keeps_every_share ... live: after ALL 5 shares: CollectingConfirmations
+ok
+test state::keygen::qa2a_val062_all_shares_dropped::qa2a_warp_drops_all_shares_and_skips_the_epoch ... warp: after 5 commitments: CollectingCommitments(commitments=5, secrets=false, deadline=Some(1560))
+warp: after ALL 5 shares (same page): CollectingCommitments(commitments=5, secrets=false, deadline=Some(1560))
+warp: after Resume::Setup: CollectingShares(shared=0, deadline=Some(1680))
+warp: after NewBlock(1680) share deadline: EpochSkipped(2)
+RESULT: shared={} -> exclude all 5 -> 0 remain < min_participants(5)=4 -> rollover_failure -> EpochSkipped(2)
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.20s
+

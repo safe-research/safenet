@@ -1,0 +1,5 @@
+{"timestamp":"2026-10-08T21:29:11.818413Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:40349"},"target":"safenet_core::observability"}
+{"timestamp":"2026-10-08T21:29:11.878505Z","level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"timestamp":"2026-10-08T21:29:20.019682Z","level":"INFO","fields":{"message":"delegating the signer account to the executor","nonce":0,"executor":"0xa39C8952827e16264Bd94F3904f7693A5050af61"},"target":"safenet_core::tx"}
+{"timestamp":"2026-10-08T21:29:43.676770Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}
+[trimmed] dropped 63 repeated post-teardown connection-refused/reset lines

@@ -1,0 +1,34 @@
+running 3 tests
+test index::blocks::tests::poc_f_core_001_retained_window_is_exactly_the_fatal_depth ... FAILED
+test index::blocks::tests::poc_f_core_001_resume_ignores_whether_the_persisted_anchor_is_canonical ... FAILED
+test state::storage::tests::poc_f_core_001_snapshots_persist_no_chain_identity ... FAILED
+
+failures:
+
+---- index::blocks::tests::poc_f_core_001_retained_window_is_exactly_the_fatal_depth stdout ----
+
+thread 'index::blocks::tests::poc_f_core_001_retained_window_is_exactly_the_fatal_depth' (84393) panicked at crates/core/src/index/blocks.rs:1529:5:
+the oldest retained snapshot sits exactly max_reorg_depth (2) blocks below the head, i.e. at exactly the depth at which a reorg is declared fatal while running (blocks.rs:435-439). After a restart that same depth is accepted silently, and there is no deeper retained anchor to fall back to — which is why remediation option 2 (walk back through retained snapshots) cannot work without also retaining more of them.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- index::blocks::tests::poc_f_core_001_resume_ignores_whether_the_persisted_anchor_is_canonical stdout ----
+
+thread 'index::blocks::tests::poc_f_core_001_resume_ignores_whether_the_persisted_anchor_is_canonical' (84392) panicked at crates/core/src/index/blocks.rs:1476:5:
+assertion `left != right` failed: resuming against a chain on which the persisted rollback anchor (block 898) is ORPHANED produced exactly the same plan as resuming against the chain the state was derived from: [("uncle", 899), ("warp", 899), ("new", 999), ("new", 1000)]. The anchor's identity is never fetched or compared, so the state machine rolls back to state derived from an orphaned fork and replays canonical logs on top of it, with no error, no warning log and no metric. While RUNNING, the same reorg is fatal (ExceededMaxReorgDepth, blocks.rs:435-439).
+  left: [("uncle", 899), ("warp", 899), ("new", 999), ("new", 1000)]
+ right: [("uncle", 899), ("warp", 899), ("new", 999), ("new", 1000)]
+
+---- state::storage::tests::poc_f_core_001_snapshots_persist_no_chain_identity stdout ----
+
+thread 'state::storage::tests::poc_f_core_001_snapshots_persist_no_chain_identity' (84394) panicked at crates/core/src/state/storage.rs:321:5:
+the snapshots table stores no block hash — columns are ["block_number", "state"]. Nothing in the persisted state identifies the chain it was derived from, so a resume cannot tell a canonical anchor from an orphaned one. The same gap accepts a restored SQLite backup and a database pointed at a different RPC endpoint or chain (no chain_id is persisted either; provider/mod.rs:135 reads it once and never records it).
+
+
+failures:
+    index::blocks::tests::poc_f_core_001_resume_ignores_whether_the_persisted_anchor_is_canonical
+    index::blocks::tests::poc_f_core_001_retained_window_is_exactly_the_fatal_depth
+    state::storage::tests::poc_f_core_001_snapshots_persist_no_chain_identity
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p safenet-core --lib`

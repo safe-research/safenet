@@ -1,0 +1,19 @@
+[package]
+name = "r2-poc"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+safenet-core = { path = "/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/base/crates/core", features = ["test-util"] }
+alloy = { version = "2", features = ["full", "json-rpc"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.9", features = ["sqlite", "runtime-tokio"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+toml = "1"
+url = { version = "2", features = ["serde"] }

@@ -1,0 +1,14 @@
+Run 3 re-validation output (rv-core-b, 2026-10-08), audit commit 361aaf3.
+Worktree: detached at 361aaf3, PoC tests appended to the crate's `mod tests`, reverted afterwards.
+Toolchain: cargo 1.96.0 / rustc 1.96.0 (aarch64).
+Command: cargo test -p safenet-core --lib rv3_ -- --nocapture --test-threads=1
+Long batch calldata is shortened as 0x<20 bytes>...(<n> bytes). Polarity: run-1 PoCs and
+run-3 F-CORE-060/067 variants assert the healthy behaviour (FAILED = defect reproduced);
+run-2 PoCs and the F-CORE-065/068 tests assert the defect (ok = defect reproduced);
+the F-CORE-069 tests assert the absence of a gap (ok = no gap).
+
+test tx::tests::rv3_f_core_065_rotated_signer_inherits_the_old_nonce_high_water_mark ... after rotation: [(1, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x01\",\"gas\":21000}", None, Some(50), Some(10), None, Some("{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x01\",\"gas\":21000,\"maxFeePerGas\":\"0xd2\",\"maxPriorityFeePerGas\":\"0xa\"}")), (2, "{\"to\":\"0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789\",\"value\":\"0x0\",\"data\":\"0x02\",\"gas\":21000}", None, Some(51), Some(10), None, Some("{\"to\":\"0x5ff137d4b0f [line truncated]
+new signer 0x9052A7118616e3bB5f4795FA0931E55a99C79123 (account nonce 0): its first transaction got nonce Some(53)
+ok
+
+Summary of the whole run (all rv3_ tests of this crate): test result: FAILED. 18 passed; 9 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.67s

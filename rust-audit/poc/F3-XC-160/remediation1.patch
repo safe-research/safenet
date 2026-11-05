@@ -1,0 +1,15 @@
+diff --git a/crates/core/src/index/blocks.rs b/crates/core/src/index/blocks.rs
+index 8467fdc..d04bb5d 100644
+--- a/crates/core/src/index/blocks.rs
++++ b/crates/core/src/index/blocks.rs
+@@ -559,7 +559,9 @@ impl BlockWatcher {
+         let last = &self.recent[last_index];
+ 
+         let current = self.get_block(BlockId::number(last.number)).await?;
+-        if current.map(|block| block.hash) == Some(last.hash) {
++        // QA3 bite check (F3-XC-160 remediation 1): no block at that height
++        // means "not available yet", not "uncled".
++        if current.is_none_or(|block| block.hash == last.hash) {
+             return Ok(None);
+         }
+ 

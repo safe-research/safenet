@@ -1,0 +1,12 @@
+===== literal
+{"timestamp":"2026-10-08T18:54:15.218907Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:43777"},"target":"safenet_core::observability"}
+Error: Transport(Custom("failed to read IPC path htps://gnosis-mainnet.example.invalid/v2/QA3-FAKE-API-KEY-0123456789: No such file or directory (os error 2)"))
+exit status: 1
+===== env
+{"timestamp":"2026-10-08T18:54:15.323630Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:38387"},"target":"safenet_core::observability"}
+Error: Transport(Custom("failed to read IPC path htps://gnosis-mainnet.example.invalid/v2/QA3-ENV-SECRET-KEY-9876: No such file or directory (os error 2)"))
+exit status: 1
+===== control
+{"timestamp":"2026-10-08T18:54:15.445755Z","level":"INFO","fields":{"message":"serving prometheus metrics and health endpoint","metrics_addr":"127.0.0.1:35535"},"target":"safenet_core::observability"}
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:1, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+exit status: 1

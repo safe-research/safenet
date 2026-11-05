@@ -1,0 +1,12 @@
+# span_fuzz_test.rs pasted into crates/core/src/config.rs mod tests (worktree wt/rv-xc at 361aaf3), reverted afterwards
+# command: cargo test --offline --locked -p safenet-core --lib config::tests::rv_xc_span_fuzz -- --nocapture
+running 1 test
+rv-xc span fuzz: 213312 documents, 213312 parse errors, 0 spans off a character boundary, 0 panics in parse()
+test config::tests::rv_xc_span_fuzz::rv_xc_parse_never_slices_inside_a_character ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 10.13s
+
+# in-tree regression test added by #1046 (unchanged tree)
+# command: cargo test --offline --locked -p safenet-core --lib config::tests -- --nocapture
+test config::tests::errors_do_not_contain_the_configuration ... ok
+test config::tests::parses_configuration ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 147 filtered out

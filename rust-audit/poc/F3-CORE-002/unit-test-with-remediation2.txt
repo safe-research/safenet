@@ -1,0 +1,18 @@
+attempt 4 (one query per event): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+
+thread 'index::events::tests::qa3_client_filtering_accepts_empty_logs_after_three_mismatches' (256497) panicked at crates/core/src/index/events.rs:2041:20:
+called `Result::unwrap()` on an `Err` value: IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test index::events::tests::qa3_client_filtering_accepts_empty_logs_after_three_mismatches ... FAILED
+
+failures:
+
+failures:
+    index::events::tests::qa3_client_filtering_accepts_empty_logs_after_three_mismatches
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p safenet-core --lib`
+test index::events::tests::qa3_client_filtering_accepts_empty_logs_after_three_mismatches ... FAILED
+thread 'index::events::tests::qa3_client_filtering_accepts_empty_logs_after_three_mismatches' (256569) panicked at crates/core/src/index/events.rs:2041:20:
+test result: FAILED. 59 passed; 1 failed; 0 ignored; 0 measured; 92 filtered out; finished in 0.00s

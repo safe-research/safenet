@@ -1,0 +1,9 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins qa2_sen::f2_sen_006 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::qa2_sen::f2_sen_006_voting_window_zero_is_accepted ... [F2-SEN-006] voting_window = 0 accepted: true; engine_timeout would be 1000 ms (w=0), 1000 ms (w=1), 371250 ms (w=100)
+
+thread 'service::tests::qa2_sen::f2_sen_006_voting_window_zero_is_accepted' (219195) panicked at crates/sentinel/src/service.rs:3985:13:
+F2-SEN-006 reproduced: voting_window = 0 accepted (WaitingForEngineCheck deadline = proposal block, 1 s engine timeout)
+FAILED

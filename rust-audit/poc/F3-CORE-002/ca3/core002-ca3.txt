@@ -1,0 +1,19 @@
+[    5.8s] deployed fee_token=0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80 consensus=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 oracle=0x7148FDa1aBAF76AC28E4803D4791a2790CddFae1
+[    5.8s] sentinel A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8) started, run 1, pid 449782
+[   14.0s] proposal in block 10 hash=0x06f417643041570c0787c4f0389393959b754bfb39b036c4b2673bb458ddc56e logsBloom_nonzero=True; suppressing its logs for 40.0s
+[   32.1s] while suppressed (anvil head 13): seen=13.0 metrics=['safenet_core_block_number{status="processed"} 13', 'safenet_core_block_number{status="seen"} 13']
+[   32.1s]   onchain committed=0 state=PENDING; engine checks=0
+[   86.2s] after suppression ended: seen=24.0
+[   86.2s] onchain request committed=0 state=PENDING; engine checks=0
+[   86.2s] 'incomplete logs served for block, bloom filter mismatch' warn count: 3
+[   86.2s] sentinel onchain txns (expect none for the request): []
+=== verdict ===
+proposal_block_has_watched_bloom = True
+seen_during_suppression=13.0 (proposal block p=10)
+advanced_past_proposal_while_suppressed = True
+stalled_on_proposal_while_suppressed = False
+bloom_mismatch_count = 3
+engine_ran_eventually = False
+request_committed_after = False
+sentinel_lost_the_event = True
+[   86.2s] sentinel A stopped (SIGKILL), exit -9

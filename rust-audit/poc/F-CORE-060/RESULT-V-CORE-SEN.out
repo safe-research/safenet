@@ -1,0 +1,32 @@
+running 3 tests
+test tx::storage::tests::poc_f_core_060_underpriced_rejection_ignores_blocks_before_resubmit ... FAILED
+test tx::tests::poc_f_core_060_priority_fee_cap_does_not_survive_the_bump ... FAILED
+test tx::tests::poc_f_core_060_underpriced_ratchet_is_unbounded_and_per_block ... FAILED
+
+failures:
+
+---- tx::storage::tests::poc_f_core_060_underpriced_rejection_ignores_blocks_before_resubmit stdout ----
+
+thread 'tx::storage::tests::poc_f_core_060_underpriced_rejection_ignores_blocks_before_resubmit' (84419) panicked at crates/core/src/tx/storage.rs:553:5:
+an underpriced rejection at block 10 made the row eligible again at block 11, one block later, despite blocks_before_resubmit = 2 — the NULL submitted_at sentinel conflates 'never submitted' with 'rejected as underpriced' (tx/storage.rs:285-311), giving the ratchet a per-block cadence: [AllocatedTransaction { nonce: 0, transaction: Transaction { to: 0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789, value: 0, data: 0x01, gas: 21000 }, max_fee_per_gas: Some(210), max_priority_fee_per_gas: Some(10) }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tx::tests::poc_f_core_060_priority_fee_cap_does_not_survive_the_bump stdout ----
+
+thread 'tx::tests::poc_f_core_060_priority_fee_cap_does_not_survive_the_bump' (84420) panicked at crates/core/src/tx/mod.rs:919:5:
+priority_fee_cap_percentage = 1.0 was configured, but after 29 bumped resubmissions max_priority_fee_per_gas = 104 against max_fee_per_gas = 3277 — the cap is applied only to the fresh estimate (tx/mod.rs:322-345) and is silently overridden by AllocatedTransaction::build's bump (tx/types.rs:61-77). Expected value on this checkout: 104 / 3_277, i.e. 3.17% against a 1% cap.
+
+---- tx::tests::poc_f_core_060_underpriced_ratchet_is_unbounded_and_per_block stdout ----
+
+thread 'tx::tests::poc_f_core_060_underpriced_ratchet_is_unbounded_and_per_block' (84421) panicked at crates/core/src/tx/mod.rs:829:5:
+after 60 blocks of underpriced rejections the priority fee ratcheted to 4037 wei/gas (max_fee 59550) from an unchanged honest estimate of 10 — compounding once per BLOCK, with no ceiling of any kind. Expected value on this checkout: 4_037 / 59_550.
+
+
+failures:
+    tx::storage::tests::poc_f_core_060_underpriced_rejection_ignores_blocks_before_resubmit
+    tx::tests::poc_f_core_060_priority_fee_cap_does_not_survive_the_bump
+    tx::tests::poc_f_core_060_underpriced_ratchet_is_unbounded_and_per_block
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.07s
+
+error: test failed, to rerun pass `-p safenet-core --lib`

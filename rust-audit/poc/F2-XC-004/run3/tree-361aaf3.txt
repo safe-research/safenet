@@ -1,0 +1,343 @@
+# rv-xc run 3: tree.sh (this folder) run from worktree wt/rv-xc at 361aaf3, offline; paths shortened to $WT; 'Blocking waiting for file lock' lines (other agents' cargo runs) dropped
+# head: 361aaf3b25e12d2e04f296184c326830968f3727
+# cargo: cargo 1.96.0 (30a34c682 2026-05-25)
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i crossbeam-epoch@0.9.18 -e normal --depth 4
+crossbeam-epoch v0.9.18
+└── metrics-util v0.20.4
+    └── metrics-exporter-prometheus v0.18.3
+        └── safenet-core v0.2.0 ($WT/crates/core)
+            ├── sentinel v0.2.0 ($WT/crates/sentinel)
+            └── validator v0.2.0 ($WT/crates/validator)
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i h2@0.4.14 -e normal --depth 4
+h2 v0.4.14
+└── hyper v1.10.1
+    ├── hyper-rustls v0.27.9
+    │   ├── metrics-exporter-prometheus v0.18.3
+    │   │   └── safenet-core v0.2.0 ($WT/crates/core)
+    │   └── reqwest v0.13.4
+    │       ├── alloy-provider v2.0.5
+    │       ├── alloy-rpc-client v2.0.5
+    │       ├── alloy-transport-http v2.0.5
+    │       ├── safenet-core v0.2.0 ($WT/crates/core) (*)
+    │       └── sentinel v0.2.0 ($WT/crates/sentinel)
+    ├── hyper-util v0.1.20
+    │   ├── hyper-rustls v0.27.9 (*)
+    │   ├── metrics-exporter-prometheus v0.18.3 (*)
+    │   └── reqwest v0.13.4 (*)
+    ├── metrics-exporter-prometheus v0.18.3 (*)
+    └── reqwest v0.13.4 (*)
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i quinn-proto@0.11.14 -e normal --depth 4
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i ruint@1.18.0 -e normal --depth 4
+ruint v1.18.0
+├── alloy-primitives v1.6.0
+│   ├── alloy-chains v0.2.34
+│   │   └── alloy-provider v2.0.5
+│   │       ├── alloy v2.0.5
+│   │       └── alloy-contract v2.0.5
+│   ├── alloy-consensus v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   ├── alloy-consensus-any v2.0.5
+│   │   │   ├── alloy-network v2.0.5
+│   │   │   ├── alloy-rpc-types-any v2.0.5
+│   │   │   └── alloy-rpc-types-eth v2.0.5
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-network-primitives v2.0.5
+│   │   │   ├── alloy-contract v2.0.5 (*)
+│   │   │   ├── alloy-network v2.0.5 (*)
+│   │   │   ├── alloy-provider v2.0.5 (*)
+│   │   │   ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   │   └── alloy-rpc-types-eth v2.0.5 (*)
+│   │   ├── alloy-provider v2.0.5 (*)
+│   │   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   │   └── alloy-signer-local v2.0.5
+│   │       └── alloy v2.0.5 (*)
+│   ├── alloy-consensus-any v2.0.5 (*)
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── alloy-core v1.6.0
+│   │   └── alloy v2.0.5 (*)
+│   ├── alloy-dyn-abi v1.6.0
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   └── alloy-core v1.6.0 (*)
+│   ├── alloy-eip2124 v0.2.0
+│   │   └── alloy-eips v2.0.5
+│   │       ├── alloy v2.0.5 (*)
+│   │       ├── alloy-consensus v2.0.5 (*)
+│   │       ├── alloy-consensus-any v2.0.5 (*)
+│   │       ├── alloy-network v2.0.5 (*)
+│   │       ├── alloy-network-primitives v2.0.5 (*)
+│   │       ├── alloy-provider v2.0.5 (*)
+│   │       └── alloy-rpc-types-eth v2.0.5 (*)
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i rustls@0.23.40 -e normal --depth 4
+rustls v0.23.40
+├── alloy-transport-ws v2.0.5
+│   ├── alloy v2.0.5
+│   │   ├── safenet-core v0.2.0 ($WT/crates/core)
+│   │   │   ├── sentinel v0.2.0 ($WT/crates/sentinel)
+│   │   │   └── validator v0.2.0 ($WT/crates/validator)
+│   │   ├── sentinel v0.2.0 ($WT/crates/sentinel)
+│   │   └── validator v0.2.0 ($WT/crates/validator)
+│   ├── alloy-provider v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   └── alloy-contract v2.0.5
+│   │       └── alloy v2.0.5 (*)
+│   └── alloy-rpc-client v2.0.5
+│       ├── alloy v2.0.5 (*)
+│       └── alloy-provider v2.0.5 (*)
+├── hyper-rustls v0.27.9
+│   ├── metrics-exporter-prometheus v0.18.3
+│   │   └── safenet-core v0.2.0 ($WT/crates/core) (*)
+│   └── reqwest v0.13.4
+│       ├── alloy-provider v2.0.5 (*)
+│       ├── alloy-rpc-client v2.0.5 (*)
+│       ├── alloy-transport-http v2.0.5
+│       │   ├── alloy v2.0.5 (*)
+│       │   ├── alloy-provider v2.0.5 (*)
+│       │   └── alloy-rpc-client v2.0.5 (*)
+│       ├── safenet-core v0.2.0 ($WT/crates/core) (*)
+│       └── sentinel v0.2.0 ($WT/crates/sentinel)
+├── metrics-exporter-prometheus v0.18.3 (*)
+├── reqwest v0.13.4 (*)
+├── rustls-platform-verifier v0.7.0
+│   └── reqwest v0.13.4 (*)
+├── tokio-rustls v0.26.4
+│   ├── hyper-rustls v0.27.9 (*)
+│   ├── reqwest v0.13.4 (*)
+│   └── tokio-tungstenite v0.28.0
+│       └── alloy-transport-ws v2.0.5 (*)
+├── tokio-tungstenite v0.28.0 (*)
+└── tungstenite v0.28.0
+    └── tokio-tungstenite v0.28.0 (*)
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i atomic-polyfill@1.0.3 -e normal --depth 4
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i derivative@2.2.0 -e normal --depth 4
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i paste@1.0.15 -e normal --depth 4
+paste v1.0.15 (proc-macro)
+├── alloy-primitives v1.6.0
+│   ├── alloy-chains v0.2.34
+│   │   └── alloy-provider v2.0.5
+│   │       ├── alloy v2.0.5
+│   │       └── alloy-contract v2.0.5
+│   ├── alloy-consensus v2.0.5
+│   │   ├── alloy v2.0.5 (*)
+│   │   ├── alloy-consensus-any v2.0.5
+│   │   │   ├── alloy-network v2.0.5
+│   │   │   ├── alloy-rpc-types-any v2.0.5
+│   │   │   └── alloy-rpc-types-eth v2.0.5
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-network-primitives v2.0.5
+│   │   │   ├── alloy-contract v2.0.5 (*)
+│   │   │   ├── alloy-network v2.0.5 (*)
+│   │   │   ├── alloy-provider v2.0.5 (*)
+│   │   │   ├── alloy-rpc-types-any v2.0.5 (*)
+│   │   │   └── alloy-rpc-types-eth v2.0.5 (*)
+│   │   ├── alloy-provider v2.0.5 (*)
+│   │   ├── alloy-rpc-types-eth v2.0.5 (*)
+│   │   └── alloy-signer-local v2.0.5
+│   │       └── alloy v2.0.5 (*)
+│   ├── alloy-consensus-any v2.0.5 (*)
+│   ├── alloy-contract v2.0.5 (*)
+│   ├── alloy-core v1.6.0
+│   │   └── alloy v2.0.5 (*)
+│   ├── alloy-dyn-abi v1.6.0
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   └── alloy-core v1.6.0 (*)
+│   ├── alloy-eip2124 v0.2.0
+│   │   └── alloy-eips v2.0.5
+│   │       ├── alloy v2.0.5 (*)
+│   │       ├── alloy-consensus v2.0.5 (*)
+│   │       ├── alloy-consensus-any v2.0.5 (*)
+│   │       ├── alloy-network v2.0.5 (*)
+│   │       ├── alloy-network-primitives v2.0.5 (*)
+│   │       ├── alloy-provider v2.0.5 (*)
+│   │       └── alloy-rpc-types-eth v2.0.5 (*)
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i proc-macro-error2@2.0.1 -e normal --depth 4
+proc-macro-error2 v2.0.1
+├── alloy-sol-macro v1.6.0 (proc-macro)
+│   └── alloy-sol-types v1.6.0
+│       ├── alloy-contract v2.0.5
+│       │   └── alloy v2.0.5
+│       ├── alloy-core v1.6.0
+│       │   └── alloy v2.0.5 (*)
+│       ├── alloy-dyn-abi v1.6.0
+│       │   ├── alloy-contract v2.0.5 (*)
+│       │   └── alloy-core v1.6.0 (*)
+│       ├── alloy-json-rpc v2.0.5
+│       │   ├── alloy v2.0.5 (*)
+│       │   ├── alloy-network v2.0.5
+│       │   ├── alloy-provider v2.0.5
+│       │   ├── alloy-pubsub v2.0.5
+│       │   ├── alloy-rpc-client v2.0.5
+│       │   ├── alloy-transport v2.0.5
+│       │   ├── alloy-transport-http v2.0.5
+│       │   └── alloy-transport-ipc v2.0.5
+│       ├── alloy-network v2.0.5 (*)
+│       ├── alloy-provider v2.0.5 (*)
+│       └── alloy-rpc-types-eth v2.0.5
+│           ├── alloy-contract v2.0.5 (*)
+│           ├── alloy-network v2.0.5 (*)
+│           ├── alloy-provider v2.0.5 (*)
+│           ├── alloy-rpc-types v2.0.5
+│           ├── alloy-rpc-types-anvil v2.0.5
+│           ├── alloy-rpc-types-any v2.0.5
+│           ├── alloy-rpc-types-trace v2.0.5
+│           └── alloy-rpc-types-txpool v2.0.5
+└── alloy-sol-macro-expander v1.6.0
+    └── alloy-sol-macro v1.6.0 (proc-macro) (*)
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i anyhow@1.0.102 -e normal --depth 4
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i event-listener@5.4.1 -e normal --depth 4
+event-listener v5.4.1
+└── sqlx-core v0.9.0
+    ├── sqlx v0.9.0
+    │   ├── safenet-core v0.2.0 ($WT/crates/core)
+    │   │   ├── sentinel v0.2.0 ($WT/crates/sentinel)
+    │   │   └── validator v0.2.0 ($WT/crates/validator)
+    │   ├── sentinel v0.2.0 ($WT/crates/sentinel)
+    │   └── validator v0.2.0 ($WT/crates/validator)
+    ├── sqlx-macros v0.9.0 (proc-macro)
+    │   └── sqlx v0.9.0 (*)
+    ├── sqlx-macros-core v0.9.0
+    │   └── sqlx-macros v0.9.0 (proc-macro) (*)
+    ├── sqlx-sqlite v0.9.0
+    │   └── sqlx v0.9.0 (*)
+    └── sqlx-sqlite v0.9.0
+        └── sqlx-macros-core v0.9.0 (*)
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i lru@0.16.4 -e normal --depth 4
+lru v0.16.4
+└── alloy-provider v2.0.5
+    ├── alloy v2.0.5
+    │   ├── safenet-core v0.2.0 ($WT/crates/core)
+    │   │   ├── sentinel v0.2.0 ($WT/crates/sentinel)
+    │   │   └── validator v0.2.0 ($WT/crates/validator)
+    │   ├── sentinel v0.2.0 ($WT/crates/sentinel)
+    │   └── validator v0.2.0 ($WT/crates/validator)
+    └── alloy-contract v2.0.5
+        └── alloy v2.0.5 (*)
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i bitcoin-io@0.1.100 -e normal --depth 4
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i bitcoin_hashes@0.14.100 -e normal --depth 4
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i chacha20@0.10.0 -e normal --depth 4
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+=================== cargo tree --offline --locked -p safenet-core -p validator -p sentinel -i spin@0.9.8 -e normal --depth 4
+spin v0.9.8
+└── flume v0.12.0
+    ├── sqlx-sqlite v0.9.0
+    │   └── sqlx v0.9.0
+    │       ├── safenet-core v0.2.0 ($WT/crates/core)
+    │       ├── sentinel v0.2.0 ($WT/crates/sentinel)
+    │       └── validator v0.2.0 ($WT/crates/validator)
+    └── sqlx-sqlite v0.9.0
+        └── sqlx-macros-core v0.9.0
+            └── sqlx-macros v0.9.0 (proc-macro)
+=================== reqwest features, per binary (is http2 on?)
+--- -p validator -e features -i reqwest --depth 1
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+└── alloy-rpc-client v2.0.5
+├── reqwest feature "__rustls"
+├── reqwest feature "__rustls-aws-lc-rs"
+├── reqwest feature "__tls"
+├── reqwest feature "json"
+└── reqwest feature "rustls"
+--- -p sentinel -e features -i reqwest --depth 1
+reqwest v0.13.4
+├── alloy-provider v2.0.5
+└── alloy-rpc-client v2.0.5
+├── reqwest feature "__rustls"
+├── reqwest feature "__rustls-aws-lc-rs"
+├── reqwest feature "__tls"
+├── reqwest feature "json"
+└── reqwest feature "rustls"
+=================== hyper features reaching the binaries (http2 comes only through hyper-util server-auto)
+hyper v1.10.1
+└── hyper-rustls v0.27.9
+    ├── hyper-rustls feature "aws-lc-rs"
+    ├── hyper-rustls feature "http1"
+    ├── hyper-rustls feature "rustls-native-certs"
+    └── hyper-rustls feature "tls12"
+├── hyper feature "client"
+│   ├── metrics-exporter-prometheus v0.18.3
+│   └── reqwest v0.13.4
+│   ├── hyper-util feature "client"
+│   └── metrics-exporter-prometheus feature "_hyper-client"
+├── hyper feature "default"
+│   ├── hyper-util v0.1.20
+│   └── reqwest v0.13.4 (*)
+├── hyper feature "http1"
+│   └── reqwest v0.13.4 (*)
+│   └── hyper-util feature "http1"
+├── hyper feature "http2"
+│   └── hyper-util feature "http2"
+└── hyper feature "server"
+    └── metrics-exporter-prometheus v0.18.3 (*)
+    ├── hyper-util feature "server"
+    └── metrics-exporter-prometheus feature "_hyper-server"
+=================== metrics-exporter-prometheus: the listener is HTTP/1 only
+9:    server::conn::http1::Builder as HyperHttpBuilder,
+77:                HyperHttpBuilder::new().serve_connection(TokioIo::new(stream), service).await
+122:                HyperHttpBuilder::new().serve_connection(TokioIo::new(stream), service).await
+=================== c-kzg / blst (alloy full -> kzg) still compiled into the binaries?
+c-kzg v2.1.7
+├── alloy-consensus v2.0.5
+│   ├── alloy v2.0.5
+│   │   ├── safenet-core v0.2.0 ($WT/crates/core)
+│   │   ├── sentinel v0.2.0 ($WT/crates/sentinel)
+│   │   └── validator v0.2.0 ($WT/crates/validator)
+│   ├── alloy-consensus-any v2.0.5
+│   │   ├── alloy-network v2.0.5
+│   │   ├── alloy-rpc-types-any v2.0.5
+│   │   └── alloy-rpc-types-eth v2.0.5
+│   ├── alloy-contract v2.0.5
+│   │   └── alloy v2.0.5 (*)
+│   ├── alloy-network v2.0.5 (*)
+│   ├── alloy-network-primitives v2.0.5
+│   │   ├── alloy-contract v2.0.5 (*)
+│   │   ├── alloy-network v2.0.5 (*)
+│   │   ├── alloy-provider v2.0.5
+=================== metrics-exporter-prometheus features enabled (push-gateway default?)
+metrics-exporter-prometheus v0.18.3
+├── metrics-exporter-prometheus feature "_hyper-client"
+├── metrics-exporter-prometheus feature "_hyper-server"
+├── metrics-exporter-prometheus feature "_push-gateway-common"
+├── metrics-exporter-prometheus feature "async-runtime"
+├── metrics-exporter-prometheus feature "default"
+├── metrics-exporter-prometheus feature "http-body-util"
+├── metrics-exporter-prometheus feature "http-listener"
+├── metrics-exporter-prometheus feature "hyper"
+├── metrics-exporter-prometheus feature "hyper-rustls"
+├── metrics-exporter-prometheus feature "hyper-util"
+├── metrics-exporter-prometheus feature "ipnet"
+├── metrics-exporter-prometheus feature "push-gateway"
+├── metrics-exporter-prometheus feature "rustls"
+├── metrics-exporter-prometheus feature "tokio"
+└── metrics-exporter-prometheus feature "tracing"
+=================== workspace-wide, any edge kind, any target, for the lockfile-only crates
+quinn-proto: warning: nothing to print.
+derivative: warning: nothing to print.
+anyhow: warning: nothing to print.
+bitcoin-io: warning: nothing to print.
+bitcoin_hashes: warning: nothing to print.
+chacha20: warning: nothing to print.
+=================== rayon / crossbeam-deque (removed since fe9e84c?)
+rayon: 0
+rayon-core: 0
+crossbeam-deque: 0

@@ -1,0 +1,67 @@
+CA3-FIX (2026-10-09), worktree wt/rv-xc at 361aaf3. Fragments pasted into mod tests of crates/sentinel/src/service.rs (rv-sen run3 fragments plus ../ca3-fix/ca3fix_sen.rs), reverted afterwards.
+Command: CA3FIX_DB_DIR=<scratch> cargo test -p sentinel --bins --locked --offline -- <filters> --nocapture --test-threads=1
+Expected from rv-sen: the original transition-level PoC still FAILS (2 tests, by design: it feeds the second verdict straight into the transition); the handler-route variants v1 to v5 pass.
+
+--- from r3-CA3FIX-sen.log (filters: poc_f_sen_015, f_sen_015_run3, F-SEN-015 run3, ca3fix_sen_f_sen_015_live, CA3-FIX F-SEN-015 live, CA3-FIX F-SEN-015 control)
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_live_reorg_control_without_the_store_mismatches ... [CA3-FIX F-SEN-015 live reorg, clear_store=true] replayed check resumed with Denied(RuleId(3, 4))
+[CA3-FIX F-SEN-015 control, verdict cleared] reveal reason = Some("R-3.4"), committed hash 0xaa83f556333b964acaa404f1c4b8bc074a717ebf6e5cef48ff43cae990d6a860
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_live_reorg_reveals_the_committed_reason ... [CA3-FIX F-SEN-015 live reorg, clear_store=false] replayed check resumed with Denied(RuleId(2, 1))
+[CA3-FIX F-SEN-015 live reorg] reveal reason = Some("R-2.1"), committed hash 0xf0fc0edb4828b71466be9464efe6a115fec180ca228aa0bc04ef36ebbdc72f53
+test service::tests::poc_f_sen_015_replayed_verdict_overwrites_the_committed_reason ... 
+thread 'service::tests::poc_f_sen_015_replayed_verdict_overwrites_the_committed_reason' (286161) panicked at crates/sentinel/src/service.rs:2394:5:
+test service::tests::poc_f_sen_015_unknown_verdict_on_replay_drops_an_already_committed_request ... 
+thread 'service::tests::poc_f_sen_015_unknown_verdict_on_replay_drops_an_already_committed_request' (286162) panicked at crates/sentinel/src/service.rs:2498:5:
+test service::tests::rv_sen_run3::f_sen_015_run3_concurrent_checks_resume_with_one_verdict ... [F-SEN-015 run3 v3] concurrent checks resumed with Denied(RuleId(3, 4)) and Denied(RuleId(3, 4))
+test service::tests::rv_sen_run3::f_sen_015_run3_engine_down_on_replay_still_reveals ... [F-SEN-015 run3 v2] unreachable engine answers Unknown; replayed check resumed with Denied(RuleId(2, 1))
+[F-SEN-015 run3 v2] NewBlock(21) → [Action(SentinelAction { kind: Reveal { id: 0x031cc2f11ba068bd4b0c8a21919dfc5a7bfebeca9fc0d2c90bd8ef99206216ae, approve: false, salt: 0x9a12fee5893e9be823b86e7a4b53e1504b7f8ee41938facfb04f2ab5c465e125, reason: "R-2.1" }, expires_at: Some(40) })]
+test service::tests::rv_sen_run3::f_sen_015_run3_replayed_check_reuses_the_committed_verdict ... [F-SEN-015 run3 v1] replayed check resumed with Denied(RuleId(2, 1)) (engine's live answer would be R-3.4)
+[F-SEN-015 run3 v1] NewBlock(21) → [Action(SentinelAction { kind: Reveal { id: 0x0eab17c7e938b286dc3d6b87bf7148fc1ba91634767ec4cba43d522b3ef616b7, approve: false, salt: 0x4fb53d5570ddb192c92d5923bbd4469036aad4be28d0711d70b3981b94aee12c, reason: "R-2.1" }, expires_at: Some(40) })]
+test service::tests::rv_sen_run3::f_sen_015_run3_restart_replay_reuses_the_recorded_verdict ... [F-SEN-015 run3 v4] restart replay: check resumed with Approved (engine's live answer would be R-4.1)
+test service::tests::rv_sen_run3::f_sen_015_run3_verdict_retained_until_the_snapshot_boundary ... [F-SEN-015 run3 v5] prune(safe=100) removed 0, kept Some(Denied(RuleId(2, 1))); prune(safe=101) removed 1, then None
+    service::tests::poc_f_sen_015_replayed_verdict_overwrites_the_committed_reason
+    service::tests::poc_f_sen_015_unknown_verdict_on_replay_drops_an_already_committed_request
+test result: FAILED. 22 passed; 7 failed; 0 ignored; 0 measured; 63 filtered out; finished in 4.10s
+
+--- from r3-CA3FIX-batch2.log (filters: warp race)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 166 filtered out; finished in 0.04s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 77 filtered out; finished in 145.58s
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_warp_housekeeping_race ... [CA3-FIX F-SEN-015 warp race] gap 0 us: verdict lost to the prune in 263 of 300 replays
+[CA3-FIX F-SEN-015 warp race] gap 1000 us: verdict lost to the prune in 0 of 300 replays
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_warp_race_with_the_driver_snapshot_prune ... [CA3-FIX F-SEN-015 warp race, driver work] 1 check(s) per page: verdict lost to the prune in 254 of 300 replays
+[CA3-FIX F-SEN-015 warp race, driver work] 4 check(s) per page: verdict lost to the prune in 746 of 1200 replays
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 129.73s
+
+
+--- mutation run M-SEN-1 (python3 mutate.py <wt> noverdict stopgap setinput; reverted with git checkout)
+applied noverdict to crates/sentinel/src/effect.rs
+applied noverdict to crates/sentinel/src/effect.rs
+applied stopgap to crates/sentinel/src/service.rs
+applied setinput to crates/core/src/config.rs
+test config::ca3fix_config_echo::ca3fix_f2_xc_001_config_errors_never_echo_the_key ... FAILED
+test service::tests::ca3fix_sen::ca3fix_sen_f2_sen_010_warp_ends_at_the_commit_deadline ... FAILED
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_003_own_reveal_mined_before_the_outage ... ok
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_live_reorg_control_without_the_store_mismatches ... ok
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_015_live_reorg_reveals_the_committed_reason ... FAILED
+test service::tests::qa2_sen_010::f2_sen_010a_own_reveal_first_emits_premature_finalize_then_parks ... FAILED
+test service::tests::qa2_sen_010::f2_sen_010b_other_reveal_first_drops_bonded_entry ... FAILED
+test service::tests::qa2_sen_010::f2_sen_010c_deadline_block_commit_is_tallied ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_a_live_deadline_block_commit_is_tallied ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_b_restart_warp_tallies_the_deadline_block ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_c_restart_replays_the_deadline_block ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_d_reorg_of_the_deadline_block ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_e_adversarial_deadline_committer_never_reveals ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_concurrent_checks_resume_with_one_verdict ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_engine_down_on_replay_still_reveals ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_replayed_check_reuses_the_committed_verdict ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_restart_replay_reuses_the_recorded_verdict ... FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_verdict_retained_until_the_snapshot_boundary ... ok
+[CA3-FIX F2-XC-001 sentinel] class mutation: 145252 documents, 22955 rejected, 22955 echo the key
+test result: FAILED. 3 passed; 15 failed; 0 ignored; 0 measured; 74 filtered out; finished in 110.41s
+
+--- mutation run M-SEN-2 (python3 mutate.py <wt> warpnb; reverted)
+applied warpnb to crates/core/src/state/mod.rs
+test service::tests::ca3fix_sen::ca3fix_sen_f2_sen_010_warp_ends_at_the_commit_deadline ... FAILED
+test service::tests::ca3fix_sen::ca3fix_sen_f_sen_003_own_reveal_mined_before_the_outage ... FAILED
+test service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops ... FAILED
+test service::tests::rv_sen_run3::f2_sen_010_run3_b_restart_warp_tallies_the_deadline_block ... FAILED
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 85 filtered out; finished in 0.04s

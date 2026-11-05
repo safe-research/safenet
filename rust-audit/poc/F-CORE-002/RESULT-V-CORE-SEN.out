@@ -1,0 +1,30 @@
+running 3 tests
+test index::events::tests::poc_f_core_002_warp_range_is_never_bloom_verified ... ok
+test index::events::tests::poc_f_core_002_transient_failures_strip_the_integrity_check_default_budget ... FAILED
+test index::events::tests::poc_f_core_002_incomplete_logs_exhaust_the_budget_that_detects_them ... FAILED
+
+failures:
+
+---- index::events::tests::poc_f_core_002_transient_failures_strip_the_integrity_check_default_budget stdout ----
+
+thread 'index::events::tests::poc_f_core_002_transient_failures_strip_the_integrity_check_default_budget' (84407) panicked at crates/core/src/index/events.rs:1713:5:
+assertion `left matches right` failed: three rate-limit responses stripped the integrity check off the next attempt, and its empty answer was accepted: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+  left: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+ right: Err(Error::IncompleteLogs { .. })
+
+---- index::events::tests::poc_f_core_002_incomplete_logs_exhaust_the_budget_that_detects_them stdout ----
+
+thread 'index::events::tests::poc_f_core_002_incomplete_logs_exhaust_the_budget_that_detects_them' (84406) panicked at crates/core/src/index/events.rs:1639:5:
+assertion `left matches right` failed: the node's second, unverified answer was accepted as complete: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] })) — a block whose header bloom asserts a watched log was committed with zero events
+  left: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+ right: Err(Error::IncompleteLogs { .. })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    index::events::tests::poc_f_core_002_incomplete_logs_exhaust_the_budget_that_detects_them
+    index::events::tests::poc_f_core_002_transient_failures_strip_the_integrity_check_default_budget
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p safenet-core --lib`

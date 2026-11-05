@@ -1,0 +1,26 @@
+[review-cargo] 1 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-b; rebuilding them
+   Compiling validator v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-core-b/crates/validator)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.95s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-b/debug/deps/validator-dd9411993fa56ac3)
+
+running 1 test
+test state::keygen::qa2a_xc100_two_victims::qa2a_last_committer_cancels_two_victims_and_skips_the_rollover ... all 5 crafted commitments verify (PoK of c[0] and PoP of q)
+survivor 0x1000000000000000000000000000000000000001 share y is a real curve point
+survivor 0x2000000000000000000000000000000000000002 share y is a real curve point
+victim 0x3000000000000000000000000000000000000003 share y = (0, 0)  [rejected on chain by NotOnCurve]
+victim 0x4000000000000000000000000000000000000004 share y = (0, 0)  [rejected on chain by NotOnCurve]
+after commitments: CollectingCommitments(group=0xdb48d825648f463c421f903924f0ede361abe47d276ddddd0000000000000000, commitments=0, deadline=Some(1561))
+
+thread 'state::keygen::qa2a_xc100_two_victims::qa2a_last_committer_cancels_two_victims_and_skips_the_rollover' (270125) panicked at crates/validator/src/state/keygen.rs:1808:18:
+remediation fired: poisoned group did not reach share collection; state is CollectingCommitments(group=0xdb48d825648f463c421f903924f0ede361abe47d276ddddd0000000000000000, commitments=0, deadline=Some(1561))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    state::keygen::qa2a_xc100_two_victims::qa2a_last_committer_cancels_two_victims_and_skips_the_rollover
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p validator --bin validator`

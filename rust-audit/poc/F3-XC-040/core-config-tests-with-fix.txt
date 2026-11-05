@@ -1,0 +1,5 @@
+test tx::config::tests::deserializes_submission_mode ... ok
+test tx::config::tests::rejects_invalid_submission_mode ... ok
+test config::tests::errors_do_not_contain_the_configuration ... ok
+test config::tests::parses_configuration ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 147 filtered out; finished in 0.00s

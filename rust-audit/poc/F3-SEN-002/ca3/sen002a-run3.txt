@@ -1,0 +1,40 @@
+[    9.4s] deployed fee_token=0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80 consensus=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 oracle=0x7148FDa1aBAF76AC28E4803D4791a2790CddFae1
+[    9.4s] sentinel A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8) started, run 1, pid 440519
+[    9.4s] sentinel S (0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC) started, run 1, pid 440520
+[   16.7s] proposal mined in block 12, request id 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b
+[   17.1s] engine S: request 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b (hold=True)
+[   17.1s] engine A: request 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b (hold=False)
+[   17.1s] engine A: answered 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b after 0.0s
+[   24.2s] engine S released 7.0s after its request
+[   24.2s] engine S: answered 0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b after 7.1s
+[  179.6s] commitDeadline=18 revealDeadline=24
+[  179.7s] FINAL onchain request: {'commitDeadline': 18, 'revealDeadline': 24, 'state': 'RESOLVED_APPROVED', 'committed': 2, 'revealed': 2, 'approve': 2, 'deny': 0}
+[  179.7s] commitment[A] = {'bond': 800000000, 'vote': 'APPROVED', 'claimed': True}
+[  179.7s] commitment[S] = {'bond': 800000000, 'vote': 'APPROVED', 'claimed': True}
+[  179.7s]   A: {'block': 13, 'index': 0, 'fn': 'approve', 'status': 1, 'gasUsed': 46915, 'replay': ''}
+[  179.7s]   A: {'block': 13, 'index': 1, 'fn': 'commit', 'status': 1, 'gasUsed': 97998, 'replay': ''}
+[  179.7s]   A: {'block': 19, 'index': 1, 'fn': 'reveal', 'status': 1, 'gasUsed': 52039, 'replay': ''}
+[  179.7s]   A: {'block': 20, 'index': 0, 'fn': 'finalize', 'status': 0, 'gasUsed': 27328, 'replay': 'RequestNotPending()'}
+[  179.7s]   A: {'block': 20, 'index': 2, 'fn': 'claim', 'status': 1, 'gasUsed': 49601, 'replay': ''}
+[  179.7s]   S: {'block': 14, 'index': 0, 'fn': 'approve', 'status': 1, 'gasUsed': 46915, 'replay': ''}
+[  179.7s]   S: {'block': 14, 'index': 1, 'fn': 'commit', 'status': 1, 'gasUsed': 97998, 'replay': ''}
+[  179.7s]   S: {'block': 19, 'index': 0, 'fn': 'reveal', 'status': 1, 'gasUsed': 42488, 'replay': ''}
+[  179.7s]   S: {'block': 20, 'index': 1, 'fn': 'finalize', 'status': 0, 'gasUsed': 27328, 'replay': 'RequestNotPending()'}
+[  179.7s]   S: {'block': 20, 'index': 3, 'fn': 'claim', 'status': 1, 'gasUsed': 44801, 'replay': ''}
+[  179.7s]   event (12, 1, 'NewRequest', '')
+[  179.7s]   event (13, 1, 'Committed', '0x70997970c51812dc3a010c7d01b50e0d17dc79c8')
+[  179.7s]   event (14, 1, 'Committed', '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc')
+[  179.7s]   event (19, 0, 'Revealed', '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc')
+[  179.7s]   event (19, 1, 'Revealed', '0x70997970c51812dc3a010c7d01b50e0d17dc79c8')
+[  179.7s]   event (19, 2, 'OracleResult', '')
+[  179.7s]   event (20, 1, 'Claimed', '0x70997970c51812dc3a010c7d01b50e0d17dc79c8')
+[  179.7s]   event (20, 3, 'Claimed', '0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc')
+=== verdict ===
+S_ignored_A_commit = True
+first_reveal = S
+request_state = RESOLVED_APPROVED
+A_claimed = True
+S_claimed = True
+S_sent_claim_tx = True
+[  179.7s] sentinel A stopped (SIGKILL), exit -9
+[  179.7s] sentinel S stopped (SIGKILL), exit -9

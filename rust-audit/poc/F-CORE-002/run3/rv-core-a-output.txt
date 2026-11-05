@@ -1,0 +1,28 @@
+# rv-core-a run 3 re-run, audit commit 361aaf3 (worktree wt/rv-core-a), 2026-10-08
+# command: cargo test -p safenet-core --lib -- --nocapture --test-threads=1 index::events::tests::poc_f_core_002 index::events::tests::qa_f2_core_002 index::events::tests::rv3_
+# sources: the rv-core-a-*.rs files in this folder (and the sibling run3 folders of the same batch), injected into the mod tests of crates/core/src/index/events.rs; reverted afterwards with git checkout
+# excerpt: only this finding's tests are shown; the batch ran 10 tests (8 passed, 2 failed by design: the run-1 PoC tests fail at their key assertion when the defect is present)
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.23s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/safenet_core-1a555efd99e0fbb6)
+running 10 tests
+test index::events::tests::poc_f_core_002_incomplete_logs_exhaust_the_budget_that_detects_them ... 
+thread 'index::events::tests::poc_f_core_002_incomplete_logs_exhaust_the_budget_that_detects_them' (134141) panicked at crates/core/src/index/events.rs:2178:5:
+assertion `left matches right` failed: the node's second, unverified answer was accepted as complete: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] })) : a block whose header bloom asserts a watched log was committed with zero events
+  left: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+ right: Err(Error::IncompleteLogs { .. })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test index::events::tests::poc_f_core_002_transient_failures_strip_the_integrity_check_default_budget ... 
+thread 'index::events::tests::poc_f_core_002_transient_failures_strip_the_integrity_check_default_budget' (134142) panicked at crates/core/src/index/events.rs:2254:5:
+assertion `left matches right` failed: three rate-limit responses stripped the integrity check off the next attempt, and its empty answer was accepted: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+  left: Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [] }))
+ right: Err(Error::IncompleteLogs { .. })
+FAILED
+test index::events::tests::poc_f_core_002_warp_range_is_never_bloom_verified ... ok
+test index::events::tests::rv3_f_core_002_fallback_accepts_a_partial_set ... attempt 1 (ClientFiltered, node serves 1 of 2 logs): Err(IncompleteLogs { block_hash: 0x1313131313131313131313131313131313131313131313131313131313131313 })
+attempt 2 (MultipleQueries, node serves 1 of 2 logs): Ok(Some(EventUpdate { blocks: 1337..=1337, logs: [EventLog { block: EventBlock { number: 1337, timestamp: 1700016044 }, index: 0, address: 0x1111111111111111111111111111111111111111, data: Transfer(Transfer { from: 0x0000000000000000000000000000000000000000, to: 0x0000000000000000000000000000000000000000, amount: 1 }) }] }))
+ok
+failures:
+failures:
+test result: FAILED. 8 passed; 2 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s

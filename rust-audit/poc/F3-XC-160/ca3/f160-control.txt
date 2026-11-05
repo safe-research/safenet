@@ -1,0 +1,23 @@
+fee token 0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80, test consensus 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0, oracle 0x0e228cd9Af086366230319995b3a4EB7e30Ceca2
+sentinel A (lagging-backend RPC) 0xd3D3D9A010ef8f5B51D37520066CD8cf78760f6A, sentinel B (direct RPC) 0xB1256Ba297EE0C3d7465B6A87e9B3A409b48D878, sponsor 0x1C797a7B816d93f72F1693Abe433B4CF68F529F1
+request 0x285e06a53f6535ea7d459f606e883d2c44a377cb2f167ecc589cbd7e2d0649a6 opened in block P=18 (commit deadline P+6, reveal deadline P+12)
+== onchain after block P+20
+request progress (state, fee, arbitrationDeadline, committed, revealed, approve, deny, ...): [3,400000,0,2,2,2,0,0]
+sentinel A commitment (hash, bond, vote, claimed): ["0xaaf27ea6544700fbb6b53356087354f4c9487bc9d6e0981c49e3ee9d7b60265a",800000000,2,true]
+sentinel B commitment (hash, bond, vote, claimed): ["0x61b05a25d21b86d95c3ac053e674f271655cd75db9abb0cb34eb877be40ca3a2",800000000,2,true]
+fee token balance change: A 200000, B 200000, oracle holds 0
+== proxy injections
+(none)
+== sentinel A log (selected lines)
+22:28:42.138 DEBUG submitting transaction {'nonce': 0, 'block': 18, 'hash': '0x92940deaa5086c89e624f4f572d7106d1b1329ece3af6955047e71625b9e6fd7'}
+22:28:42.188 DEBUG submitting transaction {'nonce': 1, 'block': 18, 'hash': '0xd0a19aca60c282a55bc73a28312f8609a6b9089310eabf537a73f9aa474643ac'}
+22:28:48.188 DEBUG submitting transaction {'nonce': 2, 'block': 24, 'hash': '0x5329c51b242545ce745044ee1216d9e3e101bb7517b00ccdf5d1a1585fb82486'}
+22:28:49.161 DEBUG submitting transaction {'nonce': 3, 'block': 25, 'hash': '0x5da2c7673b6d02a81ed15b1e9a6647c133526983b27b47c00c953c922d66afac'}
+22:28:49.227 DEBUG submitting transaction {'nonce': 4, 'block': 25, 'hash': '0xffc9d63a69d2677556db6d546cfbd035e6234c1cfd5351560b8a829055674580'}
+== sentinel B log (selected lines)
+22:28:42.060 DEBUG submitting transaction {'nonce': 0, 'block': 18, 'hash': '0xcab1b843d460dfeea50307babba0a1c2d91d12739a50ca9b335fedbf2525f634'}
+22:28:42.065 DEBUG submitting transaction {'nonce': 1, 'block': 18, 'hash': '0xbbaf7ef0828bb6b8db29aea1fa7c59633a5a7f71fffb09bccfffc339a64ecbb9'}
+22:28:48.051 DEBUG submitting transaction {'nonce': 2, 'block': 24, 'hash': '0xd9278400439d9a40469dc5f5c6a5c1a78a78a07858924df9ad4d09ec7e54b594'}
+22:28:49.046 DEBUG submitting transaction {'nonce': 3, 'block': 25, 'hash': '0xc6b78d4761219de1984838870e58f762e907bbddb88c9e07a27907b87907cbd3'}
+22:28:49.052 DEBUG submitting transaction {'nonce': 4, 'block': 25, 'hash': '0xf858bb5168381623903aa5c2d9aa2e5cea0e9d1e688453e5b695f31de7be9193'}
+artifacts in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/CA3/qa3core/f160-ca3control-1791498503

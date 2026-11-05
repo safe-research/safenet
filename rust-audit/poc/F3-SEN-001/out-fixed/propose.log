@@ -1,0 +1,32 @@
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+safeTxHash: bytes32 0x5afed546bdfc65f5ecd2b2de9e0bfbc0e0976d91c76c34eddbd1fe9f6ab30e99
+
+== Logs ==
+  Safe Transaction Hash: 0x5afed546bdfc65f5ecd2b2de9e0bfbc0e0976d91c76c34eddbd1fe9f6ab30e99
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 100
+
+Estimated gas price: 0.000000015 gwei
+
+Estimated total gas used for script: 238565
+
+Estimated amount required: 0.000000000003578475 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/build/broadcast/ProposeTransaction.s.sol/100/run-latest.json
+
+Sensitive values saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/contracts/build/cache/ProposeTransaction.s.sol/100/run-latest.json
+

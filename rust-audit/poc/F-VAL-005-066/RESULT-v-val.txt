@@ -1,0 +1,14 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/validator-3a1b46af57fe89be)
+
+running 5 tests
+test secrets::poc_f_val_005_066::an_empty_retention_set_wipes_the_whole_table ... ok
+test secrets::poc_f_val_005_066::deleting_the_row_makes_the_resample_incompatible_with_the_published_commitment ... ok
+test secrets::poc_f_val_005_066::reconciliation_cascades_away_a_committed_nonce_chunk ... ok
+test state::poc_f_val_005_066_ordering::a_reorg_reconciles_before_replaying_the_keygen_log ... ok
+test state::poc_f_val_005_066_ordering::retention_set_depends_only_on_the_current_rollover ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 35 filtered out; finished in 0.03s
+

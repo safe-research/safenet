@@ -1,0 +1,14 @@
+
+running 3 tests
+REPRO F3-SEN-002: local committed_count=1 (onchain committedCount=2)
+REPRO F3-SEN-003: at revealDeadline+1 -> tracked=false, commands=0
+REPRO F3-SEN-003: Claim after OracleResult = false (RevealMissed recovery never runs)
+REPRO F3-SEN-002: after foreign reveal -> tracked=false, commands=0
+REPRO F3-SEN-002: Claim queued after OracleResult = false
+test service::tests::qa3_sen_poc::f3_sen_003_missed_own_reveal_drops_without_claim ... ok
+test service::tests::qa3_sen_poc::f3_sen_002_foreign_commit_before_verdict_strands_the_claim ... ok
+REPRO F3-SEN-002b: at revealDeadline+30 state = waiting_for_outcome
+test service::tests::qa3_sen_poc::f3_sen_002_silent_committer_leaves_request_unfinalized ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.00s
+

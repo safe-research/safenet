@@ -1,0 +1,42 @@
+diff --git a/crates/core/src/provider/mod.rs b/crates/core/src/provider/mod.rs
+index febc353..b0d6128 100644
+--- a/crates/core/src/provider/mod.rs
++++ b/crates/core/src/provider/mod.rs
+@@ -143,6 +143,14 @@ pub struct Provider {
+ impl Provider {
+     /// Connects to `url`.
+     pub async fn connect(url: &Url) -> Result<Self, TransportError> {
++        // QA3 bite check (remediation 1): reject schemes alloy would fall back
++        // to IPC for, naming only the scheme.
++        if !matches!(url.scheme(), "http" | "https" | "ws" | "wss") {
++            return Err(TransportErrorKind::custom_str(&format!(
++                "unsupported RPC URL scheme `{}`",
++                url.scheme()
++            )));
++        }
+         let client = ClientBuilder::default()
+             .layer(ObservabilityLayer)
+             .connect(url.as_str())
+@@ -180,3 +188,22 @@ impl AlloyProvider<AnyNetwork> for Provider {
+         ProviderCall::Ready(Some(Ok(self.chain_id)))
+     }
+ }
++
++#[cfg(test)]
++mod qa3_tests {
++    use super::*;
++
++    #[tokio::test]
++    async fn qa3_connect_error_does_not_quote_the_rpc_url() {
++        for url in [
++            "htps://gnosis-mainnet.example.invalid/v2/QA3-SECRET-KEY",
++            "wws://gnosis-mainnet.example.invalid/v2/QA3-SECRET-KEY",
++        ] {
++            let err = Provider::connect(&url.parse().unwrap()).await.unwrap_err();
++            let (display, debug) = (err.to_string(), format!("{err:?}"));
++            println!("{url}: display={display} debug={debug}");
++            assert!(!display.contains("QA3-SECRET-KEY"), "{display}");
++            assert!(!debug.contains("QA3-SECRET-KEY"), "{debug}");
++        }
++    }
++}

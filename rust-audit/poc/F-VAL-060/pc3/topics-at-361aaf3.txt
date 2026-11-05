@@ -1,0 +1,22 @@
+# PC3 2026-10-09: event topic0 sets from the forge artifacts built at 361aaf3 in wt/rv-core-a (contracts/build/out)
+# command: source env/rv-core-a.sh && python3 -I rust-audit/poc/F-VAL-060/pc3/topics.py $WT/contracts/build/out
+# SentinelOracle sources unchanged since 0be9636 (2026-09-23), before the Aegis deployment of 0x4F61B8832978e83b80D69551AEf07557DBE41d03 on 2026-10-07
+SentinelOracle events: 16
+   0x5f19817b3ad988fdb5a7fb3f657a755e58a107bf47431574b7c516a6dc1551e6 ArbitrationTimedOut(bytes32)
+   0xc7a39a5cff0bd7a6c707ae62778c7253bd05c8e0bcfdf9d4b0d74044ecba46a1 BondConfigScheduled(uint32,uint32,uint64)
+   0x006f1d9d8ec7f5d7941e2363561ba0f1da911361b351d007f9b448d557e39e86 Claimed(bytes32,address,uint96,uint96)
+   0x45acbf2626c7d2bd97eb2142a43d392e8f3364c9e140b3d022446155491819d6 Committed(bytes32,address,uint96)
+   0xb6b8950d378d599036f40812984d24677cfeb9805467d2997651e3fdab8b9b77 DaoFeeShareScheduled(uint24,uint64)
+   0xe32b95dcf423c9ed3915554e30a0db65ad08358b5e5bdb1138c98dcb745dbe81 DisputeOutOfScope(bytes32,string)
+   0x7e739d167696b2e67be44f7ceb3afa7ad9e8ad5ee53d016de97ae7ab0b416a70 DisputeResolved(bytes32,uint8,uint128,string)
+   0x86e8b85731e4787f033d85108356db1e068dea243be32d422e6dc5681ff49cc1 DisputeTriggered(bytes32,uint64)
+   0xdef70574d1d359737ee26a27f066606f6d82fa51e3698f243d987958ec6fdc1c FeeScheduled(uint96,uint64)
+   0x8ec61272960f97d43d7f8f85ed630aa512818577f3d1e548e7627b06dbbbda86 NewRequest(bytes32,address,uint96,uint96,uint24,uint96,uint64,uint64)
+   0x7843c453c4f7442b00e1bf3873e741f18f3447e18a13304c58bef95efd311757 OracleResult(bytes32,address,bytes,bool)
+   0xd1eff884ebee7603c09e5563e22dfbb73c07549053cfe8ef14c1c95fc18ab70b ProtocolFundsReceiverScheduled(address,uint64)
+   0xf1ca1e9147be737b04a2b018a79405f687a97de8dd8a2559bbe62357343af414 RequestTimedOut(bytes32)
+   0xd2cdead965dbd376703d9a79240f31f1228055ab42384b68353332fcd2af939a Revealed(bytes32,address,bool,uint96,string)
+   0x8e7ac62951d0ff2590efb434e0adfbb6b9c0f784993a523c48b42751bab6c5e8 SentinelRemoved(address)
+   0xce737c23e8e6ca890064e37caf80069010b1f755c3fae1708dd03974cc20967d SentinelScheduled(address,uint256)
+FROSTCoordinator events: 10  Consensus events: 6
+overlap of SentinelOracle topic0 with Coordinator or Consensus topic0: none

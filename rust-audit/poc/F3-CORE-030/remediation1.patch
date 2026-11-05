@@ -1,0 +1,27 @@
+diff --git a/crates/core/src/index/blocks.rs b/crates/core/src/index/blocks.rs
+index 8467fdc..f33d762 100644
+--- a/crates/core/src/index/blocks.rs
++++ b/crates/core/src/index/blocks.rs
+@@ -296,7 +296,21 @@ impl BlockWatcher {
+     }
+ 
+     async fn initialize(&mut self, indexed: Option<BlockStatus>) -> Result<(), Error> {
+-        let latest = self.require_block(BlockId::latest()).await?;
++        let mut latest = self.require_block(BlockId::latest()).await?;
++        // QA3 bite check (F3-CORE-030 remediation 1): a node whose head is below
++        // the oldest retained snapshot cannot serve the first block the state
++        // machine accepts, so wait for it instead of starting below it.
++        if let Some(indexed) = indexed {
++            while latest.number < indexed.safe {
++                tracing::warn!(
++                    head = latest.number,
++                    resume = indexed.safe,
++                    "RPC node is behind the persisted state, waiting for it to catch up"
++                );
++                tokio::time::sleep(Duration::from_millis(self.timings.block_time)).await;
++                latest = self.require_block(BlockId::latest()).await?;
++            }
++        }
+         let safe = latest.number.saturating_sub(self.config.max_reorg_depth);
+         tracing::debug!(
+             latest = latest.number,

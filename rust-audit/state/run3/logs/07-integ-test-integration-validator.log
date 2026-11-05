@@ -1,0 +1,192 @@
+# command: integ just test-integration-validator
+# cwd: $RUN/wt/base
+# head: 361aaf3b25e12d2e04f296184c326830968f3727
+# start: 2026-10-08T14:26:22Z
+./scripts/run_validator_integration_test.sh
+==> Using temporary directory /var/tmp/tmp.OkCBqNGQry
+==> Building Rust services...
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s
+==> Building Solidity contracts...
+Missing dependencies found. Installing now...
+
+fatal: destination path '$RUN/wt/base/contracts/lib/forge-std' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/foundry-rs/forge-std' into submodule path '$RUN/wt/base/contracts/lib/forge-std' failed
+Failed to clone 'contracts/lib/forge-std'. Retry scheduled
+fatal: destination path '$RUN/wt/base/contracts/lib/openzeppelin-contracts' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/OpenZeppelin/openzeppelin-contracts' into submodule path '$RUN/wt/base/contracts/lib/openzeppelin-contracts' failed
+Failed to clone 'contracts/lib/openzeppelin-contracts'. Retry scheduled
+fatal: destination path '$RUN/wt/base/contracts/lib/safe-smart-account' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/safe-fndn/safe-smart-account' into submodule path '$RUN/wt/base/contracts/lib/safe-smart-account' failed
+Failed to clone 'contracts/lib/safe-smart-account'. Retry scheduled
+fatal: destination path '$RUN/wt/base/contracts/lib/forge-std' already exists and is not an empty directory.
+fatal: clone of 'https://github.com/foundry-rs/forge-std' into submodule path '$RUN/wt/base/contracts/lib/forge-std' failed
+Failed to clone 'contracts/lib/forge-std' a second time, aborting
+Warning: Your project has missing dependencies that could not be installed.
+Solc 0.8.30 finished in 1.07s
+Solc 0.8.30 finished in 16.29s
+Compiler run successful!
+==> Starting Anvil...
+==> Deploying contracts...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+coordinator: contract FROSTCoordinator 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+consensus: contract Consensus 0x706f3533B199078F30BE5520b183d130a5cbb17F
+groupId: FROSTGroupId.T 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000
+
+== Logs ==
+  Genesis Group ID: 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000
+  Genesis Group Participants Root: 0x43c8bee048e0480d644b3fe14e67fe0bf976d6ec2c649e37c28719ce63f6a1c8
+  Genesis Group Count: 2
+  Genesis Group Threshold: 2
+  Genesis Group Context: 0x0000000000000000000000000000000000000000000000000000000000000000
+  FROSTCoordinator: 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+  Consensus: 0x706f3533B199078F30BE5520b183d130a5cbb17F
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 7240248
+
+Estimated amount required: 0.014480496007240248 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeployConsensus.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeployConsensus.s.sol/31337/run-latest.json
+
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+alwaysApproveOracle: contract AlwaysApproveOracle 0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+
+== Logs ==
+  AlwaysApproveOracle: 0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 297742
+
+Estimated amount required: 0.000595484000297742 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeployAlwaysApproveOracle.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeployAlwaysApproveOracle.s.sol/31337/run-latest.json
+
+    coordinator: 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+    consensus:   0x706f3533B199078F30BE5520b183d130a5cbb17F
+    oracle:      0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+==> Starting validator A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8)...
+    pid 35410
+==> Starting validator B (0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC)...
+    pid 35411
+==> Triggering genesis KeyGen...
+No files changed, compilation skipped
+Script ran successfully.
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 1.832509969 gwei
+
+Estimated total gas used for script: 102984
+
+Estimated amount required: 0.000188719206647496 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/Genesis.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/Genesis.s.sol/31337/run-latest.json
+
+==> Waiting for transaction attestations and the epoch 1 rollover (timeout: 120s)...
+    genesis confirmations: 0; epoch 1 confirmations: 0; staged: no; rolled over: no; transaction: pending/pending at block 3
+    genesis confirmations: 0; epoch 1 confirmations: 0; staged: no; rolled over: no; transaction: pending/pending at block 4
+    genesis confirmations: 0; epoch 1 confirmations: 0; staged: no; rolled over: no; transaction: pending/pending at block 5
+    genesis confirmations: 2; epoch 1 confirmations: 0; staged: no; rolled over: no; transaction: pending/pending at block 6
+    genesis confirmations: 2; epoch 1 confirmations: 0; staged: no; rolled over: no; transaction: pending/pending at block 7
+    genesis confirmations: 2; epoch 1 confirmations: 0; staged: no; rolled over: no; transaction: pending/pending at block 8
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: no; rolled over: no; transaction: pending/pending at block 9
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: no; rolled over: no; transaction: pending/pending at block 10
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: no; transaction: pending/pending at block 11
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: no; transaction: pending/pending at block 12
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: no; transaction: pending/pending at block 13
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: no; transaction: pending/pending at block 14
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: no; transaction: pending/pending at block 16
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: no; transaction: pending/pending at block 17
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: no; transaction: pending/pending at block 18
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: no; transaction: pending/pending at block 19
+==> Triggering epoch 1 rollover and proposing another oracle-backed transaction for attestation...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+safeTxHash: bytes32 0x50736e4f274c9bae76b2c1d5d96572ada43c1920efe10170921165c31e25d871
+
+== Logs ==
+  Safe Transaction Hash: 0x50736e4f274c9bae76b2c1d5d96572ada43c1920efe10170921165c31e25d871
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 0.168351069 gwei
+
+Estimated total gas used for script: 125894
+
+Estimated amount required: 0.000021194389480686 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/ProposeTransaction.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/ProposeTransaction.s.sol/31337/run-latest.json
+
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: yes; transaction: proposed/pending at block 20
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: yes; transaction: proposed/pending at block 22
+    genesis confirmations: 2; epoch 1 confirmations: 2; staged: yes; rolled over: yes; transaction: proposed/attested at block 23
+SUCCESS: genesis and epoch 1 each attested an oracle-backed transaction, and epoch 1 was generated, staged, and rolled over.
+# end: 2026-10-08T14:27:02Z
+# duration_s: 40
+# exit: 0

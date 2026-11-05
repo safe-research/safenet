@@ -1,0 +1,50 @@
+== run 1: sentinel follows the chain through an up-to-date node
+run 1 stopped (SIGINT); last processed block L=27; snapshots: [22, 23, 24, 25, 26, 27]
+{"timestamp":"2026-10-08T19:11:06.323514Z","level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"timestamp":"2026-10-08T19:11:33.171805Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}
+== node now lags 30 blocks: upstream head 27, proxy head 0
+== run 2: restart against the lagging node (20 s limit)
+run 2 exit status: 124 after 20.1 s; snapshots: [22, 23, 24, 25, 26, 27]
+{"timestamp":"2026-10-08T19:11:33.547794Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":0,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:34.561139Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":0,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:35.577611Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":0,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:36.596727Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":0,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:37.615577Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":1,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:38.624339Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":2,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:39.637360Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":4,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:40.646822Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":5,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:41.658311Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":6,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:42.677942Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":7,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:43.688231Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":8,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:44.694001Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":9,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:45.701027Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":10,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:46.705184Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":11,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:47.715104Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":12,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:48.726287Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":13,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:49.736791Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":14,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:50.749534Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":15,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:51.752021Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":16,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:52.765346Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":17,"resume":22},"target":"safenet_core::index::blocks"}
+== run 3: restart against the lagging node (20 s limit)
+run 3 exit status: 124 after 20.0 s; snapshots: [32, 33, 34, 35, 36, 37]
+{"timestamp":"2026-10-08T19:11:53.645213Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":17,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:54.655287Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":18,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:55.673099Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":20,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:56.687541Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":21,"resume":22},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:11:57.696488Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":22,"safe":17,"resume":"Some(BlockStatus { latest: 27, safe: 22 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:12:13.563605Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}
+== run 4: restart against the lagging node, node catches up 8 s later
+run 4 snapshots: [78, 79, 80, 81, 82, 83]
+{"timestamp":"2026-10-08T19:12:13.714305Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":37,"safe":32,"resume":"Some(BlockStatus { latest: 37, safe: 32 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:12:29.951855Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}
+
+run 1: mining frozen at upstream head 20; snapshots [15, 16, 17, 18, 19, 20]
+restart against a node at head 14 (lag 6); one block mined 3 s later
+run 2: still running 4 s after the new block
+run 2 snapshots: [15]
+{"timestamp":"2026-10-08T19:12:53.748410Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":14,"resume":15},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:12:54.753877Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":14,"resume":15},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:12:55.760384Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":14,"resume":15},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:12:56.767179Z","level":"WARN","fields":{"message":"RPC node is behind the persisted state, waiting for it to catch up","head":14,"resume":15},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:12:57.773584Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":15,"safe":10,"resume":"Some(BlockStatus { latest: 20, safe: 15 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:13:00.975183Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}

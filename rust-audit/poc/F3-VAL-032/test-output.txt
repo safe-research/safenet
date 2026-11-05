@@ -1,0 +1,18 @@
+$ cargo test -p validator --bins collected_signature_id_is_given_a_fresh_pair -- --nocapture
+running 1 test
+test secrets::store::tests::collected_signature_id_is_given_a_fresh_pair ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out
+
+Reproduces claim 1 (carrying claim): after the signing-nonce row for a used
+signature id is collected (schedule + prune), a replay re-running
+store_signing_nonces for the SAME signature id inserts and returns a FRESH,
+usable pair (different commitments), contradicting store.rs:18-22 and :38-41.
+
+Bite (in-test differential, no mutation needed): while the row exists the replay
+returns None (doc holds); after collection it returns Some(fresh). The two
+assertions (.expect(Some) and assert_ne!(first, second)) both fail if the code
+kept a tombstone instead of giving a fresh pair.
+
+Safety half (a fresh pair cannot produce an accepted share while the old
+commitment is first onchain -> frost round2 IncorrectCommitment) is Critic-
+confirmed; not re-run (documentation-only, Informational).

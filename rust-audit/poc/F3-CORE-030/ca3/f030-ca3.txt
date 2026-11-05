@@ -1,0 +1,17 @@
+== run 1: sentinel follows the chain through an up-to-date node
+run 1 stopped (SIGINT); last processed block L=27; snapshots: [22, 23, 24, 25, 26, 27]
+{"timestamp":"2026-10-08T22:26:02.707087Z","level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"timestamp":"2026-10-08T22:26:29.605844Z","level":"INFO","fields":{"message":"received shutdown signal; stopping service"},"target":"safenet_core::driver"}
+== node now lags 30 blocks: upstream head 27, proxy head 0
+== run 2: restart against the lagging node (20 s limit)
+run 2 exit status: 0 after 3.2 s; snapshots: [22]
+{"timestamp":"2026-10-08T22:26:29.981856Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":0,"safe":0,"resume":"Some(BlockStatus { latest: 27, safe: 22 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T22:26:33.015805Z","level":"ERROR","fields":{"message":"unrecoverable driver error; exiting","err":"State(BadUpdate)"},"target":"safenet_core::driver"}
+== run 3: restart against the lagging node (20 s limit)
+run 3 exit status: 0 after 1.1 s; snapshots: [22]
+{"timestamp":"2026-10-08T22:26:33.183630Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":1,"safe":0,"resume":"Some(BlockStatus { latest: 22, safe: 22 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T22:26:34.099500Z","level":"ERROR","fields":{"message":"unrecoverable driver error; exiting","err":"State(BadUpdate)"},"target":"safenet_core::driver"}
+== run 4: restart against the lagging node, node catches up 8 s later
+run 4 snapshots: [22]
+{"timestamp":"2026-10-08T22:26:34.307651Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":2,"safe":0,"resume":"Some(BlockStatus { latest: 22, safe: 22 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T22:26:35.057408Z","level":"ERROR","fields":{"message":"unrecoverable driver error; exiting","err":"State(BadUpdate)"},"target":"safenet_core::driver"}

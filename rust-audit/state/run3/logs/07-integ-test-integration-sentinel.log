@@ -1,0 +1,326 @@
+# command: integ just test-integration-sentinel
+# cwd: $RUN/wt/base
+# head: 361aaf3b25e12d2e04f296184c326830968f3727
+# start: 2026-10-08T14:24:39Z
+./scripts/run_sentinel_integration_test.sh
+Building the Rust sentinel and sentinel engine...
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 16.10s
+Starting Anvil...
+Deploying fee token...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+erc20: address 0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80
+
+== Logs ==
+  ERC20 deployed at: 0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 1.750000001 gwei
+
+Estimated total gas used for script: 2805017
+
+Estimated amount required: 0.004908779752805017 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeployERC20.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeployERC20.s.sol/31337/run-latest.json
+
+Fee token deployed at 0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80
+Deploying test consensus...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+consensus: address 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+
+== Logs ==
+  Consensus deployed at: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 1.531250001 gwei
+
+Estimated total gas used for script: 2593819
+
+Estimated amount required: 0.003971785346343819 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeployTestConsensus.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeployTestConsensus.s.sol/31337/run-latest.json
+
+Test consensus deployed at 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+Deploying sentinel oracle...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+sentinelOracle: address 0x984e5a1a8623b8eA71BE12beEE4DC4823B91B97E
+
+== Logs ==
+  SentinelOracle deployed at: 0x984e5a1a8623b8eA71BE12beEE4DC4823B91B97E
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 1.364317733 gwei
+
+Estimated total gas used for script: 5538442
+
+Estimated amount required: 0.007556194633791986 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeploySentinelOracle.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeploySentinelOracle.s.sol/31337/run-latest.json
+
+Sentinel oracle deployed at 0x984e5a1a8623b8eA71BE12beEE4DC4823B91B97E
+Generating sentinel and sponsor accounts...
+Sentinel A: 0xB810931811fa7Ee69D1D5Ea6177E91E1acCA53F7
+Sentinel B: 0xa6b00E727a2f7402B4610dc6C355E45b70B332E3
+Sponsor:    0xB1B1A8A351c2d041D5B08627a59732b121134713
+Funding accounts with ETH and the fee token...
+Deploying transaction token...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+erc20: address 0x7D0a9bdeF10fcd30Cc90C6704612D9F9426c8180
+
+== Logs ==
+  ERC20 deployed at: 0x7D0a9bdeF10fcd30Cc90C6704612D9F9426c8180
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 0.566534349 gwei
+
+Estimated total gas used for script: 2805017
+
+Estimated amount required: 0.001589138480028933 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/DeployERC20.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/DeployERC20.s.sol/31337/run-latest.json
+
+Transaction token deployed at 0x7D0a9bdeF10fcd30Cc90C6704612D9F9426c8180
+Registering both sentinels...
+Approving the oracle to pull the request fee from the sponsor...
+Starting sentinel engine A...
+Starting sentinel A...
+Starting sentinel engine B...
+Starting sentinel B...
+Proposing an oracle-checked transaction...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+safeTxHash: bytes32 0x9f18091b6d701478e8429f3d4aafa4811902f8c9fe9a42a3a959e312674bfeea
+
+== Logs ==
+  Safe Transaction Hash: 0x9f18091b6d701478e8429f3d4aafa4811902f8c9fe9a42a3a959e312674bfeea
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 0.173934577 gwei
+
+Estimated total gas used for script: 238005
+
+Estimated amount required: 0.000041397298998885 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/ProposeTransaction.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/ProposeTransaction.s.sol/31337/run-latest.json
+
+Request id: 0x85b8d10b56c70a35ed7d830f20dcd98a5d985819abdb2182714a566c84ecb155
+Waiting for block 31 (currently 21)...
+Final request state: [
+  [
+    26,
+    0,
+    31,
+    4000,
+    "0x0000000000000000000000000000000000000000",
+    "1014453288774700857126020242654114625444545513235",
+    2000
+  ],
+  [
+    3,
+    1000,
+    0,
+    2,
+    2,
+    2,
+    0,
+    0
+  ]
+]
+OK: both sentinels agreed (approved) and no arbitration was triggered.
+Sentinel A fee share: 500
+Sentinel B fee share: 500
+Oracle balance after claims (dust only): 0
+OK: bonds were returned in full and the request fee was split between the sentinels.
+Approving the oracle to pull the request fee for the disputed request...
+Proposing a transaction sentinel B's blocklist denies (to trigger a genuine dispute)...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+safeTxHash: bytes32 0x37800483a0710b446f508df3c922efaeee92ef415b5e4faac6ccc6bc8d9eea61
+
+== Logs ==
+  Safe Transaction Hash: 0x37800483a0710b446f508df3c922efaeee92ef415b5e4faac6ccc6bc8d9eea61
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 0.035266229 gwei
+
+Estimated total gas used for script: 226896
+
+Estimated amount required: 0.000008001766295184 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/ProposeTransaction.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/ProposeTransaction.s.sol/31337/run-latest.json
+
+Disputed request id: 0x0895349cd7c7b30df01c2b5db522eeb8460e28373ddb605876b2570a53ab61a3
+Waiting for the disputed request to freeze...
+OK: both sentinels revealed opposing votes and the request froze.
+Resolving the dispute in favor of the approving side...
+Disputed request state after arbitration: [
+  [
+    38,
+    0,
+    43,
+    4000,
+    "0x0000000000000000000000000000000000000000",
+    "1014453288774700857126020242654114625444545513235",
+    2000
+  ],
+  [
+    3,
+    1000,
+    59,
+    2,
+    2,
+    1,
+    1,
+    0
+  ]
+]
+OK: arbitration resolved the dispute and both sentinels claimed, including the losing one.
+Sentinel A (won the dispute) balance change: 1000
+Sentinel B (lost the dispute) balance change: -2000
+OK: the losing sentinel's bond was slashed only partially and both sides' balances reconcile.
+Approving the oracle to pull the request fee for the unruled disputed request...
+Proposing another transaction sentinel B's blocklist denies (a dispute left unruled)...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+safeTxHash: bytes32 0xef871f50b2865623ce1a676e131d12faa5ed77d9a48a40eac8e8ab3017972185
+
+== Logs ==
+  Safe Transaction Hash: 0xef871f50b2865623ce1a676e131d12faa5ed77d9a48a40eac8e8ab3017972185
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 0.009349497 gwei
+
+Estimated total gas used for script: 226896
+
+Estimated amount required: 0.000002121363471312 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: $RUN/wt/base/contracts/build/broadcast/ProposeTransaction.s.sol/31337/run-latest.json
+
+Sensitive values saved to: $RUN/wt/base/contracts/build/cache/ProposeTransaction.s.sol/31337/run-latest.json
+
+Unruled disputed request id: 0xbd21003fda2db1579f01cf0ab72e63c25cef607bcd426315b2df31c77063fe50
+Waiting for the sentinels to time out the unruled arbitration...
+Request froze; arbitration deadline is block 69.
+OK: 0xB810931811fa7Ee69D1D5Ea6177E91E1acCA53F7 timed out the unruled arbitration.
+Sentinel A balance change: 0
+Sentinel B balance change: 0
+Sponsor balance change: 0
+OK: the sentinels timed out the unruled arbitration and recovered their bonds in full.
+Sentinel integration test finished successfully.
+Stopping background processes (31890 32590 32591 32592 32593)...
+# end: 2026-10-08T14:26:06Z
+# duration_s: 87
+# exit: 0

@@ -1,0 +1,28 @@
+   Compiling safenet-core v0.2.0 (/home/shebin.guest/safe/safenet/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.71s
+     Running unittests src/lib.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/safenet_core-9a33466691bc8389)
+
+running 14 tests
+[excerpt: only this finding's tests are shown; the complete 14-test run is poc/F2-CORE-060/output-full-run.txt]
+test tx::tests::qa_f2_core_060_accepted_but_unmined_transaction_compounds_fees_without_ceiling ... bump  0 at block  10: maxFeePerGas=210 maxPriorityFeePerGas=10
+bump  1 at block  12: maxFeePerGas=231 maxPriorityFeePerGas=11  (x1.1 / x1.1 of the estimate)
+bump  2 at block  14: maxFeePerGas=255 maxPriorityFeePerGas=13  (x1.2 / x1.3 of the estimate)
+bump  3 at block  16: maxFeePerGas=281 maxPriorityFeePerGas=15  (x1.3 / x1.5 of the estimate)
+bump  6 at block  22: maxFeePerGas=376 maxPriorityFeePerGas=21  (x1.8 / x2.1 of the estimate)
+bump 12 at block  34: maxFeePerGas=670 maxPriorityFeePerGas=41  (x3.2 / x4.1 of the estimate)
+bump 18 at block  46: maxFeePerGas=1191 maxPriorityFeePerGas=77  (x5.7 / x7.7 of the estimate)
+bump 24 at block  58: maxFeePerGas=2115 maxPriorityFeePerGas=140  (x10.1 / x14.0 of the estimate)
+bump 30 at block  70: maxFeePerGas=3749 maxPriorityFeePerGas=250  (x17.9 / x25.0 of the estimate)
+bump 36 at block  82: maxFeePerGas=6646 maxPriorityFeePerGas=446  (x31.6 / x44.6 of the estimate)
+bump 42 at block  94: maxFeePerGas=11778 maxPriorityFeePerGas=795  (x56.1 / x79.5 of the estimate)
+bump 48 at block 106: maxFeePerGas=20869 maxPriorityFeePerGas=1412  (x99.4 / x141.2 of the estimate)
+bump 54 at block 118: maxFeePerGas=36974 maxPriorityFeePerGas=2505  (x176.1 / x250.5 of the estimate)
+bump 60 at block 130: maxFeePerGas=65505 maxPriorityFeePerGas=4441  (x311.9 / x444.1 of the estimate)
+1.1^60 = 304.5
+ok
+test tx::tests::qa_f2_core_060_row_behind_a_generically_rejected_row_compounds ... nonce 0 data 0x01 maxFeePerGas=None maxPriorityFeePerGas=None
+nonce 1 data 0x02 maxFeePerGas=Some(553) maxPriorityFeePerGas=Some(33)
+ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.20s
+

@@ -1,0 +1,167 @@
+# F2-XC-001 run 3 re-validation; binaries: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-xc/debug
+# validator: 0.2.0  sentinel: 0.2.0
+# marker key 0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef (fake, valid scalar); grep needle 0123456789abcdef0123456789abcdef
+=================== v01-typo-table (validator)
+--- the lines that differ from the base config:
+    < [transactions]
+    > [transaction]
+--- exit=1   stderr bytes=150   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `transaction`", input: None, keys: [], span: Some(0..0) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v03-typo-key-validator (validator)
+--- the lines that differ from the base config:
+    > blocks_per_epoc = 1440
+--- exit=1   stderr bytes=327   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((6, 1)), inner: Error { message: "unknown field `blocks_per_epoc`, expected one of `consensus`, `staker`, `participants`, `oracles`, `genesis_salt`, `blocks_per_epoch`, `key_gen_timeout`, `signing_timeout`, `oracle_timeout`", input: None, keys: ["validator"], span: Some(203..218) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=1 input-Some=0
+=================== v04-signer-odd-digits (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+--- exit=1   stderr bytes=176   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid hex-encoded secp256k1 private key", input: None, keys: ["signer"], span: Some(36..103) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v05-signer-31-bytes (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "0x23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+--- exit=1   stderr bytes=176   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid hex-encoded secp256k1 private key", input: None, keys: ["signer"], span: Some(36..102) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v06a-signing-timeout-0 (validator)
+--- the lines that differ from the base config:
+    > signing_timeout = 0
+--- exit=1   stderr bytes=208   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((6, 19)), inner: Error { message: "invalid value: integer `0`, expected a nonzero u64", input: None, keys: ["validator", "signing_timeout"], span: Some(221..222) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v06b-blocks-per-epoch-0 (validator)
+--- the lines that differ from the base config:
+    > blocks_per_epoch = 0
+--- exit=1   stderr bytes=209   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((6, 20)), inner: Error { message: "invalid value: integer `0`, expected a nonzero u64", input: None, keys: ["validator", "blocks_per_epoch"], span: Some(222..223) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v07a-unknown-top-level (validator)
+--- the lines that differ from the base config:
+    > not_a_real_field = "typo"
+--- exit=1   stderr bytes=155   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `not_a_real_field`", input: None, keys: [], span: Some(0..0) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v07b-unknown-in-index (validator)
+--- the lines that differ from the base config:
+    > use_client_filterring = true
+--- exit=1   stderr bytes=160   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `use_client_filterring`", input: None, keys: [], span: Some(0..0) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v09-signer-unquoted-hex (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = 0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+--- exit=1   stderr bytes=160   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "integer number overflowed", input: None, keys: ["signer"], span: Some(36..102) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v10-signer-bare (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+--- exit=1   stderr bytes=167   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "unexpected leading zero, expected nothing", input: None, keys: [], span: Some(36..37) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v12-signer-array (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = ["0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
+--- exit=1   stderr bytes=176   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid type: sequence, expected a string", input: None, keys: ["signer"], span: Some(36..106) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v13-signer-duplicate (validator)
+--- the lines that differ from the base config:
+    > signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+--- exit=1   stderr bytes=140   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((3, 1)), inner: Error { message: "duplicate key", input: None, keys: [], span: Some(105..111) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v15-signer-bad-hex-char (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg"
+--- exit=1   stderr bytes=176   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid hex-encoded secp256k1 private key", input: None, keys: ["signer"], span: Some(36..104) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v02-typo-key-sentinel (sentinel)
+--- the lines that differ from the base config:
+    < engine = "http://localhost:5473"
+    > engin = "http://localhost:5473"
+--- exit=1   stderr bytes=214   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((9, 1)), inner: Error { message: "unknown field `engin`, expected one of `fee_token`, `voting_window`, `engine`", input: None, keys: ["sentinel"], span: Some(331..336) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=1 input-Some=0
+=================== v08-signer-unterminated (sentinel)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+--- exit=1   stderr bytes=163   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 77)), inner: Error { message: "invalid basic string, expected `\"`", input: None, keys: [], span: Some(103..103) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v14-wrong-type-flattened (sentinel)
+--- the lines that differ from the base config:
+    > max_in_flight_transactions = "16"
+--- exit=1   stderr bytes=166   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "invalid type: string \"16\", expected usize", input: None, keys: [], span: Some(0..0) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v11a-env-signer-malformed (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "${RV_XC_SIGNER}"
+--- environment: RV_XC_SIGNER=<value, see variant name>
+--- exit=1   stderr bytes=175   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "invalid hex-encoded secp256k1 private key", input: None, keys: ["signer"], span: Some(36..53) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== v11b-env-signer-unset (validator)
+--- the lines that differ from the base config:
+    < signer = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    > signer = "${RV_XC_SIGNER_UNSET}"
+--- exit=1   stderr bytes=184   stdout bytes=0
+--- stderr (first 600 characters):
+    Error: Parse(ParseError { position: Some((2, 10)), inner: Error { message: "environment variable RV_XC_SIGNER_UNSET is not set", input: None, keys: ["signer"], span: Some(36..59) } })
+
+--- grep counts on stderr: marker-hex=0 rpc-host=0 doc-only-strings=0 input-Some=0
+=================== c01-control-parses (validator)
+--- the lines that differ from the base config:
+--- exit=1   stderr bytes=233   stdout bytes=201
+--- stderr (first 600 characters):
+    Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+
+--- grep counts on stderr: marker-hex=0 rpc-host=1 doc-only-strings=0 input-Some=0
+# done

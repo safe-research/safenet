@@ -1,0 +1,12 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.66s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-a/debug/deps/sentinel-702b20590452b382)
+
+running 1 test
+no rollback: commands after the verdict: [Action(SentinelAction { kind: ApproveToken { bond: 800000000 }, expires_at: Some(106) }), Action(SentinelAction { kind: Commit { id: 0x23d490d080446171493a1d2ae6a02ac79b3ea4f676668bb2abc7515f5225538d, hash: 0xcc5df88cef2fd216e7519f692deb916f4f274aa42fcb5086545b8d3f79ebf0ac }, expires_at: Some(106) }), Action(SentinelAction { kind: Reveal { id: 0x23d490d080446171493a1d2ae6a02ac79b3ea4f676668bb2abc7515f5225538d, approve: true, salt: 0x261eb185891d438bbfe68d2874d756c532288f5b4d45692135cd5fc33e0d398d, reason: "" }, expires_at: Some(112) })]
+no rollback: request state in the newest snapshot: Some(CollectingVotes { approve: true, slash_amount: 400000, reveal_deadline: 112, committed_count: 1, revealed_count: 0, approve_count: 0, deny_count: 0, self_revealed: false })
+rollback to S: commands after the verdict: [Action(SentinelAction { kind: ApproveToken { bond: 800000000 }, expires_at: Some(106) }), Action(SentinelAction { kind: Commit { id: 0x23d490d080446171493a1d2ae6a02ac79b3ea4f676668bb2abc7515f5225538d, hash: 0xcc5df88cef2fd216e7519f692deb916f4f274aa42fcb5086545b8d3f79ebf0ac }, expires_at: Some(106) })]
+rollback to S: request state in the newest snapshot: None
+test service::tests::qa3_rollback_to_the_proposal_block_loses_the_verdict_and_the_reveal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.01s
+

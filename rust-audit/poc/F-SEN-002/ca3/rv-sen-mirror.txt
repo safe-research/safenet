@@ -1,0 +1,7 @@
+
+running 1 test
+test service::tests::rv_sen_run3::f_sen_002_run3_mirror_case_recovers_when_the_last_reveal_auto_finalizes ... [F-SEN-002 run3 mirror] Revealed(self) → [Action(SentinelAction { kind: Finalize { id: 0x7c33d2ce51683642a6af54556bea5845e378d99280a20fde435c3ae8c59b2410 }, expires_at: None })] state Some(WaitingForOutcome { approve: true, slash_amount: 500 }); Revealed(A) → []; OracleResult → [Action(SentinelAction { kind: Claim { id: 0x7c33d2ce51683642a6af54556bea5845e378d99280a20fde435c3ae8c59b2410 }, expires_at: None })]; tracked=false
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 82 filtered out; finished in 0.00s
+

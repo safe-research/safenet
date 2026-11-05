@@ -1,0 +1,13 @@
+QA3_OUTAGE_MS = None
+A fixed window 10 per 150 ms: processed up to Some(1030) of head 1030; eth_getLogs sent 54 (1 per s), ok 45, 429 6, 502 3
+B control: A with block_single_query_retry_count 1000: processed up to Some(1030) of head 1030; eth_getLogs sent 38 (1 per s), ok 35, 429 0, 502 3
+C at most 8 requests in flight: processed up to Some(1030) of head 1030; eth_getLogs sent 54 (1 per s), ok 43, 429 8, 502 3
+D token bucket 12, 100 per s: processed up to Some(1030) of head 1030; eth_getLogs sent 54 (1 per s), ok 47, 429 4, 502 3
+E token bucket 20, 50 per s, first per-event attempt in the outage: processed up to Some(1030) of head 1030; eth_getLogs sent 56 (1 per s), ok 35, 429 0, 502 21
+G control: E with the outage over before the first per-event attempt: processed up to Some(1030) of head 1030; eth_getLogs sent 53 (1 per s), ok 50, 429 0, 502 3
+F restart warp from 800, A's window, 1 s outage: processed up to Some(800) of head 1030; eth_getLogs sent 3767 (125 per s), ok 1950, 429 1810, 502 7
+thread 'driver::qa3_tests::qa3_rate_limited_rpc_stalls_the_watcher' (293641) panicked at crates/core/src/driver.rs:736:13:
+assertion `left == right` failed: A fixed window 10 per 150 ms
+  left: Some(1030)
+ right: None
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 151 filtered out; finished in 30.14s

@@ -1,0 +1,24 @@
+$ RV_VAL_DB_DIR=<scratch> cargo test -p validator --bins poc_f_val_066_run3 -- --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3, module wired into service/effect.rs, reverted)
+test service::effect::poc_f_val_066_run3::same_input_spawn_then_prune_race ... round  0: keygen_secrets row = None
+round  1: keygen_secrets row = None
+round  2: keygen_secrets row = None
+round  3: keygen_secrets row = None
+round  4: keygen_secrets row = None
+round  5: keygen_secrets row = None
+round  6: keygen_secrets row = None
+round  7: keygen_secrets row = None
+round  8: keygen_secrets row = None
+round  9: keygen_secrets row = None
+round 10: keygen_secrets row = None
+round 11: keygen_secrets row = None
+round 12: keygen_secrets row = None
+round 13: keygen_secrets row = None
+round 14: keygen_secrets row = None
+round 15: keygen_secrets row = None
+round 16: keygen_secrets row = None
+round 17: keygen_secrets row = None
+round 18: keygen_secrets row = None
+round 19: keygen_secrets row = None
+same-input spawn then prune, 20 rounds on 2 workers: secret lost in 20, retained in 0
+test service::effect::poc_f_val_066_run3::short_outage_prune_precedes_every_accepted_reconciliation ... short outage: after New(999) prune row = None; after the first accepted reconciliation (1000) row = None
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.15s

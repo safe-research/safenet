@@ -1,0 +1,63 @@
+[review-cargo] 1 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-val; rebuilding them
+   Compiling validator v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-val/crates/validator)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.19s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-val/debug/deps/validator-dd9411993fa56ac3)
+
+running 11 tests
+test frost::poc_f_val_001::impostor_recovers_victim_signing_share ... ok
+test frost::poc_f_val_001::impostor_share_verifies_and_group_finalizes ... ok
+test frost::poc_f_val_001::pad_opens_two_recipients_slots ... ok
+test frost::poc_f_val_001_run3::v1_copy_q_keep_own_pop_rejected ... FAILED
+test frost::poc_f_val_001_run3::v2_copy_q_and_pop_verbatim_rejected ... FAILED
+test frost::poc_f_val_001_run3::v3_scalar_related_q_rejected ... FAILED
+test frost::poc_f_val_001_run3::v4_additive_related_q_rejected ... FAILED
+test frost::poc_f_val_001_run3::v5_negated_q_rejected ... FAILED
+test frost::poc_f_val_001_run3::v6_random_pop_rejected ... FAILED
+test frost::poc_f_val_001_run3::v7_identity_q_trivial_pop_rejected ... ok
+test frost::poc_f_val_001_run3::v8_owned_key_harvest_opens_no_victim_slot ... ok
+
+failures:
+
+---- frost::poc_f_val_001_run3::v1_copy_q_keep_own_pop_rejected stdout ----
+
+thread 'frost::poc_f_val_001_run3::v1_copy_q_keep_own_pop_rejected' (102327) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F-VAL-001/run3/poc_variants.rs:85:26:
+v1 copy q, own pop: impostor commitment ACCEPTED, F-VAL-001 step 2 holds
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- frost::poc_f_val_001_run3::v2_copy_q_and_pop_verbatim_rejected stdout ----
+
+thread 'frost::poc_f_val_001_run3::v2_copy_q_and_pop_verbatim_rejected' (102328) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F-VAL-001/run3/poc_variants.rs:85:26:
+v2 copy q and pop: impostor commitment ACCEPTED, F-VAL-001 step 2 holds
+
+---- frost::poc_f_val_001_run3::v3_scalar_related_q_rejected stdout ----
+
+thread 'frost::poc_f_val_001_run3::v3_scalar_related_q_rejected' (102329) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F-VAL-001/run3/poc_variants.rs:85:26:
+v3a 2*q_A, own pop: impostor commitment ACCEPTED, F-VAL-001 step 2 holds
+
+---- frost::poc_f_val_001_run3::v4_additive_related_q_rejected stdout ----
+
+thread 'frost::poc_f_val_001_run3::v4_additive_related_q_rejected' (102330) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F-VAL-001/run3/poc_variants.rs:85:26:
+v4 q_A + G, own pop: impostor commitment ACCEPTED, F-VAL-001 step 2 holds
+
+---- frost::poc_f_val_001_run3::v5_negated_q_rejected stdout ----
+
+thread 'frost::poc_f_val_001_run3::v5_negated_q_rejected' (102335) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F-VAL-001/run3/poc_variants.rs:85:26:
+v5a -q_A, own pop: impostor commitment ACCEPTED, F-VAL-001 step 2 holds
+
+---- frost::poc_f_val_001_run3::v6_random_pop_rejected stdout ----
+
+thread 'frost::poc_f_val_001_run3::v6_random_pop_rejected' (102336) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F-VAL-001/run3/poc_variants.rs:85:26:
+v6 copy q, random pop: impostor commitment ACCEPTED, F-VAL-001 step 2 holds
+
+
+failures:
+    frost::poc_f_val_001_run3::v1_copy_q_keep_own_pop_rejected
+    frost::poc_f_val_001_run3::v2_copy_q_and_pop_verbatim_rejected
+    frost::poc_f_val_001_run3::v3_scalar_related_q_rejected
+    frost::poc_f_val_001_run3::v4_additive_related_q_rejected
+    frost::poc_f_val_001_run3::v5_negated_q_rejected
+    frost::poc_f_val_001_run3::v6_random_pop_rejected
+
+test result: FAILED. 5 passed; 6 failed; 0 ignored; 0 measured; 41 filtered out; finished in 1.45s
+
+error: test failed, to rerun pass `-p validator --bin validator`

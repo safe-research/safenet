@@ -1,0 +1,39 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins qa2_sen::f2_sen_005 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood ... [F2-SEN-005] rate=5/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=150 commits submitted=150 commits dropped=0 reveals submitted=150 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005] rate=8/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=240 commits submitted=232 commits dropped=8 reveals submitted=240 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005] rate=10/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=300 commits submitted=212 commits dropped=88 reveals submitted=300 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005] rate=12/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=360 commits submitted=192 commits dropped=168 reveals submitted=360 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005] rate=16/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=480 commits submitted=152 commits dropped=328 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005] rate=17/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=510 commits submitted=152 commits dropped=358 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=8 first slashable proposal block=Some(1)
+[F2-SEN-005] rate=20/block x 30 blocks (CW=10, RW=10, cap=16, all mined next block): proposals=600 commits submitted=152 commits dropped=448 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=24 first slashable proposal block=Some(1)
+
+thread 'service::tests::qa2_sen::f2_sen_005_reveal_starvation_under_proposal_flood' (219093) panicked at crates/sentinel/src/service.rs:3917:13:
+assertion `left == right` failed: F2-SEN-005 (ii) reproduced: 32 commitments across the modelled rates were submitted while their Reveal expired unsubmitted behind the FIFO backlog
+  left: 32
+ right: 0
+FAILED
+test service::tests::qa2_sen::f2_sen_005_run3_aegis_windows ... [F2-SEN-005 run3] CW=6 RW=6 rate=1/block x 30 blocks (cap=16, all mined next block): proposals=30 commits submitted=30 commits dropped=0 reveals submitted=30 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=6 RW=6 rate=4/block x 30 blocks (cap=16, all mined next block): proposals=120 commits submitted=120 commits dropped=0 reveals submitted=120 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=6 RW=6 rate=8/block x 30 blocks (cap=16, all mined next block): proposals=240 commits submitted=184 commits dropped=56 reveals submitted=240 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=6 RW=6 rate=12/block x 30 blocks (cap=16, all mined next block): proposals=360 commits submitted=136 commits dropped=224 reveals submitted=360 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=6 RW=6 rate=16/block x 30 blocks (cap=16, all mined next block): proposals=480 commits submitted=88 commits dropped=392 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=6 RW=6 rate=17/block x 30 blocks (cap=16, all mined next block): proposals=510 commits submitted=88 commits dropped=422 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=4 first slashable proposal block=Some(1)
+[F2-SEN-005 run3] CW=6 RW=6 rate=20/block x 30 blocks (cap=16, all mined next block): proposals=600 commits submitted=88 commits dropped=512 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=12 first slashable proposal block=Some(1)
+[F2-SEN-005 run3] CW=6 RW=6 rate=32/block x 30 blocks (cap=16, all mined next block): proposals=960 commits submitted=88 commits dropped=872 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=24 first slashable proposal block=Some(1)
+[F2-SEN-005 run3] CW=2 RW=3 rate=1/block x 30 blocks (cap=16, all mined next block): proposals=30 commits submitted=30 commits dropped=0 reveals submitted=30 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=2 RW=3 rate=4/block x 30 blocks (cap=16, all mined next block): proposals=120 commits submitted=120 commits dropped=0 reveals submitted=120 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=2 RW=3 rate=8/block x 30 blocks (cap=16, all mined next block): proposals=240 commits submitted=136 commits dropped=104 reveals submitted=240 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=2 RW=3 rate=12/block x 30 blocks (cap=16, all mined next block): proposals=360 commits submitted=80 commits dropped=280 reveals submitted=360 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=2 RW=3 rate=16/block x 30 blocks (cap=16, all mined next block): proposals=480 commits submitted=24 commits dropped=456 reveals submitted=480 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=2 RW=3 rate=17/block x 30 blocks (cap=16, all mined next block): proposals=510 commits submitted=24 commits dropped=486 reveals submitted=496 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=2 RW=3 rate=20/block x 30 blocks (cap=16, all mined next block): proposals=600 commits submitted=24 commits dropped=576 reveals submitted=496 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+[F2-SEN-005 run3] CW=2 RW=3 rate=32/block x 30 blocks (cap=16, all mined next block): proposals=960 commits submitted=24 commits dropped=936 reveals submitted=496 reveals DROPPED after a submitted commit (slashable)=0 first slashable proposal block=None
+
+thread 'service::tests::qa2_sen::f2_sen_005_run3_aegis_windows' (219136) panicked at crates/sentinel/src/service.rs:3949:13:
+assertion `left == right` failed: F2-SEN-005 (ii) at Aegis/testnet windows: 40 commitments submitted while their Reveal expired unsubmitted behind the FIFO backlog
+  left: 40
+ right: 0
+FAILED

@@ -1,0 +1,22 @@
+# F3-SEN-060 contract half with no network. No fork and no rpc_endpoints: the USDC.e code and
+# storage come from src/UsdcCode.sol. Paths are relative to a checkout of the audit commit 361aaf3.
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+cache_path = "cache"
+libs = []
+offline = true
+solc_version = "0.8.30"
+evm_version = "prague"
+# Production settings for SentinelOracle.sol (contracts/foundry.toml, "optimized" profile).
+optimizer = true
+optimizer_runs = 1000000
+via_ir = true
+auto_detect_remappings = false
+allow_paths = ["../../../../contracts"]
+remappings = [
+  "@/=../../../../contracts/src/",
+  "@oz/=../../../../contracts/lib/openzeppelin-contracts/contracts/",
+  "forge-std/=../../../../contracts/lib/forge-std/src/",
+]

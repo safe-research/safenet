@@ -1,0 +1,14 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/validator-3a1b46af57fe89be)
+
+running 1 test
+test frost::poc_v_val_q6::signing_with_a_nonce_that_does_not_match_the_revealed_commitment_is_rejected ... 
+=== VAL-Q6 result ===
+stale-nonce signature_share -> Err(Unexpected(IncorrectCommitment))
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 35 filtered out; finished in 0.06s
+

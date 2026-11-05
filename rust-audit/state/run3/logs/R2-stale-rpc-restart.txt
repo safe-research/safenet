@@ -1,0 +1,40 @@
+# R2: restart against an RPC node whose head is below the oldest retained snapshot (run 3, audit commit 361aaf3)
+# Harness: $RUN/scratch/R2/poc (copy: R2-harness-main.rs.txt and R2-harness-Cargo.toml.txt; not part of the repo). It depends on crates/core of wt/base (HEAD 361aaf3b25e12d2e04f296184c326830968f3727) with feature test-util, built with the workspace Cargo.lock (--offline).
+# Run 1 drives the real StateMachine like Driver::update does (New{n}, empty Logs{n}, prune(n - 5)) for n = 1000..=1006, leaving snapshots 1001..=1006.
+# Run 2 builds the real Driver (default config: max_reorg_depth 5, Gnosis timings via chain id 100) on the same pool, with a mocked RPC whose latest block is <head>, and runs Driver::run for at most 5 s.
+# Command: ./target/debug/r2-poc restart <head>
+# Expected if stale heads were tolerated: no ERROR line, Driver::run still running after 5 s.
+
+===== head=999
+run 1 done: persisted snapshot range Some(BlockStatus { latest: 1006, safe: 1001 })
+run 2: driver created with RPC head 999; running
+2026-10-08T17:35:14.846549Z ERROR safenet_core::driver: unrecoverable driver error; exiting err=State(BadUpdate)
+run 2: Driver::run returned (the binary's main would now exit)
+run 2: snapshots left: [1001]
+
+===== head=1000
+run 1 done: persisted snapshot range Some(BlockStatus { latest: 1006, safe: 1001 })
+run 2: driver created with RPC head 1000; running
+2026-10-08T17:35:14.960989Z ERROR safenet_core::driver: unrecoverable driver error; exiting err=State(BadUpdate)
+run 2: Driver::run returned (the binary's main would now exit)
+run 2: snapshots left: [1001]
+
+===== head=1001
+run 1 done: persisted snapshot range Some(BlockStatus { latest: 1006, safe: 1001 })
+run 2: driver created with RPC head 1001; running
+2026-10-08T17:35:15.086644Z  WARN safenet_core::driver: failed to get next blockchain update; retrying after delay err=Blocks(Rpc(Transport(Custom("empty asserter response queue for request with id 14 and method eth_getBlockByNumber"))))
+2026-10-08T17:35:15.188801Z  WARN safenet_core::driver: failed to get next blockchain update; retrying after delay err=Blocks(Rpc(Transport(Custom("empty asserter response queue for request with id 15 and method eth_getBlockByNumber"))))
+run 2: Driver::run still running after 5 s (no fatal error)
+run 2: snapshots left: [1001, 1002, 1003, 1004, 1005]
+[... 47 more identical WARN retry lines: the mocked RPC has no more responses ...]
+
+===== head=1006
+run 1 done: persisted snapshot range Some(BlockStatus { latest: 1006, safe: 1001 })
+run 2: driver created with RPC head 1006; running
+2026-10-08T17:35:20.142230Z  WARN safenet_core::driver: failed to get next blockchain update; retrying after delay err=Blocks(Rpc(Transport(Custom("empty asserter response queue for request with id 19 and method eth_getBlockByNumber"))))
+2026-10-08T17:35:20.243745Z  WARN safenet_core::driver: failed to get next blockchain update; retrying after delay err=Blocks(Rpc(Transport(Custom("empty asserter response queue for request with id 20 and method eth_getBlockByNumber"))))
+run 2: Driver::run still running after 5 s (no fatal error)
+run 2: snapshots left: [1005, 1006, 1007, 1008, 1009, 1010]
+[... 46 more identical WARN retry lines: the mocked RPC has no more responses ...]
+
+# Harness source (src/main.rs) sha256: caaf9e6d22b277690c04cde9cef224701c2500f3f71ff069b971f135f2b09ef4

@@ -1,0 +1,81 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+
+running 18 tests
+test service::tests::rv_sen_run3::f2_sen_010_run3_a_live_deadline_block_commit_is_tallied ... [F2-SEN-010 run3 a] after Revealed(self)@107: commands=[] entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[F2-SEN-010 run3 a] Revealed(OTHER) + OracleResult@108 → [Action(SentinelAction { kind: Finalize { id: 0xda031202cb8d7b4a7b9488e2d0f8fe690a34fc045194fefc4c988f2c9012df05 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0xda031202cb8d7b4a7b9488e2d0f8fe690a34fc045194fefc4c988f2c9012df05 }, expires_at: None })]
+ok
+test service::tests::rv_sen_run3::f2_sen_010_run3_b_restart_warp_tallies_the_deadline_block ... [F2-SEN-010 run3 b] warp page 102..=107 → [Action(SentinelAction { kind: Reveal { id: 0x5ac3838b5eaa6605899f3e4940bac45a53070e92037319aad7a29f7830e64587, approve: true, salt: 0xb691a022ac5849f6d94710684b3a9a2af081c91a83327ef6791b904770e741d1, reason: "" }, expires_at: Some(112) })]; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[F2-SEN-010 run3 b] warp page 108..=110 → [Action(SentinelAction { kind: Finalize { id: 0x5ac3838b5eaa6605899f3e4940bac45a53070e92037319aad7a29f7830e64587 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0x5ac3838b5eaa6605899f3e4940bac45a53070e92037319aad7a29f7830e64587 }, expires_at: None })]
+ok
+test service::tests::rv_sen_run3::f2_sen_010_run3_c_restart_replays_the_deadline_block ... [F2-SEN-010 run3 c] replayed cd → [Action(SentinelAction { kind: Reveal { id: 0x7ccf0ff6c1f737530240a440ddb63e230956c50b0c4c59e09761347419fd576b, approve: true, salt: 0x782f4f7efaafb23a09983c156a796f7026f791e856c2c99d7ea2fb5a90ed0e9a, reason: "" }, expires_at: Some(112) })]; Revealed(self) → []; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+ok
+test service::tests::rv_sen_run3::f2_sen_010_run3_d_reorg_of_the_deadline_block ... [F2-SEN-010 run3 d] replacement cd → [Action(SentinelAction { kind: Reveal { id: 0xc93d35d0140c178d95a1a519ada5486a055ad9ba576dd3b4f92ddc02df3ab5a2, approve: true, salt: 0x119c44cd24c38b9843243317c94a1f00ae936a3ed017e6d8fa0a7abc67dc56d5, reason: "" }, expires_at: Some(112) })]; Revealed(self) → []; entry=Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 112, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+ok
+test service::tests::rv_sen_run3::f2_sen_010_run3_e_adversarial_deadline_committer_never_reveals ... [F2-SEN-010 run3 e] early Finalize=false; NewBlock(113) → [Action(SentinelAction { kind: Finalize { id: 0xb33e9ce408bb70a09dc665a3615c314e16a961edb85cb28048d8d9a024fc97b4 }, expires_at: None })]
+ok
+test service::tests::rv_sen_run3::f2_sen_011_run3_non_revealer_timeout_is_metered_as_full_refund ... [F2-SEN-011 run3] NewBlock(rd+1) → [Action(SentinelAction { kind: Finalize { id: 0x8c030899081defe8bd86aab07f685f2afab9422cea0d43d532405774160cb70e }, expires_at: None })] state Some(WaitingForOutcome { approve: true, slash_amount: 500 }); DisputeTriggered → [] state Some(WaitingForDisputeResolution { approve: true, slash_amount: 500, arbitration_deadline: 162 }); NewBlock(deadline+1) → [Action(SentinelAction { kind: TimeoutArbitration { id: 0x8c030899081defe8bd86aab07f685f2afab9422cea0d43d532405774160cb70e }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0x8c030899081defe8bd86aab07f685f2afab9422cea0d43d532405774160cb70e }, expires_at: None })] tracked=false
+ok
+test service::tests::rv_sen_run3::f_sen_001_run3_live_reorg_drops_resume_then_discards_own_commit ... [F-SEN-001 run3 c] replacement 101 → []; replacement 102 (own Committed) → []; entry=Some(WaitingForEngineCheck { deadline: 110, request: Some(Request { bond_target: 500, slash_amount: 500, commit_deadline: 106, reveal_deadline: 112 }) })
+[F-SEN-001 run3 c] reveal_emitted=false check_reissued=false tracked_at_reveal_deadline=false
+
+thread 'service::tests::rv_sen_run3::f_sen_001_run3_live_reorg_drops_resume_then_discards_own_commit' (219287) panicked at crates/sentinel/src/service.rs:4560:13:
+F-SEN-001 variant (c) reproduced at 361aaf3: depth-2 reorg restored snapshot 100 (WaitingForEngineCheck), the resume was lost, no check was re-issued, our replayed Committed was discarded and no Reveal was emitted through the reveal deadline
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test service::tests::rv_sen_run3::f_sen_002_run3_mirror_case_recovers_when_the_last_reveal_auto_finalizes ... [F-SEN-002 run3 mirror] Revealed(self) → [Action(SentinelAction { kind: Finalize { id: 0x7c33d2ce51683642a6af54556bea5845e378d99280a20fde435c3ae8c59b2410 }, expires_at: None })] state Some(WaitingForOutcome { approve: true, slash_amount: 500 }); Revealed(A) → []; OracleResult → [Action(SentinelAction { kind: Claim { id: 0x7c33d2ce51683642a6af54556bea5845e378d99280a20fde435c3ae8c59b2410 }, expires_at: None })]; tracked=false
+ok
+test service::tests::rv_sen_run3::f_sen_003_run3_downtime_over_reveal_window_claims_after_arbitration ... [F-SEN-003 run3] anchor 101 = Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 106, reveal_deadline: 112, committed_count: 1, self_committed: true })
+[F-SEN-003 run3] warp page commands=[Action(SentinelAction { kind: Reveal { id: 0x8d43b88fa768b65583bb304bf6e676ba9cad6be77d3d5ecf6fca7bc527d97ab8, approve: true, salt: 0x1c8553cc13c172275b422826b06e8c571fca2921efd99081e8d6975a9797abba, reason: "" }, expires_at: Some(112) })]; entry after page=None
+[F-SEN-003 run3] DisputeResolved@122 → []
+
+thread 'service::tests::rv_sen_run3::f_sen_003_run3_downtime_over_reveal_window_claims_after_arbitration' (219291) panicked at crates/sentinel/src/service.rs:5127:13:
+bonded entry dropped inside the warp at NewBlock(113) (self_revealed=false, 2 reveals counted); DisputeTriggered and DisputeResolved ignored as untracked; bondTarget minus slashAmount never claimed
+FAILED
+test service::tests::rv_sen_run3::f_sen_005_run3_dispute_times_out_live_and_in_a_warp ... [F-SEN-005 run3] in_warp=false arbitration_deadline=158 actions=[Action(SentinelAction { kind: TimeoutArbitration { id: 0x0839adafbc69d23200ea9260c3b490645074d5cf60629fcfa042e0bfe245057f }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0x0839adafbc69d23200ea9260c3b490645074d5cf60629fcfa042e0bfe245057f }, expires_at: None })]
+[F-SEN-005 run3] in_warp=true arbitration_deadline=158 actions=[Action(SentinelAction { kind: TimeoutArbitration { id: 0xace4566b506def0b5fb2daa63ba718eb495acc4761f28f17badb5aab93306caa }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0xace4566b506def0b5fb2daa63ba718eb495acc4761f28f17badb5aab93306caa }, expires_at: None })]
+ok
+test service::tests::rv_sen_run3::f_sen_006_run3_restart_re_emits_the_reveal ... [F-SEN-006 run3] before restart → [Action(SentinelAction { kind: Reveal { id: 0xc7eb2c2c992b3c075e158e582af4fefb3711b17461124cde0053a337d8de6371, approve: true, salt: 0xc48373faefd98eb161dd13390e923c96e23b370208510860bd27ffed63acc95d, reason: "" }, expires_at: Some(112) })]; Reveal rows emitted again after restart: 1
+
+thread 'service::tests::rv_sen_run3::f_sen_006_run3_restart_re_emits_the_reveal' (219300) panicked at crates/sentinel/src/service.rs:5315:13:
+assertion `left == right` failed: a second Reveal row is queued for the same request (no idempotency key)
+  left: 1
+ right: 0
+FAILED
+test service::tests::rv_sen_run3::f_sen_011_run3_restart_strands_in_flight_check_from_anchor_block ... [F-SEN-011 run3] after restart: checks re-issued=[]; tracked after commit deadline=false
+
+thread 'service::tests::rv_sen_run3::f_sen_011_run3_restart_strands_in_flight_check_from_anchor_block' (219303) panicked at crates/sentinel/src/service.rs:4606:13:
+F-SEN-011 reproduced at 361aaf3: the in-flight check died with the process, the anchor snapshot holds WaitingForEngineCheck without the transaction, no check was re-issued and the request expired at the commit deadline without a vote
+FAILED
+test service::tests::rv_sen_run3::f_sen_014_run3_finalize_after_auto_finalize ... [F-SEN-014 run3] Revealed(self) → []; last Revealed(OTHER) → [Action(SentinelAction { kind: Finalize { id: 0xa31709017f4dab40e2a1ae48bbd55cb7687ba16e6d4f90adc024f89bd4567677 }, expires_at: None })]; OracleResult (same tx) → [Action(SentinelAction { kind: Claim { id: 0xa31709017f4dab40e2a1ae48bbd55cb7687ba16e6d4f90adc024f89bd4567677 }, expires_at: None })]; tracked=false
+
+thread 'service::tests::rv_sen_run3::f_sen_014_run3_finalize_after_auto_finalize' (219306) panicked at crates/sentinel/src/service.rs:5213:13:
+a Finalize is emitted for a request the oracle already finalized in the same transaction; it reverts RequestNotPending (#964's own test)
+FAILED
+test service::tests::rv_sen_run3::f_sen_015_run3_concurrent_checks_resume_with_one_verdict ... [F-SEN-015 run3 v3] concurrent checks resumed with Denied(RuleId(3, 4)) and Denied(RuleId(3, 4))
+ok
+test service::tests::rv_sen_run3::f_sen_015_run3_engine_down_on_replay_still_reveals ... [F-SEN-015 run3 v2] unreachable engine answers Unknown; replayed check resumed with Denied(RuleId(2, 1))
+[F-SEN-015 run3 v2] NewBlock(21) → [Action(SentinelAction { kind: Reveal { id: 0x031cc2f11ba068bd4b0c8a21919dfc5a7bfebeca9fc0d2c90bd8ef99206216ae, approve: false, salt: 0x9a12fee5893e9be823b86e7a4b53e1504b7f8ee41938facfb04f2ab5c465e125, reason: "R-2.1" }, expires_at: Some(40) })]
+ok
+test service::tests::rv_sen_run3::f_sen_015_run3_replayed_check_reuses_the_committed_verdict ... [F-SEN-015 run3 v1] replayed check resumed with Denied(RuleId(2, 1)) (engine's live answer would be R-3.4)
+[F-SEN-015 run3 v1] NewBlock(21) → [Action(SentinelAction { kind: Reveal { id: 0x0eab17c7e938b286dc3d6b87bf7148fc1ba91634767ec4cba43d522b3ef616b7, approve: false, salt: 0x4fb53d5570ddb192c92d5923bbd4469036aad4be28d0711d70b3981b94aee12c, reason: "R-2.1" }, expires_at: Some(40) })]
+ok
+test service::tests::rv_sen_run3::f_sen_015_run3_restart_replay_reuses_the_recorded_verdict ... [F-SEN-015 run3 v4] restart replay: check resumed with Approved (engine's live answer would be R-4.1)
+ok
+test service::tests::rv_sen_run3::f_sen_015_run3_verdict_retained_until_the_snapshot_boundary ... [F-SEN-015 run3 v5] prune(safe=100) removed 0, kept Some(Denied(RuleId(2, 1))); prune(safe=101) removed 1, then None
+ok
+
+failures:
+
+failures:
+    service::tests::rv_sen_run3::f_sen_001_run3_live_reorg_drops_resume_then_discards_own_commit
+    service::tests::rv_sen_run3::f_sen_003_run3_downtime_over_reveal_window_claims_after_arbitration
+    service::tests::rv_sen_run3::f_sen_006_run3_restart_re_emits_the_reveal
+    service::tests::rv_sen_run3::f_sen_011_run3_restart_strands_in_flight_check_from_anchor_block
+    service::tests::rv_sen_run3::f_sen_014_run3_finalize_after_auto_finalize
+
+test result: FAILED. 13 passed; 5 failed; 0 ignored; 0 measured; 73 filtered out; finished in 0.55s
+
+error: test failed, to rerun pass `-p sentinel --bin sentinel`

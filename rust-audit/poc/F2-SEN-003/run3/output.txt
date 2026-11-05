@@ -1,0 +1,27 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins qa2_sen::f2_sen_003 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::qa2_sen::f2_sen_003a_finalize_drops_bonded_entry_when_own_reveal_unobserved ... [F2-SEN-003a] NewBlock(131): tracked=false commands=[]
+[F2-SEN-003a] OracleResult@132 → []; tracked=false
+
+thread 'service::tests::qa2_sen::f2_sen_003a_finalize_drops_bonded_entry_when_own_reveal_unobserved' (219086) panicked at crates/sentinel/src/service.rs:3518:13:
+F2-SEN-003 reproduced: bonded entry (self_committed) dropped at reveal_deadline + 1 with self_revealed=false and one reveal counted; no Finalize, no Claim, OracleResult ignored
+FAILED
+test service::tests::qa2_sen::f2_sen_003b_restart_in_reveal_window_discards_own_reveal_then_drops ... [F2-SEN-003b] warp page commands: [Action(SentinelAction { kind: Reveal { id: 0x512c9b96760a8b79e92d78c485699641e30204c6d8b9a3c6cb19f083d0d9c4cb, approve: true, salt: 0x6f694265eb8e13c4170f7656b6df2f7eecea23628daaca02185fdf15538dc36d, reason: "" }, expires_at: Some(130) })]
+[F2-SEN-003b] after warp page carrying Revealed(self)@122: Some(CollectingVotes { approve: true, slash_amount: 500, reveal_deadline: 130, committed_count: 2, revealed_count: 1, approve_count: 1, deny_count: 0, self_revealed: true })
+[F2-SEN-003b] NewBlock(125) → []
+[F2-SEN-003b] NewBlock(131): commands=[] tracked=true
+[F2-SEN-003b] OracleResult@132 → [Action(SentinelAction { kind: Claim { id: 0x512c9b96760a8b79e92d78c485699641e30204c6d8b9a3c6cb19f083d0d9c4cb }, expires_at: None })]
+ok
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3::f_sen_003 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::rv_sen_run3::f_sen_003_run3_downtime_over_reveal_window_claims_after_arbitration ... [F-SEN-003 run3] anchor 101 = Some(CollectingCommitments { approve: true, reason: "", slash_amount: 500, commit_deadline: 106, reveal_deadline: 112, committed_count: 1, self_committed: true })
+[F-SEN-003 run3] warp page commands=[Action(SentinelAction { kind: Reveal { id: 0x8d43b88fa768b65583bb304bf6e676ba9cad6be77d3d5ecf6fca7bc527d97ab8, approve: true, salt: 0x1c8553cc13c172275b422826b06e8c571fca2921efd99081e8d6975a9797abba, reason: "" }, expires_at: Some(112) })]; entry after page=None
+[F-SEN-003 run3] DisputeResolved@122 → []
+
+thread 'service::tests::rv_sen_run3::f_sen_003_run3_downtime_over_reveal_window_claims_after_arbitration' (219291) panicked at crates/sentinel/src/service.rs:5127:13:
+bonded entry dropped inside the warp at NewBlock(113) (self_revealed=false, 2 reveals counted); DisputeTriggered and DisputeResolved ignored as untracked; bondTarget minus slashAmount never claimed
+FAILED

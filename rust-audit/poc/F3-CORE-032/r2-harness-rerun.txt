@@ -1,0 +1,30 @@
+===== r2-poc lost-effect 1001
+run 1 done: effect-emitting event in block 1001; effects performed: 1; persisted snapshot range Some(BlockStatus { latest: 1006, safe: 1001 })
+after run 1: snapshot 1001: waiting_for_resume = true
+after run 1: snapshot 1002: waiting_for_resume = false
+after run 1: snapshot 1003: waiting_for_resume = false
+after run 1: snapshot 1004: waiting_for_resume = false
+after run 1: snapshot 1005: waiting_for_resume = false
+after run 1: snapshot 1006: waiting_for_resume = false
+run 2: effects performed after the restart: 0
+after run 2: snapshot 1003: waiting_for_resume = true
+after run 2: snapshot 1004: waiting_for_resume = true
+after run 2: snapshot 1005: waiting_for_resume = true
+after run 2: snapshot 1006: waiting_for_resume = true
+after run 2: snapshot 1007: waiting_for_resume = true
+after run 2: snapshot 1008: waiting_for_resume = true
+===== r2-poc lost-effect 1002
+run 1 done: effect-emitting event in block 1002; effects performed: 1; persisted snapshot range Some(BlockStatus { latest: 1006, safe: 1001 })
+after run 1: snapshot 1001: waiting_for_resume = false
+after run 1: snapshot 1002: waiting_for_resume = true
+after run 1: snapshot 1003: waiting_for_resume = false
+after run 1: snapshot 1004: waiting_for_resume = false
+after run 1: snapshot 1005: waiting_for_resume = false
+after run 1: snapshot 1006: waiting_for_resume = false
+run 2: effects performed after the restart: 1
+after run 2: snapshot 1003: waiting_for_resume = true
+after run 2: snapshot 1004: waiting_for_resume = true
+after run 2: snapshot 1005: waiting_for_resume = true
+after run 2: snapshot 1006: waiting_for_resume = true
+after run 2: snapshot 1007: waiting_for_resume = false
+after run 2: snapshot 1008: waiting_for_resume = false

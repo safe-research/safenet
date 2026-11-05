@@ -1,0 +1,32 @@
+[review-cargo] 3 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-sen; rebuilding them
+   Compiling safenet-core v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/crates/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.86s
+     Running unittests src/lib.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-sen/debug/deps/safenet_core-1a555efd99e0fbb6)
+
+running 1 test
+test driver::qa3_too_soon_tests::qa3_client_filtering_loses_events_inside_a_short_too_soon_window ... too-soon window 200 ms: events applied from blocks [1003]
+    41 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    170 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    303 ms after the header: logs of block 1003 (all logs) -> 1 log(s)
+too-soon window 500 ms: events applied from blocks []
+    33 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    174 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    307 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    437 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+    442 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+too-soon window 1000 ms: events applied from blocks []
+    35 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    177 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    310 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    445 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+    448 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+too-soon window 2000 ms: events applied from blocks []
+    37 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    180 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    313 ms after the header: logs of block 1003 (all logs) -> 0 log(s)
+    451 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+    453 ms after the header: logs of block 1003 (one event) -> 0 log(s)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 151 filtered out; finished in 9.17s
+

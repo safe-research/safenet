@@ -1,0 +1,15 @@
+diff --git a/crates/core/src/tx/fees.rs b/crates/core/src/tx/fees.rs
+index 609d25c..1946ed9 100644
+--- a/crates/core/src/tx/fees.rs
++++ b/crates/core/src/tx/fees.rs
+@@ -52,7 +52,9 @@ pub fn bump(fresh: Eip1559Estimation, previous: Option<Eip1559Estimation>) -> Ei
+ /// Returns `fresh`, raised to at least 10% above `previous`.
+ fn bump_fee(fresh: u128, previous: u128) -> u128 {
+     let bumped = previous.saturating_add(previous.div_ceil(10));
+-    fresh.max(bumped)
++    // QA3 bite check (F3-CORE-060 remediation 1): never bump above a multiple
++    // of the fresh estimate; at the ceiling, rebroadcast at the same fee.
++    fresh.max(bumped).min(fresh.saturating_mul(3))
+ }
+ 
+ #[cfg(test)]

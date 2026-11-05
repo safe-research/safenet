@@ -1,0 +1,19 @@
+# rv-xc run 3, F-XC-008 items 2 and 3, first execution: engine_client_defaults_test.rs pasted into mod tests of crates/sentinel/src/engine.rs (worktree wt/rv-xc at 361aaf3), reverted with git checkout afterwards; loopback listeners only (the proxy on the rv-xc port 31605)
+## cargo test --offline --locked -p sentinel --bins engine::tests::rv_xc_008::rv_xc_008_redirect -- --nocapture
+
+running 1 test
+configured engine http://127.0.0.1:45987/ answered 307 -> http://127.0.0.1:37633/elsewhere
+redirect target received: "POST /elsewhere HTTP/1.1"; body carries the Safe: true
+outcome taken from the redirect target: Approved
+test engine::tests::rv_xc_008::rv_xc_008_redirect_reposts_the_transaction_to_another_host ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 51 filtered out; finished in 0.03s
+
+## HTTP_PROXY=http://127.0.0.1:31605 cargo test --offline --locked -p sentinel --bins engine::tests::rv_xc_008::rv_xc_008_proxy -- --nocapture
+
+running 1 test
+HTTP_PROXY=http://127.0.0.1:31605/; proxy received: "POST http://engine.invalid:5473/v1/security-check HTTP/1.1"; outcome: Approved
+test engine::tests::rv_xc_008::rv_xc_008_proxy_environment_is_honoured ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 51 filtered out; finished in 0.02s
+

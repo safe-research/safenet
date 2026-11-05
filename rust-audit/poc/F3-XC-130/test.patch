@@ -1,0 +1,27 @@
+diff --git a/crates/core/src/provider/mod.rs b/crates/core/src/provider/mod.rs
+index febc353..5ae49aa 100644
+--- a/crates/core/src/provider/mod.rs
++++ b/crates/core/src/provider/mod.rs
+@@ -180,3 +180,22 @@ impl AlloyProvider<AnyNetwork> for Provider {
+         ProviderCall::Ready(Some(Ok(self.chain_id)))
+     }
+ }
++
++#[cfg(test)]
++mod qa3_tests {
++    use super::*;
++
++    #[tokio::test]
++    async fn qa3_connect_error_does_not_quote_the_rpc_url() {
++        for url in [
++            "htps://gnosis-mainnet.example.invalid/v2/QA3-SECRET-KEY",
++            "wws://gnosis-mainnet.example.invalid/v2/QA3-SECRET-KEY",
++        ] {
++            let err = Provider::connect(&url.parse().unwrap()).await.unwrap_err();
++            let (display, debug) = (err.to_string(), format!("{err:?}"));
++            println!("{url}: display={display} debug={debug}");
++            assert!(!display.contains("QA3-SECRET-KEY"), "{display}");
++            assert!(!debug.contains("QA3-SECRET-KEY"), "{debug}");
++        }
++    }
++}

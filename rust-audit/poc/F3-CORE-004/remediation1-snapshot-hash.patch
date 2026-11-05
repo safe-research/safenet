@@ -1,0 +1,124 @@
+--- f004a/crates/core/src/state/storage.rs	2026-10-09 01:07:32.352720917 +0530
++++ f004b/crates/core/src/state/storage.rs	2026-10-09 01:07:32.354679081 +0530
+@@ -50,7 +50,8 @@
+         sqlx::query(
+             "CREATE TABLE IF NOT EXISTS snapshots (
+                  block_number INTEGER PRIMARY KEY,
+-                 state        TEXT    NOT NULL
++                 state        TEXT    NOT NULL,
++                 block_hash   TEXT
+              )",
+         )
+         .execute(&pool)
+@@ -115,6 +116,29 @@
+         Ok(())
+     }
+ 
++    /// QA3 bite check (F3-CORE-004 remediation 1): records the hash of the
++    /// block a snapshot was taken at, when known.
++    pub async fn set_hash(&self, block_number: u64, hash: alloy::primitives::B256) -> Result<(), Error> {
++        sqlx::query("UPDATE snapshots SET block_hash = ? WHERE block_number = ?")
++            .bind(hash.to_string())
++            .bind(i64::try_from(block_number)?)
++            .execute(&self.pool)
++            .await?;
++        Ok(())
++    }
++
++    /// QA3 bite check: the recorded block hash of the snapshot at `block_number`.
++    pub async fn hash(&self, block_number: u64) -> Result<Option<alloy::primitives::B256>, Error> {
++        let hash = sqlx::query_as::<_, (Option<String>,)>(
++            "SELECT block_hash FROM snapshots WHERE block_number = ?",
++        )
++        .bind(i64::try_from(block_number)?)
++        .fetch_optional(&self.pool)
++        .await?
++        .and_then(|(hash,)| hash);
++        Ok(hash.map(|hash| hash.parse().expect("stored hashes are valid")))
++    }
++
+     /// Rolls the store back, discarding `uncle` and every snapshot above it, and
+     /// returns the parent block number and its restored state.
+     ///
+--- f004a/crates/core/src/state/mod.rs	2026-10-09 01:07:32.357720910 +0530
++++ f004b/crates/core/src/state/mod.rs	2026-10-09 01:07:32.360213532 +0530
+@@ -106,6 +106,9 @@
+     inner: Mutex<Option<(S, Status)>>,
+     snapshots: SnapshotStore<S>,
+     transition: T,
++    /// QA3 bite check: the last live block seen, to record its hash with its
++    /// snapshot.
++    last_new: Option<(u64, alloy::primitives::B256)>,
+ }
+ 
+ enum Status {
+@@ -152,9 +155,15 @@
+             inner,
+             snapshots,
+             transition,
++            last_new: None,
+         })
+     }
+ 
++    /// QA3 bite check: the recorded block hash of the snapshot at `block`.
++    pub async fn snapshot_hash(&self, block: u64) -> Result<Option<alloy::primitives::B256>, Error> {
++        Ok(self.snapshots.hash(block).await?)
++    }
++
+     /// Returns the bounds of the snapshots currently persisted by the state
+     /// machine.
+     ///
+@@ -174,6 +183,9 @@
+     ) -> Result<Commands<S, T>, Error> {
+         let mut lock = self.inner.lock().await;
+         let (state, status) = mem::take(&mut *lock).ok_or(Error::Poisoned)?;
++        if let Update::Block(BlockUpdate::New { number, hash, .. }) = &update {
++            self.last_new = Some((*number, *hash));
++        }
+         let (state, status, commands) = match update {
+             Update::Block(BlockUpdate::Warp { from, to })
+                 if matches!(status, Status::Initialized)
+@@ -255,6 +267,11 @@
+                 };
+ 
+                 self.snapshots.commit(blocks.last, &state).await?;
++                if let Some((number, hash)) = self.last_new
++                    && number == blocks.last
++                {
++                    self.snapshots.set_hash(number, hash).await?;
++                }
+ 
+                 // Optimistically apply the pending block's transition right
+                 // away instead of waiting for the block to be observed, so
+--- f004a/crates/core/src/driver.rs	2026-10-09 01:07:32.363720901 +0530
++++ f004b/crates/core/src/driver.rs	2026-10-09 01:07:32.371720890 +0530
+@@ -131,6 +131,29 @@
+         let state = StateMachine::new(transition, pool.clone()).await?;
+         let effects = EffectManager::new(effects);
+         let block_status = state.block_status().await?;
++        // QA3 bite check (F3-CORE-004 remediation 1): refuse to resume on a
++        // chain that no longer contains the block the oldest snapshot was
++        // taken at.
++        if let Some(status) = block_status
++            && let Some(hash) = state.snapshot_hash(status.safe).await?
++        {
++            use alloy::providers::Provider as _;
++            let node = provider
++                .get_block(alloy::eips::BlockId::number(status.safe))
++                .hashes()
++                .await
++                .map_err(|err| index::Error::from(index::blocks::Error::from(err)))?;
++            if node.map(|block| block.header.hash) != Some(hash) {
++                tracing::error!(
++                    block = status.safe,
++                    "the chain no longer contains the block the persisted state was built on"
++                );
++                return Err(index::Error::from(index::blocks::Error::ExceededMaxReorgDepth(
++                    config.index.blocks.max_reorg_depth,
++                ))
++                .into());
++            }
++        }
+         let watcher = Watcher::new(provider.clone(), config.index, addresses, block_status).await?;
+         let transactions =
+             TransactionQueue::new(provider, signer, pool, config.transactions).await?;

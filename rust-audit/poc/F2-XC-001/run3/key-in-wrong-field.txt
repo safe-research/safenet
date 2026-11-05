@@ -1,0 +1,21 @@
+# rv-xc: key pasted into the wrong field (validator built at 361aaf3); stderr only; marker = 32 hex digits of the fake key
+=== key in database
+Error: Transport(Custom(reqwest::Error { kind: Request, source: hyper_util::client::legacy::Error(Connect, ConnectError("tcp connect error", 127.0.0.1:9, Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) }))
+
+--- marker count: 0
+=== key in consensus
+Error: Parse(ParseError { position: Some((5, 13)), inner: Error { message: "invalid string length", input: None, keys: ["validator", "consensus"], span: Some(158..226) } })
+
+--- marker count: 0
+=== key in log_filter
+Error: Parse(ParseError { position: Some((12, 14)), inner: Error { message: "error parsing level filter: expected one of \"off\", \"error\", \"warn\", \"info\", \"debug\", \"trace\", or a number 0-5", input: None, keys: ["observability", "log_filter"], span: Some(480..555) } })
+
+--- marker count: 0
+=== key in genesis_salt
+Error: Parse(ParseError { position: Some((6, 16)), inner: Error { message: "invalid string length", input: None, keys: ["validator", "genesis_salt"], span: Some(218..288) } })
+
+--- marker count: 0
+=== key in rpc
+Error: Parse(ParseError { position: Some((1, 7)), inner: Error { message: "relative URL without a base", input: None, keys: ["rpc"], span: Some(6..74) } })
+
+--- marker count: 0

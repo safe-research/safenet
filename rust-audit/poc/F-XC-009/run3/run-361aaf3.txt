@@ -1,0 +1,9 @@
+# rv-xc run 3, F-XC-009: sample_key_tests.rs pasted into mod tests of crates/validator/src/config.rs and crates/sentinel/src/config.rs (worktree wt/rv-xc at 361aaf3), reverted with git checkout afterwards
+## cargo test --offline --locked -p validator --bins config::tests::rv_xc_009 -- --nocapture
+sample validator.sample.toml: rpc = https://rpc.gnosischain.com/, signer address = 0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf
+test config::tests::rv_xc_009_the_sample_loads_with_a_publicly_known_signer ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.00s
+## cargo test --offline --locked -p sentinel --bins config::tests::rv_xc_009 -- --nocapture
+sample sentinel.sample.toml: rpc = https://rpc.gnosischain.com/, signer address = 0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf
+test config::tests::rv_xc_009_the_sample_loads_with_a_publicly_known_signer ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.00s

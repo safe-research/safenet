@@ -1,0 +1,10 @@
+$ cargo test -p validator --bins poc_f2_val_006_unconditional_unaccountable_complaint_response
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/validator-3a1b46af57fe89be)
+
+running 1 test
+test state::keygen::poc_tests::poc_f2_val_006_unconditional_unaccountable_complaint_response ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.01s
+

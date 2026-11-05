@@ -1,0 +1,3 @@
+# QA2-XC PoC run for F2-XC-009, release profile (the profile the images ship: crates/*/Dockerfile:18 'cargo build --release'); commit 3ec8bc5
+# PoC source: poc/F2-XC-009/qa2_xc_009_blocks_test.rs, pasted into crates/core/src/index/blocks.rs 'mod tests', reverted afterwards
+# command: cargo test --offline --locked --profile release -p safenet-core --lib index::blocks::tests::qa2_xc_009 -v -- --nocapture   (full verbose log: run-release-full.log)

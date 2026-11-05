@@ -1,0 +1,23 @@
+# QA2-XC (resume) re-run of F2-XC-002 on the current tree; HEAD fe9e84cc59b65367b31d5a3121774383cc422234; validator debug binary built from this tree
+# rpc = http://127.0.0.1:8748 = loopback python stub (poc/F2-XC-002/stub.py, pid 18092, started and killed by QA2-XC) answering every JSON-RPC call with 0x64; no real chain contacted
+# database directory <scratch>/vol exists and is empty (a fresh named volume); signer is the 0x0123... placeholder; configs saved as poc/F2-XC-002/val-fresh{,-rwc}.toml
+
+=================== validator val-fresh.toml
+3:rpc = "http://127.0.0.1:8748"
+5:database = "sqlite:<scratch>/vol/storage.db"
+--- ls vol before: 
+--- output:
+Error: Database(SqliteError { code: 14, message: "unable to open database file" })
+--- exit=1
+--- ls vol after: 
+
+=================== validator val-fresh-rwc.toml
+3:rpc = "http://127.0.0.1:8748"
+5:database = "sqlite:<scratch>/vol/storage-rwc.db?mode=rwc"
+--- ls vol before: 
+--- output:
+Error: AbiError(SolTypes(Overrun))
+--- exit=1
+--- ls vol after: storage-rwc.db 
+
+# stub pid 18092 killed

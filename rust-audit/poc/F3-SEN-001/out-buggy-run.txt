@@ -1,0 +1,27 @@
+== [1] fresh Anvil on 31500 (chain 100, 1s blocks)
+== [2] etch real USDC.e (proxy+impl code, 14 cached slots)
+== [3] deploy TestConsensus + SentinelOracle (Aegis parameters)
+   CONSENSUS=0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+   ORACLE=0x1d78F455B77785Fa8E093d125550232F20Af5949  fee_token=0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0 (USDC.e)
+   fee=400000 [4e5]  bondMult=2000
+== [4] sentinel + sponsor accounts, funded with ETH and USDC.e
+   SENTINEL=0x70997970C51812dc3A010C7d01b50e0d17dc79C8  usdc=1000000000000 [1e12]
+   SPONSOR =0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc  usdc=1000000000000 [1e12]
+== [5] register the sentinel, then mine past the 51840-block governance delay
+   activeAt=51850  head=51864  isActive(by activeAt)=yes
+== [6] start stub engine + the REAL sentinel binary (Direct mode)
+== [7] propose one oracle-checked transaction
+   request_id=0x39d3abc6228b01caa3d851d8e9f2eb9442d6646c4e39668e1250ff2337501cff  proposed in block 51873  commitDeadline=+6
+== [8] let the commit window (6 blocks) pass with margin
+== [9] OBSERVE
+-- Committed events for this request (expect 0 in the buggy run):
+   count=0
+-- allowance(sentinel -> oracle): 0
+-- getCommitment(request, sentinel) vote (0=NONE):  0
+-- sentinel USDC.e balance now: 1000000000000 [1e12]
+-- oracle USDC.e balance now  : 400000 [4e5]
+-- the sentinel's own transactions (scan blocks 51869..head):
+   block 51874  nonce 0  -> USDC.e ERC20.approve  status=0 (FAILED)  gasLimit=55000  gasUsed=54629
+   block 51874  nonce 1  -> oracle oracle.commit  status=0 (FAILED)  gasLimit=250000  gasUsed=100202
+-- tail of the sentinel log (drop / reveal decisions):
+== done (buggy). Outputs in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-sen/rust-audit/poc/F3-SEN-001/out-buggy

@@ -1,0 +1,12 @@
+2026-10-08T19:54:23.095844Z DEBUG safenet_core::tx: submitting transaction nonce=0 block=1 hash=0xad76296de09259f0cbe70187d86b33aa6d61ef41ef7101a861fc486bc826ef8e
+2026-10-08T19:54:25.044856Z DEBUG safenet_core::tx: resubmitting stale transaction nonce=0
+2026-10-08T19:54:25.086808Z DEBUG safenet_core::tx: submitting transaction nonce=0 block=3 hash=0xc45e0b88d8ab2bb9a76e0230a22783c02979eb89a6090230ba585ef0ae31c50c
+2026-10-08T19:54:27.047855Z DEBUG safenet_core::tx: resubmitting stale transaction nonce=0
+2026-10-08T19:54:27.089584Z DEBUG safenet_core::tx: submitting transaction nonce=0 block=5 hash=0x3bb25e4616c1a6be87c741823e6f2bef137e6712b746b1110b751ed647004e85
+2026-10-08T19:54:29.046576Z DEBUG safenet_core::tx: resubmitting stale transaction nonce=0
+2026-10-08T19:54:29.088725Z DEBUG safenet_core::tx: submitting transaction nonce=0 block=7 hash=0x088e595dffa6897958cdf26c012ff867a59f8163f972f3387fe091dc023d31a2
+2026-10-08T19:54:31.047883Z DEBUG safenet_core::tx: resubmitting stale transaction nonce=0
+2026-10-08T19:54:31.090021Z DEBUG safenet_core::tx: submitting transaction nonce=0 block=9 hash=0xfb6a837e09691aa860453f93223dd89b6a14aa3224e30bdcd6c06435743f4f7c
+2026-10-08T19:54:33.048439Z DEBUG safenet_core::tx: resubmitting stale transaction nonce=0
+2026-10-08T19:54:33.090935Z DEBUG safenet_core::tx: submitting transaction nonce=0 block=11 hash=0x9369c2a4a078881e0021304c01a10ea3cea2715ff90ba3419d9255301a5c044c
+2026-10-08T19:54:35.044491Z DEBUG safenet_core::tx: resubmitting stale transaction nonce=0

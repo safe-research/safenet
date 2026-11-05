@@ -1,0 +1,8 @@
+$ cargo test -p validator --bins state::keygen:: -- --test-threads=1 --nocapture   (worktree wt/rv-val at 361aaf3, PoC modules wired into crates/validator/src/state/keygen.rs, reverted afterwards)
+test state::keygen::poc_f2_val_007_run3::foreign_staged_epoch_does_not_advance_active_epoch ... after the chain's epoch-2 rollover block: local active_epoch = Number { number: 1 }
+ok
+test state::keygen::poc_f2_val_007_run3::rollover_session_built_from_stale_active_epoch ... session under hash(1->3): true, under hash(2->3): false
+at the session deadline: Sign actions = 1
+ok
+
+(full run) test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.28s

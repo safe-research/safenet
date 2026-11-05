@@ -1,0 +1,22 @@
+# rv-xc run 3 re-run of F-XC-003 at 361aaf3 (worktree wt/rv-xc): the two run-1 PoC files (../append-to-crates-*-src-config.rs) pasted UNCHANGED into the mod tests blocks of crates/validator/src/config.rs and crates/sentinel/src/config.rs with ../../F2-XC-050/paste.py, reverted with git checkout afterwards
+## xc003-val: cargo test --offline --locked -p validator --bins config::tests::qa_xc_003 -- --nocapture
+test config::tests::qa_xc_003_rejects_a_mistyped_table_name ... ok
+test config::tests::qa_xc_003_rejects_a_typo_in_a_security_relevant_key ... ok
+test config::tests::qa_xc_003_rejects_an_unknown_top_level_key ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.00s
+## xc003-sen: cargo test --offline --locked -p sentinel --bins config::tests::qa_xc_003 -- --nocapture
+test config::tests::qa_xc_003_rejects_a_typo_inside_the_sentinel_table ... ok
+test config::tests::qa_xc_003_rejects_a_typo_in_a_flattened_driver_key ... ok
+test config::tests::qa_xc_003_rejects_an_unknown_top_level_key ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.00s
+
+## binary-level variants for keys added since run 2 (7702 [transactions] keys, #1010 timing keys): validator built at 361aaf3, base config = the sample with comments dropped (see poc/F2-XC-001/run3/run.sh), one typo each, stderr
+=== excutor: > excutor = "0x1111111111111111111111111111111111111111"
+Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `excutor`, expected one of `max_in_flight_transactions`, `executor`, `max_batch_gas`, `blocks_before_resubmit`, `priority_fee_cap_percentage`", input: None, keys: [], span: Some(0..0) } })
+--- exit=1
+=== batchgas: > max_batch_gass = 1000000
+Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `max_batch_gass`, expected one of `max_in_flight_transactions`, `executor`, `max_batch_gas`, `blocks_before_resubmit`, `priority_fee_cap_percentage`", input: None, keys: [], span: Some(0..0) } })
+--- exit=1
+=== propagation: > block_propagation_dealy = 500
+Error: Parse(ParseError { position: Some((1, 1)), inner: Error { message: "unknown field `block_propagation_dealy`", input: None, keys: [], span: Some(0..0) } })
+--- exit=1

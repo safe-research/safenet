@@ -1,0 +1,16 @@
+[    6.3s] deployed fee_token=0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80 consensus=0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0 oracle=0x7148FDa1aBAF76AC28E4803D4791a2790CddFae1
+[    6.3s] sentinel A (0x70997970C51812dc3A010C7d01b50e0d17dc79C8) started, run 1, pid 444835
+[   16.8s] after warmup, block metrics: ['safenet_core_block_number{status="processed"} 10', 'safenet_core_block_number{status="seen"} 10']; /health=(200, 'OK')
+[   68.8s] during stall: block metrics=['safenet_core_block_number{status="seen"} 11', 'safenet_core_block_number{status="processed"} 10']; /health=(200, 'OK'); anvil head=21
+[   80.8s] 12 s later: block metrics=['safenet_core_block_number{status="processed"} 10', 'safenet_core_block_number{status="seen"} 11']; eth_getLogs rate ~91/s; alive=True
+[   80.8s] last eth_getLogs bursts (t, count) during stall: [(79.0, 21), (79.3, 22), (79.5, 22), (79.7, 16), (80.0, 22), (80.2, 22), (80.4, 22), (80.7, 16)]
+[   80.8s] number of >=8-wide (per-event) bursts: 267; sizes seen: [1, 2, 4, 13, 14, 15, 16, 17, 18, 20, 21, 22]
+[   80.8s] 'failed to get next blockchain update; retrying after delay' warn count: 538
+=== verdict ===
+seen_block warmup=10.0 stall=11.0 stall+12s=11.0
+indexer_stalled = True
+health_ok_while_stalled = True
+process_alive = True
+escalated_to_per_event_11 = True
+high_request_rate = True
+[   80.8s] sentinel A stopped (SIGKILL), exit -9

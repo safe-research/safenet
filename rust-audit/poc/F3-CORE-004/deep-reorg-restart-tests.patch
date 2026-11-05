@@ -1,0 +1,384 @@
+diff --git a/crates/core/src/driver.rs b/crates/core/src/driver.rs
+index bb3b717..b03644a 100644
+--- a/crates/core/src/driver.rs
++++ b/crates/core/src/driver.rs
+@@ -326,3 +326,355 @@ impl UpdateRecorder {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod qa3_deep_reorg_tests {
++    //! QA3 F3-CORE-004: the real `Driver` (real time, 1 s blocks, default
++    //! `max_reorg_depth` 5) following chain A, then a reorg deeper than 5
++    //! blocks to chain B, either live (path A) or while the service is stopped
++    //! (path B), and a restart. Every block carries one watched `Ping` whose
++    //! value tags its chain (`0xA << 32 | n` or `0xB << 32 | n`), so the state
++    //! shows which branch each applied event came from. Mocked at the
++    //! transport boundary only.
++    use super::*;
++    use crate::{
++        index::blocks::Timing,
++        state::{Commands, Message, StateTransition},
++    };
++    use alloy::{
++        primitives::{B256, Bloom, Log as PrimitiveLog, U256, keccak256},
++        rpc::{
++            json_rpc::{RequestPacket, Response, ResponsePacket, ResponsePayload},
++            types::{Block, Filter, Header, Log},
++        },
++        sol_types::SolEvent,
++        transports::{TransportError, TransportFut},
++    };
++    use sqlx::sqlite::SqliteConnectOptions;
++    use std::{
++        str::FromStr,
++        sync::{Arc, Mutex},
++        task::{Context, Poll},
++        time::Instant,
++    };
++
++    alloy::sol! {
++        #[derive(Debug)]
++        contract Watched {
++            event Ping(uint256 value);
++        }
++    }
++    crate::watcher_events!(Watched::WatchedEvents);
++
++    const WATCHED: Address = Address::repeat_byte(0x11);
++    const EPOCH: u64 = 1_337_420;
++    const A: u64 = 0xA;
++    const B: u64 = 0xB;
++
++    #[derive(Default, Serialize, Deserialize)]
++    struct QaState {
++        events: Vec<(u64, u64)>,
++    }
++
++    struct QaTransition;
++
++    impl StateTransition<QaState> for QaTransition {
++        type Event = Watched::WatchedEvents;
++        type Action = ();
++        type Effect = ();
++        type Resume = ();
++
++        fn apply_transition(
++            &self,
++            mut state: QaState,
++            message: Message<Self::Event, Self::Resume>,
++        ) -> (QaState, Commands<QaState, Self>) {
++            if let Message::Event(log) = message {
++                let Watched::WatchedEvents::Ping(ping) = log.data;
++                let value = ping.value.to::<u64>();
++                state.events.push((log.block.number, value >> 32));
++            }
++            (state, vec![])
++        }
++    }
++
++    struct QaEffects;
++
++    impl EffectHandler<(), ()> for QaEffects {
++        async fn perform_effect(&self, _effect: ()) {}
++    }
++
++    struct QaActions;
++
++    impl ActionEncoder<()> for QaActions {
++        fn encode_action(&self, _action: ()) -> (Transaction, Option<u64>) {
++            (Transaction::default(), None)
++        }
++    }
++
++    struct QaService;
++
++    impl Service for QaService {
++        type State = QaState;
++        type Event = Watched::WatchedEvents;
++        type Action = ();
++        type Effect = ();
++        type Resume = ();
++        type Transition = QaTransition;
++        type Effects = QaEffects;
++        type Actions = QaActions;
++
++        fn components(self) -> (QaTransition, QaEffects, QaActions) {
++            (QaTransition, QaEffects, QaActions)
++        }
++    }
++
++    /// Chain A, or chain B forking from A at `fork` (B's block `fork` replaces
++    /// A's) and running `lead` blocks ahead of A's schedule.
++    struct ChainState {
++        start: Instant,
++        fork: Option<(u64, u64)>,
++    }
++
++    impl ChainState {
++        fn a_head(&self) -> u64 {
++            1000 + self.start.elapsed().as_secs()
++        }
++
++        fn head(&self) -> u64 {
++            self.a_head() + self.fork.map_or(0, |(_, lead)| lead)
++        }
++
++        fn tag(&self, number: u64) -> u64 {
++            match self.fork {
++                Some((fork, _)) if number >= fork => B,
++                _ => A,
++            }
++        }
++
++        fn hash(&self, number: u64) -> B256 {
++            keccak256([self.tag(number).to_be_bytes(), number.to_be_bytes()].concat())
++        }
++
++        fn log(&self, number: u64) -> Log {
++            Log {
++                inner: PrimitiveLog {
++                    address: WATCHED,
++                    data: Watched::Ping {
++                        value: U256::from(self.tag(number) << 32 | number),
++                    }
++                    .encode_log_data(),
++                },
++                block_hash: Some(self.hash(number)),
++                block_number: Some(number),
++                block_timestamp: Some(EPOCH + number - 1000),
++                transaction_hash: Some(B256::repeat_byte(0x77)),
++                transaction_index: Some(0),
++                log_index: Some(0),
++                removed: false,
++            }
++        }
++
++        fn block(&self, number: u64) -> Block {
++            let mut bloom = Bloom::default();
++            bloom.accrue_log(&self.log(number).inner);
++            Block::empty(Header {
++                hash: self.hash(number),
++                inner: alloy::consensus::Header {
++                    parent_hash: self.hash(number - 1),
++                    number,
++                    timestamp: EPOCH + number - 1000,
++                    logs_bloom: bloom,
++                    ..Default::default()
++                },
++                ..Default::default()
++            })
++        }
++    }
++
++    #[derive(Clone)]
++    struct Chain(Arc<Mutex<ChainState>>);
++
++    impl tower::Service<RequestPacket> for Chain {
++        type Response = ResponsePacket;
++        type Error = TransportError;
++        type Future = TransportFut<'static>;
++
++        fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
++            Poll::Ready(Ok(()))
++        }
++
++        fn call(&mut self, request: RequestPacket) -> Self::Future {
++            let RequestPacket::Single(request) = request else {
++                panic!("unexpected batch request");
++            };
++            let c = self.0.lock().unwrap();
++            let head = c.head();
++            let payload = match request.method() {
++                "eth_getBlockByNumber" => {
++                    let (tag, _): (String, bool) =
++                        serde_json::from_str(request.params().unwrap().get()).unwrap();
++                    let number = match tag.as_str() {
++                        "latest" => head,
++                        hex => u64::from_str_radix(hex.trim_start_matches("0x"), 16).unwrap(),
++                    };
++                    serde_json::value::to_raw_value(&(number <= head).then(|| c.block(number)))
++                        .unwrap()
++                }
++                "eth_getLogs" => {
++                    let (filter,): (Filter,) =
++                        serde_json::from_str(request.params().unwrap().get()).unwrap();
++                    let numbers = match filter.get_block_hash() {
++                        Some(hash) => (900..=head).filter(|n| c.hash(*n) == hash).collect::<Vec<_>>(),
++                        None => (filter.get_from_block().unwrap()..=filter.get_to_block().unwrap())
++                            .collect(),
++                    };
++                    let logs = numbers
++                        .into_iter()
++                        .map(|n| c.log(n))
++                        .filter(|log| filter.matches(&log.inner))
++                        .collect::<Vec<_>>();
++                    serde_json::value::to_raw_value(&logs).unwrap()
++                }
++                method => panic!("unexpected method {method}"),
++            };
++            let response = Response {
++                id: request.id().clone(),
++                payload: ResponsePayload::Success(payload),
++            };
++            Box::pin(async move { Ok(ResponsePacket::Single(response)) })
++        }
++    }
++
++    fn config() -> Config {
++        let mut config = Config::default();
++        config.index.blocks.block_time = Timing::Millis(1_000);
++        config.index.blocks.block_propagation_delay = Timing::Millis(0);
++        config.index.blocks.block_retry_delays = Timing::Millis(vec![]);
++        config
++    }
++
++    async fn driver(chain: &Chain, pool: &sqlx::SqlitePool) -> Result<Driver<QaService>, Error> {
++        let signer = Signer::from_str(
++            "0x0000000000000000000000000000000000000000000000000000000000000001",
++        )
++        .unwrap();
++        Driver::new(
++            QaService,
++            Provider::qa3_from_transport(chain.clone(), 0x5afe),
++            signer,
++            pool.clone(),
++            vec![WATCHED],
++            config(),
++        )
++        .await
++    }
++
++    async fn snapshots(pool: &sqlx::SqlitePool) -> Vec<i64> {
++        sqlx::query_as::<_, (i64,)>("SELECT block_number FROM snapshots ORDER BY 1")
++            .fetch_all(pool)
++            .await
++            .unwrap()
++            .into_iter()
++            .map(|(n,)| n)
++            .collect()
++    }
++
++    async fn applied_events(pool: &sqlx::SqlitePool) -> Vec<(u64, u64)> {
++        let (state,) = sqlx::query_as::<_, (String,)>(
++            "SELECT state FROM snapshots ORDER BY block_number DESC LIMIT 1",
++        )
++        .fetch_one(pool)
++        .await
++        .unwrap();
++        serde_json::from_str::<QaState>(&state).unwrap().events
++    }
++
++    fn describe(events: &[(u64, u64)], from: u64, to: u64) -> String {
++        events
++            .iter()
++            .filter(|(n, _)| (from..=to).contains(n))
++            .map(|(n, tag)| format!("{n}:{}", if *tag == A { "A" } else { "B" }))
++            .collect::<Vec<_>>()
++            .join(" ")
++    }
++
++    /// Path B: the deep reorg happens while the service is stopped.
++    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
++    async fn qa3_deep_reorg_while_stopped_is_accepted_on_restart() {
++        let chain = Chain(Arc::new(Mutex::new(ChainState {
++            start: Instant::now(),
++            fork: None,
++        })));
++        let pool = utils::connect_sqlite(SqliteConnectOptions::from_str("sqlite::memory:").unwrap())
++            .await
++            .unwrap();
++        let run1 = driver(&chain, &pool).await.unwrap();
++        let _ = tokio::time::timeout(Duration::from_secs(8), run1.run()).await;
++        let kept = snapshots(&pool).await;
++        let (safe, latest) = (kept[0] as u64, *kept.last().unwrap() as u64);
++        println!("run 1 on chain A stopped: snapshots {kept:?}");
++        // While stopped, chain B replaces every block from `latest - 7`, two
++        // blocks below the oldest retained snapshot, and runs 3 blocks ahead.
++        let fork = latest - 7;
++        chain.0.lock().unwrap().fork = Some((fork, 3));
++        println!("chain B forks at {fork} (reorg depth {}), head {}", latest + 1 - fork, chain.0.lock().unwrap().head());
++        let run2 = driver(&chain, &pool).await;
++        println!("run 2 Driver::new: {}", match &run2 { Ok(_) => "ok".to_string(), Err(err) => format!("error {err:?}") });
++        if let Ok(run2) = run2 {
++            let finished = tokio::time::timeout(Duration::from_secs(4), run2.run()).await.is_ok();
++            println!("run 2 Driver::run returned early: {finished}");
++            let events = applied_events(&pool).await;
++            println!("run 2 applied events from {fork} to {safe} (replaced by B): {}", describe(&events, fork, safe));
++            println!("run 2 applied events after {safe}: {}", describe(&events, safe + 1, safe + 12));
++            assert!(events.iter().any(|(n, tag)| *n >= fork && *n <= safe && *tag == A));
++            assert!(!events.iter().any(|(n, tag)| *n >= fork && *n <= safe && *tag == B));
++        } else {
++            panic!("the restart refused the replaced chain");
++        }
++    }
++
++    /// Path A: the deep reorg happens live, the driver exits with
++    /// `ExceededMaxReorgDepth`, and the operator restarts it.
++    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
++    async fn qa3_deep_reorg_exit_is_forgotten_on_restart() {
++        let chain = Chain(Arc::new(Mutex::new(ChainState {
++            start: Instant::now(),
++            fork: None,
++        })));
++        let pool = utils::connect_sqlite(SqliteConnectOptions::from_str("sqlite::memory:").unwrap())
++            .await
++            .unwrap();
++        let run1 = driver(&chain, &pool).await.unwrap();
++        let switcher = {
++            let chain = chain.clone();
++            tokio::spawn(async move {
++                tokio::time::sleep(Duration::from_millis(8_500)).await;
++                let mut c = chain.0.lock().unwrap();
++                let head = c.a_head();
++                // Six blocks deep: one more than `max_reorg_depth`.
++                c.fork = Some((head - 5, 1));
++                println!("live: chain B forks at {} (reorg depth 6), head {}", head - 5, c.head());
++            })
++        };
++        let exited = tokio::time::timeout(Duration::from_secs(14), run1.run()).await.is_ok();
++        switcher.await.unwrap();
++        let kept = snapshots(&pool).await;
++        println!("run 1 exited on its own: {exited}; snapshots {kept:?}");
++        let fork = chain.0.lock().unwrap().fork.unwrap().0;
++        let safe = kept[0] as u64;
++        let run2 = driver(&chain, &pool).await;
++        println!("run 2 Driver::new: {}", match &run2 { Ok(_) => "ok".to_string(), Err(err) => format!("error {err:?}") });
++        if let Ok(run2) = run2 {
++            let finished = tokio::time::timeout(Duration::from_secs(4), run2.run()).await.is_ok();
++            println!("run 2 Driver::run returned early: {finished}");
++            let events = applied_events(&pool).await;
++            println!("run 2 applied events from {fork} to {safe} (replaced by B): {}", describe(&events, fork, safe));
++            println!("run 2 applied events after {safe}: {}", describe(&events, safe + 1, safe + 12));
++            assert!(exited);
++            assert!(events.iter().any(|(n, tag)| *n >= fork && *n <= safe && *tag == A));
++        } else {
++            panic!("the restart refused the replaced chain");
++        }
++    }
++}
+diff --git a/crates/core/src/provider/mod.rs b/crates/core/src/provider/mod.rs
+index febc353..0f59ad9 100644
+--- a/crates/core/src/provider/mod.rs
++++ b/crates/core/src/provider/mod.rs
+@@ -180,3 +180,19 @@ impl AlloyProvider<AnyNetwork> for Provider {
+         ProviderCall::Ready(Some(Ok(self.chain_id)))
+     }
+ }
++
++/// QA3 PoC support: a provider over an in-process transport, so tests can model
++/// time-dependent node behaviour that the FIFO `Asserter` cannot.
++#[cfg(test)]
++impl Provider {
++    pub fn qa3_from_transport<T>(transport: T, chain_id: u64) -> Self
++    where
++        T: alloy::transports::IntoBoxTransport,
++    {
++        let client = ClientBuilder::default().transport(transport, true);
++        Self {
++            root: RootProvider::new(client),
++            chain_id,
++        }
++    }
++}

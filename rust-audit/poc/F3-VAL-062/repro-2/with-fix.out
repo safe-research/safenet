@@ -1,0 +1,25 @@
+[review-cargo] 2 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-b; rebuilding them
+   Compiling validator v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-core-b/crates/validator)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.86s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/target-rv-core-b/debug/deps/validator-dd9411993fa56ac3)
+
+running 2 tests
+test state::keygen::qa2a_val062_all_shares_dropped::qa2a_live_order_keeps_every_share ... live: after ALL 5 shares: CollectingConfirmations
+ok
+test state::keygen::qa2a_val062_all_shares_dropped::qa2a_warp_drops_all_shares_and_skips_the_epoch ... warp: after 5 commitments: CollectingCommitments(commitments=5, secrets=false, deadline=Some(1560))
+warp: after ALL 5 shares (same page): CollectingCommitments(commitments=5, secrets=false, deadline=Some(1560))
+warp: after Resume::Setup: CollectingConfirmations
+
+thread 'state::keygen::qa2a_val062_all_shares_dropped::qa2a_warp_drops_all_shares_and_skips_the_epoch' (279552) panicked at crates/validator/src/state/keygen.rs:1705:13:
+expected CollectingShares, got CollectingConfirmations
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    state::keygen::qa2a_val062_all_shares_dropped::qa2a_warp_drops_all_shares_and_skips_the_epoch
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.24s
+
+error: test failed, to rerun pass `-p validator --bin validator`

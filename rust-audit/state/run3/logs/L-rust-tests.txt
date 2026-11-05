@@ -1,0 +1,74 @@
+# L-rust: existing unit tests for the lens files, wt/base at 361aaf3 (git status clean), 2026-10-08
+## cargo test -p safenet-core --lib -- effects:: config:: serialization:: tx::storage:: provider::
+running 33 tests
+test effects::tests::remains_pending_when_empty ... ok
+test effects::tests::forwards_housekeeping_status_to_handler ... ok
+test effects::tests::pure_handler_inherits_noop_housekeeping ... ok
+test effects::tests::next_is_cancel_safe ... ok
+test effects::tests::shares_one_handler_between_tasks ... ok
+test effects::tests::runs_effects_concurrently_and_yields_in_completion_order ... ok
+test effects::tests::skips_panicked_tasks_without_losing_successful_resumes ... ok
+test serialization::tests::does_not_substitute_variable_values ... ok
+test serialization::tests::rejects_missing_variables ... ok
+test serialization::tests::does_not_leak_variable_values_in_errors ... ok
+test serialization::tests::rejects_invalid_references ... ok
+test serialization::tests::substitutes_environment_variables ... ok
+test config::tests::parses_configuration ... ok
+test serialization::tests::substitutes_values_longer_than_the_input ... ok
+test tx::config::tests::deserializes_submission_mode ... ok
+test tx::config::tests::rejects_invalid_submission_mode ... ok
+test config::tests::errors_do_not_contain_the_configuration ... ok
+test effects::tests::accepts_more_effects_after_completing_all_tasks ... ok
+test tx::storage::tests::record_submission_errors_for_an_unknown_nonce ... ok
+test tx::storage::tests::never_expiring_transactions_are_always_selectable_and_never_pruned ... ok
+test tx::storage::tests::only_recovers_the_authorization_at_the_account_nonce ... ok
+test tx::storage::tests::prunes_queued_transactions_past_their_expiry ... ok
+test tx::storage::tests::marks_a_cancellation_executed_once_the_account_is_past_it ... ok
+test tx::storage::tests::bundles_unexpired_unallocated_transactions_in_order ... ok
+test tx::storage::tests::prunes_executed_transactions_with_their_nonces ... ok
+test tx::storage::tests::authorization_uses_up_the_next_nonce ... ok
+test tx::storage::tests::prunes_a_nonce_with_its_authorization_and_transactions ... ok
+test tx::storage::tests::batches_several_transactions_into_one_nonce ... ok
+test tx::storage::tests::submit_next_is_none_when_empty ... ok
+test tx::storage::tests::record_submission_stamps_the_block_and_fees ... ok
+test tx::storage::tests::submit_assigns_the_account_nonce_and_fees ... ok
+test tx::storage::tests::recovers_an_unused_authorization_nonce_once ... ok
+test tx::storage::tests::submit_assigns_sequential_nonces_in_queue_order ... ok
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 118 filtered out; finished in 0.02s
+## cargo test -p validator --bins -- secrets::store service::
+running 12 tests
+test secrets::store::tests::keygen_secrets_roundtrip_and_missing ... ok
+test secrets::store::tests::scheduled_nonces_stay_consumable ... ok
+test secrets::store::tests::reconciliation_below_the_last_accepted_block_is_ignored ... ok
+test secrets::store::tests::signing_nonces_are_stored_once_per_signature_id ... ok
+test secrets::store::tests::a_failed_collection_deletes_nothing ... ok
+test secrets::store::tests::schedules_absent_groups_and_unschedules_retained_ones ... ok
+test secrets::store::tests::each_kind_of_secret_follows_its_own_retained_set ... ok
+test secrets::store::tests::a_failed_reconciliation_rolls_back_the_marker_and_both_schedules ... ok
+test secrets::store::tests::take_signing_nonces_clears_them_permanently ... ok
+test secrets::store::tests::reopening_preserves_stored_secrets ... ok
+test secrets::store::tests::collects_only_secrets_scheduled_at_or_before_the_safe_block ... ok
+test secrets::store::tests::store_keygen_secrets_does_not_overwrite ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.03s
+## cargo test -p sentinel --bins -- verdicts:: effect:: engine::
+running 19 tests
+test engine::tests::fails_when_the_endpoint_is_unreachable ... ok
+test engine::tests::accepts_a_rule_not_known_to_the_sentinel ... ok
+test engine::tests::approves_when_the_endpoint_approves ... ok
+test engine::tests::denies_with_the_cited_rule ... ok
+test engine::tests::fails_when_the_endpoint_returns_an_error ... ok
+test effect::tests::replayed_check_resumes_with_the_first_verdict ... ok
+test engine::tests::rule_id_json_roundtrip ... ok
+test effect::tests::check_without_a_verdict_is_asked_again ... ok
+test verdicts::tests::does_not_record_unknown_outcomes ... ok
+test engine::tests::abstains_when_the_endpoint_abstains ... ok
+test verdicts::tests::records_and_reads_back_verdicts ... ok
+test verdicts::tests::prunes_verdicts_below_the_safe_block ... ok
+test verdicts::tests::never_overwrites_a_recorded_verdict ... ok
+test verdicts::tests::retains_verdicts_for_the_latest_block_they_were_seen_in ... ok
+test effect::tests::resumes_with_the_engine_outcome ... ok
+test engine::tests::fails_on_a_malformed_rule_code ... ok
+test engine::tests::fails_when_the_request_times_out ... ok
+test engine::tests::forwards_request_headers ... ok
+test engine::tests::sends_the_block_label ... ok
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 31 filtered out; finished in 0.08s

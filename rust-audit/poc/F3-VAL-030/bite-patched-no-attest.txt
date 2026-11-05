@@ -1,0 +1,127 @@
+==> Temp dir /tmp/tmp.gLZrkI4tIg, RPC http://127.0.0.1:31400
+==> Starting Anvil...
+==> Deploying contracts...
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+coordinator: contract FROSTCoordinator 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+consensus: contract Consensus 0x706f3533B199078F30BE5520b183d130a5cbb17F
+groupId: FROSTGroupId.T 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000
+
+== Logs ==
+  Genesis Group ID: 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000
+  Genesis Group Participants Root: 0x43c8bee048e0480d644b3fe14e67fe0bf976d6ec2c649e37c28719ce63f6a1c8
+  Genesis Group Count: 2
+  Genesis Group Threshold: 2
+  Genesis Group Context: 0x0000000000000000000000000000000000000000000000000000000000000000
+  FROSTCoordinator: 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+  Consensus: 0x706f3533B199078F30BE5520b183d130a5cbb17F
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 1.531250001 gwei
+
+Estimated total gas used for script: 7240248
+
+Estimated amount required: 0.011086629757240248 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-val/contracts/build/broadcast/DeployConsensus.s.sol/31337/run-latest.json
+
+Sensitive values saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-val/contracts/build/cache/DeployConsensus.s.sol/31337/run-latest.json
+
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+alwaysApproveOracle: contract AlwaysApproveOracle 0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+
+== Logs ==
+  AlwaysApproveOracle: 0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 1.227638515 gwei
+
+Estimated total gas used for script: 297742
+
+Estimated amount required: 0.00036551954673313 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-val/contracts/build/broadcast/DeployAlwaysApproveOracle.s.sol/31337/run-latest.json
+
+Sensitive values saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-val/contracts/build/cache/DeployAlwaysApproveOracle.s.sol/31337/run-latest.json
+
+    coordinator: 0x549EA04E135d6e9D4b6d6E6f437114E4d3f667E1
+    consensus:   0x706f3533B199078F30BE5520b183d130a5cbb17F
+    oracle:      0x1B270f9c0561F0C5b55538730fBfFbf69C8Ba6E3
+==> Deploying SimpleOracle(approver=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266)...
+    SimpleOracle: 0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9
+==> Starting validators...
+    A pid 284698
+    B pid 284699
+==> Triggering genesis KeyGen...
+No files changed, compilation skipped
+Script ran successfully.
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 0.724234395 gwei
+
+Estimated total gas used for script: 102984
+
+Estimated amount required: 0.00007458455493468 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-val/contracts/build/broadcast/Genesis.s.sol/31337/run-latest.json
+
+Sensitive values saved to: /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/wt/rv-val/contracts/build/cache/Genesis.s.sol/31337/run-latest.json
+
+==> Waiting for genesis confirmation...
+    genesis group 0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000000 confirmed
+==> Proposing an oracle-backed transaction (oracle = SimpleOracle)...
+    request/message 0x3ead51b14ffaf9ae019f19e6e93e1376dfa786f88499463ce0b2186974889058
+    signature id    0xf2b57b06d5e8f1f3ad8183c141f8c145545105fe83a672240000000000000002
+==> Fork point is block 17; approving the request on branch A...
+==> Waiting until block 21 to reorg (fork at 17, depth 4)...
+==> At block 21: 0 shares broadcast so far; reorging depth 4 back to 17...
+==> Resolving the SAME request DENIED on the canonical branch...
+==> Waiting for the rebroadcast share transactions to attest on the canonical (denied) branch...
+
+=== RESULT ===
+canonical attestation id : 0x0000000000000000000000000000000000000000000000000000000000000000
+canonical approved=true  results for request: 0
+canonical approved=false results for request: 1
+canonical TransactionAttested events        : 0
+NOT REPRODUCED: attest=0x0000000000000000000000000000000000000000000000000000000000000000 approved=0 denied=1

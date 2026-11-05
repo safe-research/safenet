@@ -1,0 +1,40 @@
+# R2: effects emitted at the restart's restore point are never performed again (run 3, audit commit 361aaf3)
+# Harness: $RUN/scratch/R2/poc (copy: R2-harness-main.rs.txt), mode lost-effect, against crates/core of wt/base (HEAD 361aaf3b25e12d2e04f296184c326830968f3727).
+# Run 1 drives the real StateMachine for blocks 1000..=1006 with one event in <event block>; its transition sets waiting_for_resume and emits an effect.
+#   As Driver::update does, the effect is performed and resumed only after handle_update (and the snapshot commit) returned; prune(n - 5) keeps 1001..=1006.
+# Run 2 restarts the real Driver against an up-to-date mocked RPC (head 1006) that still returns the event for its block when that block is replayed.
+# Command: ./target/debug/r2-poc lost-effect <event block>   (WARN retry lines from the exhausted mock removed)
+
+===== event in block 1001
+run 1 done: effect-emitting event in block 1001; effects performed: 1; persisted snapshot range Some(BlockStatus { latest: 1006, safe: 1001 })
+after run 1: snapshot 1001: waiting_for_resume = true
+after run 1: snapshot 1002: waiting_for_resume = false
+after run 1: snapshot 1003: waiting_for_resume = false
+after run 1: snapshot 1004: waiting_for_resume = false
+after run 1: snapshot 1005: waiting_for_resume = false
+after run 1: snapshot 1006: waiting_for_resume = false
+run 2: effects performed after the restart: 0
+after run 2: snapshot 1003: waiting_for_resume = true
+after run 2: snapshot 1004: waiting_for_resume = true
+after run 2: snapshot 1005: waiting_for_resume = true
+after run 2: snapshot 1006: waiting_for_resume = true
+after run 2: snapshot 1007: waiting_for_resume = true
+after run 2: snapshot 1008: waiting_for_resume = true
+
+===== event in block 1002
+run 1 done: effect-emitting event in block 1002; effects performed: 1; persisted snapshot range Some(BlockStatus { latest: 1006, safe: 1001 })
+after run 1: snapshot 1001: waiting_for_resume = false
+after run 1: snapshot 1002: waiting_for_resume = true
+after run 1: snapshot 1003: waiting_for_resume = false
+after run 1: snapshot 1004: waiting_for_resume = false
+after run 1: snapshot 1005: waiting_for_resume = false
+after run 1: snapshot 1006: waiting_for_resume = false
+run 2: effects performed after the restart: 1
+after run 2: snapshot 1003: waiting_for_resume = true
+after run 2: snapshot 1004: waiting_for_resume = false
+after run 2: snapshot 1005: waiting_for_resume = false
+after run 2: snapshot 1006: waiting_for_resume = false
+after run 2: snapshot 1007: waiting_for_resume = false
+after run 2: snapshot 1008: waiting_for_resume = false
+
+# Harness source sha256: caaf9e6d22b277690c04cde9cef224701c2500f3f71ff069b971f135f2b09ef4

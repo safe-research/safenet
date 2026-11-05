@@ -1,0 +1,223 @@
+# R7: sentinel restart-replay flow tests (scratch copy, no tracked file touched)
+# Date: 2026-10-08T17:29:33Z
+# Workspace: git archive 361aaf3 into $RUN/scratch/R7/ws; the module below appended to crates/sentinel/src/service.rs of that copy only.
+# Command: CARGO_TARGET_DIR=$RUN/scratch/R7/target cargo test -p sentinel --bins --offline r7_poc_replay -- --nocapture --test-threads=1
+
+[review-cargo] 1 input file(s) differ from the last build in /home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R7/target; rebuilding them
+   Compiling sentinel v0.2.0 (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R7/ws/crates/sentinel)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.77s
+     Running unittests src/main.rs (/home/sj.guest/.cache/kb-runs/safenet/2026-10-08-rust-audit-run3/scratch/R7/target/debug/deps/sentinel-702b20590452b382)
+
+running 2 tests
+test service::r7_poc_replay::warp_replay_past_the_commit_deadline_drops_before_the_resume ... warp page P..=CD+2: commands=["Effect::EngineCheck"] state=None
+resume (recorded verdict): commands=[] state=None
+ok
+test service::r7_poc_replay::warp_replay_with_own_commit_drops_the_committed_request ... warp page P..=P+4: commands=["Effect::EngineCheck"] state=Some(WaitingForEngineCheck { deadline: 1006, request: Some(Request { bond_target: 800000000, slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012 }) })
+resume (recorded verdict): commands=["ApproveToken", "Commit"] state=Some(CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 0, self_committed: false })
+NewBlock(1005): commands=[] state=Some(CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 0, self_committed: false })
+NewBlock(1006): commands=[] state=Some(CollectingCommitments { approve: true, reason: "", slash_amount: 400000, commit_deadline: 1006, reveal_deadline: 1012, committed_count: 0, self_committed: false })
+NewBlock(1007): commands=[] state=None
+NewBlock(1008): commands=[] state=None
+NewBlock(1009): commands=[] state=None
+NewBlock(1010): commands=[] state=None
+NewBlock(1011): commands=[] state=None
+NewBlock(1012): commands=[] state=None
+NewBlock(1013): commands=[] state=None
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 55 filtered out; finished in 0.00s
+
+
+# ---- appended test module ----
+
+/// R7 (run 3) restart-replay flow tests, appended to a scratch copy of `service.rs` only.
+/// A restart restores the oldest retained snapshot and replays the missed blocks; when the
+/// node was down for more than `max_reorg_depth` blocks, the replay is a warp page that the
+/// state machine applies in one update, with a `NewBlock` before each block's logs
+/// (crates/core/src/state/mod.rs:225-244). Effects spawn only after the update, so the engine
+/// resume for the replayed proposal arrives after the whole page.
+#[cfg(test)]
+mod r7_poc_replay {
+    use super::*;
+    use crate::bindings::consensus::{Operation, SafeTransaction};
+    use alloy::{
+        primitives::{Bytes, Uint, address, keccak256},
+        signers::k256::ecdsa::SigningKey,
+    };
+    use safenet_core::index::{EventBlock, EventLog};
+
+    const ORACLE: Address = address!("1111111111111111111111111111111111111111");
+    const CONSENSUS: Address = address!("3333333333333333333333333333333333333333");
+    const SAFE: Address = address!("4444444444444444444444444444444444444444");
+    const OTHER: Address = address!("9999999999999999999999999999999999999999");
+    const P: u64 = 1_000;
+    const CD: u64 = P + 6;
+    const RD: u64 = P + 12;
+
+    fn signer() -> Signer {
+        Signer::new(SigningKey::from_bytes(&keccak256("r7-poc-sentinel").0.into()).unwrap())
+    }
+
+    fn svc() -> SentinelTransition {
+        SentinelTransition {
+            oracle: ORACLE,
+            consensus: CONSENSUS,
+            signer: signer(),
+            chain_id: U256::from(100u64),
+            voting_window: 6,
+        }
+    }
+
+    fn id() -> B256 {
+        oracle_tx_proposal_hash(U256::from(100u64), CONSENSUS, 7, ORACLE, Bytes::new(), B256::repeat_byte(0x42))
+    }
+
+    fn ev(block: u64, index: u64, data: SentinelEvents) -> Message<SentinelEvents, effect::Resume> {
+        Message::Event(EventLog {
+            block: EventBlock { number: block, timestamp: 1_700_000_000 + block * 5 },
+            index,
+            address: Address::ZERO,
+            data,
+        })
+    }
+
+    fn proposed() -> SentinelEvents {
+        SentinelEvents::Consensus(Consensus::ConsensusEvents::TransactionProposed(
+            Consensus::TransactionProposed {
+                safeTxHash: B256::repeat_byte(0x42),
+                safeId: B256::ZERO,
+                oracle: ORACLE,
+                epoch: 7,
+                oracleData: Bytes::new(),
+                transaction: SafeTransaction { safe: SAFE, operation: Operation::CALL, ..Default::default() },
+            },
+        ))
+    }
+
+    fn new_request() -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::NewRequest(SentinelOracle::NewRequest {
+            requestId: id(),
+            sponsor: SAFE,
+            fee: Uint::from(400_000u64),
+            bondTarget: Uint::from(800_000_000u64),
+            daoFeeShare: Default::default(),
+            slashAmount: Uint::from(400_000u64),
+            commitDeadline: CD,
+            revealDeadline: RD,
+        }))
+    }
+
+    fn committed(sentinel: Address) -> SentinelEvents {
+        SentinelEvents::Oracle(SentinelOracle::SentinelOracleEvents::Committed(SentinelOracle::Committed {
+            requestId: id(),
+            sentinel,
+            bondAmount: Uint::from(800_000_000u64),
+        }))
+    }
+
+    fn kinds(commands: &Commands<State, SentinelTransition>) -> Vec<&'static str> {
+        commands
+            .iter()
+            .filter_map(|command| match command {
+                Command::Action(action) => Some(match action.kind {
+                    SentinelActionKind::ApproveToken { .. } => "ApproveToken",
+                    SentinelActionKind::Commit { .. } => "Commit",
+                    SentinelActionKind::Reveal { .. } => "Reveal",
+                    SentinelActionKind::Finalize { .. } => "Finalize",
+                    SentinelActionKind::Claim { .. } => "Claim",
+                    SentinelActionKind::TimeoutArbitration { .. } => "TimeoutArbitration",
+                }),
+                Command::Effect(_) => Some("Effect::EngineCheck"),
+            })
+            .collect()
+    }
+
+    /// Applies `messages` as one update (a warp page) and returns the state and every command.
+    fn page(
+        svc: &SentinelTransition,
+        mut state: State,
+        messages: Vec<Message<SentinelEvents, effect::Resume>>,
+    ) -> (State, Vec<&'static str>) {
+        let mut all = Vec::new();
+        for message in messages {
+            let (next, commands) = svc.apply_transition(state, message);
+            all.extend(kinds(&commands));
+            state = next;
+        }
+        (state, all)
+    }
+
+    /// Before the restart this sentinel had committed in P + 2 (its bond is onchain). The node
+    /// was down long enough that the replay is a warp page over P..=P + 4 (the proposal block
+    /// is newer than the oldest retained snapshot, the case issue #973 marks as recovered).
+    /// The replayed own `Committed` arrives while the replayed proposal waits for its engine
+    /// check and is ignored; the recorded verdict then resumes, a second `Commit` is queued
+    /// (it reverts onchain with `AlreadyCommitted`), `self_committed` stays false, and at
+    /// `NewBlock(CD + 1)` the request is dropped: no reveal for a bond that is onchain.
+    #[test]
+    fn warp_replay_with_own_commit_drops_the_committed_request() {
+        let svc = svc();
+        let mut trace = Vec::new();
+        let (state, commands) = page(
+            &svc,
+            State::default(),
+            vec![
+                Message::NewBlock(P),
+                ev(P, 0, proposed()),
+                ev(P, 2, new_request()),
+                Message::NewBlock(P + 1),
+                Message::NewBlock(P + 2),
+                ev(P + 2, 0, committed(signer().address())),
+                ev(P + 2, 1, committed(OTHER)),
+                Message::NewBlock(P + 3),
+                Message::NewBlock(P + 4),
+            ],
+        );
+        trace.push(format!("warp page P..=P+4: commands={commands:?} state={:?}", state.0.get(&id())));
+        // The effect spawned for the replayed proposal resumes with the recorded verdict.
+        let (mut state, commands) = svc.apply_transition(
+            state,
+            Message::Resume(effect::Resume::EngineCheckResult { request_id: id(), outcome: CheckOutcome::Approved }),
+        );
+        trace.push(format!("resume (recorded verdict): commands={:?} state={:?}", kinds(&commands), state.0.get(&id())));
+        let mut reveal = false;
+        for block in P + 5..=RD + 1 {
+            let (next, commands) = svc.apply_transition(state, Message::NewBlock(block));
+            reveal |= kinds(&commands).contains(&"Reveal");
+            trace.push(format!("NewBlock({block}): commands={:?} state={:?}", kinds(&commands), next.0.get(&id())));
+            state = next;
+        }
+        for line in &trace {
+            println!("{line}");
+        }
+        assert!(!reveal, "no reveal for the commit that is already onchain");
+        assert!(!state.0.contains_key(&id()));
+    }
+
+    /// Same, with the warp page reaching past the commit deadline: the replayed request is
+    /// dropped inside the page, before the engine resume can arrive.
+    #[test]
+    fn warp_replay_past_the_commit_deadline_drops_before_the_resume() {
+        let svc = svc();
+        let mut messages = vec![
+            Message::NewBlock(P),
+            ev(P, 0, proposed()),
+            ev(P, 2, new_request()),
+            Message::NewBlock(P + 1),
+            Message::NewBlock(P + 2),
+            ev(P + 2, 0, committed(signer().address())),
+        ];
+        for block in P + 3..=CD + 2 {
+            messages.push(Message::NewBlock(block));
+        }
+        let (state, commands) = page(&svc, State::default(), messages);
+        println!("warp page P..=CD+2: commands={commands:?} state={:?}", state.0.get(&id()));
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Resume(effect::Resume::EngineCheckResult { request_id: id(), outcome: CheckOutcome::Approved }),
+        );
+        println!("resume (recorded verdict): commands={:?} state={:?}", kinds(&commands), state.0.get(&id()));
+        assert!(!state.0.contains_key(&id()));
+        assert!(kinds(&commands).is_empty());
+    }
+}

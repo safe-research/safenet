@@ -1,0 +1,49 @@
+estimate: max_fee 1084000000 tip 1000000000 (alloy default: 2 * base 42000000 + tip)
+
+== A. cap_priority_fee (tx/fees.rs:12-31, compiled by path)
+cap    NaN: max_fee     84000000 tip            0
+cap      0: max_fee     84000000 tip            0
+cap    -25: max_fee     84000000 tip            0
+cap     50: max_fee    168000000 tip     84000000
+cap     95: max_fee   1084000000 tip   1000000000
+cap    100: max_fee   1084000000 tip   1000000000
+cap    inf: max_fee   1084000000 tip   1000000000
+
+== B. AllocatedTransaction::build (tx/types.rs:119-141), same estimate every round
+round   0 (+  0 blocks): tip             1000000000 =        1.0x first tip; gas_limit * max_fee            271000000000000 wei
+round   1 (+  2 blocks): tip             1100000000 =        1.1x first tip; gas_limit * max_fee            298100000000000 wei
+round  10 (+ 20 blocks): tip             2593742461 =        2.6x first tip; gas_limit * max_fee            702904207250000 wei
+round  24 (+ 48 blocks): tip             9849732693 =        9.8x first tip; gas_limit * max_fee           2669277560750000 wei
+round  48 (+ 96 blocks): tip            97017233998 =       97.0x first tip; gas_limit * max_fee          26291670421000000 wei
+round  72 (+144 blocks): tip           955593819855 =      955.6x first tip; gas_limit * max_fee         258965925258750000 wei
+round  96 (+192 blocks): tip          9412343672264 =     9412.3x first tip; gas_limit * max_fee        2550745135951500000 wei
+
+== C. build under a 0% cap: the tip never leaves zero
+round   0: max_fee               84000000 tip 0
+round   1: max_fee               92400000 tip 0
+round  50: max_fee             9860831951 tip 0
+round 100: max_fee          1157571473420 tip 0
+
+== D. tx::Config from a [transactions] table (tx/config.rs:77-135)
+priority_fee_cap_percentage = nan    -> Ok(Config { mode: Direct { max_in_flight_transactions: 16 }, blocks_before_resubmit: 2, priority_fee_cap_percentage: Some(NaN) })
+priority_fee_cap_percentage = -5.0   -> Ok(Config { mode: Direct { max_in_flight_transactions: 16 }, blocks_before_resubmit: 2, priority_fee_cap_percentage: Some(-5.0) })
+max_in_flight_transactions = 0       -> Ok(Config { mode: Direct { max_in_flight_transactions: 0 }, blocks_before_resubmit: 2, priority_fee_cap_percentage: None })
+blocks_before_resubmit = 0           -> Ok(Config { mode: Direct { max_in_flight_transactions: 16 }, blocks_before_resubmit: 0, priority_fee_cap_percentage: None })
+
+== E1. End to end: an unincluded transaction through update_block_status (tx/mod.rs:166-363)
+round  0 (block  10): max_fee           1084000000 tip           1000000000 =      1.0x first tip
+round  1 (block  12): max_fee           1192400000 tip           1100000000 =      1.1x first tip
+round 10 (block  30): max_fee           2811616829 tip           2593742461 =      2.6x first tip
+round 24 (block  58): max_fee          10677110243 tip           9849732693 =      9.8x first tip
+round 48 (block 106): max_fee         105166681684 tip          97017233998 =     97.0x first tip
+
+== E2. End to end with priority_fee_cap_percentage = NaN
+round  0: max_fee         84000000 tip 0
+round  1: max_fee         92400000 tip 0
+round 10: max_fee        217874369 tip 0
+round 20: max_fee        565110009 tip 0
+
+== E3. End to end with max_in_flight_transactions = 0
+block 10: unused mocked responses 2 (fee history and send never requested); allocated nonces 0; queued actions 1
+block 11: unused mocked responses 2 (fee history and send never requested); allocated nonces 0; queued actions 1
+block 12: unused mocked responses 2 (fee history and send never requested); allocated nonces 0; queued actions 1

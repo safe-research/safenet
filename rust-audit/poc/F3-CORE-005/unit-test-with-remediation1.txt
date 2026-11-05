@@ -1,0 +1,9 @@
+host clock in sync: (block, lag ms) [(1001, 500), (1002, 500), (1003, 500), (1004, 500), (1005, 500), (1006, 500)]; block requests 12
+host clock 10 s behind: (block, lag ms) [(1001, 500), (1002, 0), (1003, 500), (1004, 0), (1005, 500), (1006, 0)]; block requests 75
+thread 'index::blocks::tests::qa3_host_clock_behind_delays_every_block_by_the_offset' (261907) panicked at crates/core/src/index/blocks.rs:1479:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 151 filtered out; finished in 0.00s
+--- whole core suite with the fix:
+test effects::tests::skips_panicked_tasks_without_losing_successful_resumes ... ok
+test index::blocks::tests::qa3_host_clock_behind_delays_every_block_by_the_offset ... FAILED
+thread 'index::blocks::tests::qa3_host_clock_behind_delays_every_block_by_the_offset' (261979) panicked at crates/core/src/index/blocks.rs:1479:9:
+test result: FAILED. 151 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s

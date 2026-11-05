@@ -1,0 +1,21 @@
+run 1 on chain A stopped: snapshots [1002, 1003, 1004, 1005, 1006, 1007]
+chain B forks at 1000 (reorg depth 8), head 1011
+run 2 Driver::new: error Index(Blocks(ExceededMaxReorgDepth(5)))
+thread 'driver::qa3_deep_reorg_tests::qa3_deep_reorg_while_stopped_is_accepted_on_restart' (303932) panicked at crates/core/src/driver.rs:656:13:
+test driver::qa3_deep_reorg_tests::qa3_deep_reorg_while_stopped_is_accepted_on_restart ... FAILED
+live: chain B forks at 1003 (reorg depth 6), head 1009
+run 1 exited on its own: true; snapshots [1003]
+run 2 Driver::new: error Index(Blocks(ExceededMaxReorgDepth(5)))
+thread 'driver::qa3_deep_reorg_tests::qa3_deep_reorg_exit_is_forgotten_on_restart' (303931) panicked at crates/core/src/driver.rs:700:13:
+test driver::qa3_deep_reorg_tests::qa3_deep_reorg_exit_is_forgotten_on_restart ... FAILED
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 151 filtered out; finished in 9.02s
+error: test failed, to rerun pass `-p safenet-core --lib`
+--- whole core suite with remediation 1:
+test effects::tests::skips_panicked_tasks_without_losing_successful_resumes ... ok
+test driver::qa3_deep_reorg_tests::qa3_deep_reorg_while_stopped_is_accepted_on_restart ... FAILED
+test driver::qa3_deep_reorg_tests::qa3_deep_reorg_exit_is_forgotten_on_restart ... FAILED
+thread 'driver::qa3_deep_reorg_tests::qa3_deep_reorg_while_stopped_is_accepted_on_restart' (304405) panicked at crates/core/src/driver.rs:656:13:
+thread 'driver::qa3_deep_reorg_tests::qa3_deep_reorg_exit_is_forgotten_on_restart' (304404) panicked at crates/core/src/driver.rs:700:13:
+test result: FAILED. 151 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.03s
+control restart on chain A: snapshots before [1000, 1001, 1002, 1003, 1004, 1005], after [1001, 1002, 1003, 1004, 1005, 1006]
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 153 filtered out; finished in 9.04s

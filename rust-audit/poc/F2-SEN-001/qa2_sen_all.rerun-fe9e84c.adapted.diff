@@ -1,0 +1,54 @@
+--- rust-audit/poc/F2-SEN-001/qa2_sen_all.rs	2026-09-15 18:47:50.929046070 +0530
++++ rust-audit/poc/F2-SEN-001/qa2_sen_all.rerun-fe9e84c.adapted.rs	2026-09-22 16:19:12.636105493 +0530
+@@ -1,3 +1,6 @@
++    // QA2-SEN-Δ adapted copy for the fe9e84c re-run: identical to qa2_sen_all.rs except that the
++    // f2_sen_003b / f2_sen_007b *setup* preconditions follow the Reveal from block 121 to 120
++    // (PR #914). No finding assertion was changed. Diff: qa2_sen_all.rerun-fe9e84c.adapted.diff
+     // =====================================================================
+     // QA2-SEN (run 2) proof-of-concept tests for F2-SEN-001..008.
+     // Temporary: pasted into `mod tests` of crates/sentinel/src/service.rs,
+@@ -420,11 +423,14 @@
+             m.handle_resume(approved(id)).await.unwrap();
+             step(&mut m, 102, vec![committed_event(id, self_address(), BOND)]).await;
+             step(&mut m, 103, vec![committed_event(id, OTHER, BOND)]).await;
+-            for n in 104..=120 {
++            for n in 104..=119 {
+                 step(&mut m, n, vec![]).await;
+             }
+-            let c = step(&mut m, 121, vec![]).await;
++            // QA2-SEN-Δ (fe9e84c, PR #914): the Reveal is now emitted at NewBlock(commit_deadline) = 120,
++            // not 121; the precondition moves one block earlier, nothing else changes.
++            let c = step(&mut m, 120, vec![]).await;
+             assert!(has(&c, is_reveal));
++            step(&mut m, 121, vec![]).await;
+             step(&mut m, 122, vec![revealed_event(id, self_address(), true, BOND)]).await;
+             assert!(matches!(
+                 snapshot(&pool, 122).await.unwrap().0[&id],
+@@ -804,18 +810,20 @@
+             step(&mut m, 101, vec![proposed_event(ORACLE, h, TO), new_request(id)]).await;
+             m.handle_resume(approved(id)).await.unwrap();
+             step(&mut m, 102, vec![committed_event(id, self_address(), BOND)]).await;
+-            for n in 103..=120 {
++            for n in 103..=119 {
+                 step(&mut m, n, vec![]).await;
+             }
+-            let c1 = step(&mut m, 121, vec![]).await;
++            // QA2-SEN-Δ (fe9e84c, PR #914): the Reveal is now emitted at NewBlock(commit_deadline) = 120,
++            // so the reorged block is 120 (rollback to snapshot 119); the finding assertion is unchanged.
++            let c1 = step(&mut m, 120, vec![]).await;
+             assert!(has(&c1, is_reveal)); // row 1 queued; the queue is never rolled back (tx/storage.rs:89-104)
+-            // Block 121 is uncled (depth 1 ≤ max_reorg_depth): rollback to snapshot 120, replacement block 121.
+-            assert_eq!(m.handle_update(uncle(121)).await.unwrap(), vec![]);
+-            let c2 = step(&mut m, 121, vec![]).await;
+-            eprintln!("[F2-SEN-007b] first block 121 → {:?}\n[F2-SEN-007b] replacement block 121 → {:?}", c1, c2);
++            // Block 120 is uncled (depth 1 ≤ max_reorg_depth): rollback to snapshot 119, replacement block 120.
++            assert_eq!(m.handle_update(uncle(120)).await.unwrap(), vec![]);
++            let c2 = step(&mut m, 120, vec![]).await;
++            eprintln!("[F2-SEN-007b] first block 120 → {:?}\n[F2-SEN-007b] replacement block 120 → {:?}", c1, c2);
+             assert!(
+                 !has(&c2, is_reveal),
+-                "F2-SEN-007 reproduced: a second Reveal row is emitted for the replacement block 121; the \
++                "F2-SEN-007 reproduced: a second Reveal row is emitted for the replacement block 120; the \
+                  first is still queued or in flight, so the second reverts AlreadyRevealed (Commitments.sol:117)"
+             );
+         }

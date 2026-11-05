@@ -1,0 +1,22 @@
+# QA2-XC (resume): coverage.md section 7 item 4 (sentinel catch-up with terminal events) on the current tree; HEAD fe9e84cc59b65367b31d5a3121774383cc422234
+# PoC source: poc/F2-XC-050/coverage-7.4/qa2_cov_7_4_sentinel_test.rs, pasted into 'mod tests' of crates/sentinel/src/service.rs in a scratch copy of the workspace (Cargo.toml, Cargo.lock, crates/ copied verbatim from HEAD into the session scratchpad; the tracked file was concurrently in use by another QA agent). Build artefacts go to the shared CARGO_TARGET_DIR, nothing is built under /tmp.
+# command: cargo test --offline --locked --manifest-path <scratch>/ws/Cargo.toml -p sentinel --bins qa2_cov_7_4 -- --nocapture
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.86s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (/home/shebin.guest/.cache/safenet-run2/target/debug/deps/sentinel-152a0c2d5ccd9f00)
+
+running 1 test
+stopped at BlockStatus { latest: 110, safe: 105 }; snapshot 105 tracks 3 bonded requests (CollectingCommitments, self_committed)
+warp page 106..=195 commands: [Action(SentinelAction { kind: Claim { id: 0x055bdced12608fe768da8edeac70bc54e87589a0b9fa1ad307a63e0b27a29bb7 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0x7c33d2ce51683642a6af54556bea5845e378d99280a20fde435c3ae8c59b2410 }, expires_at: None }), Action(SentinelAction { kind: Claim { id: 0xb05637b90481befcd0b253790579ed4b8b3a69532ac034a23507a01bae0cff56 }, expires_at: None })]
+claims emitted from the warp page: [(0x055bdced12608fe768da8edeac70bc54e87589a0b9fa1ad307a63e0b27a29bb7, None), (0x7c33d2ce51683642a6af54556bea5845e378d99280a20fde435c3ae8c59b2410, None), (0xb05637b90481befcd0b253790579ed4b8b3a69532ac034a23507a01bae0cff56, None)]
+snapshots after the page: [105, 195]
+snapshots after prune(195): [195]
+restart 2: persisted BlockStatus { latest: 195, safe: 195 }; uncle candidate 196 > latest -> no Uncle queued
+after restart 2: claims re-emitted = []; tracked requests = 0
+test service::tests::qa2_cov_7_4::claims_for_terminal_events_are_emitted_from_the_warp_page_and_lost_with_it ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.07s
+
+# exit=0

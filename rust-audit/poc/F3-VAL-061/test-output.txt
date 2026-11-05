@@ -1,0 +1,19 @@
+$ cargo test -p validator --bins poc_f3_val_061 -- --nocapture
+running 1 test
+test state::keygen::poc_f3_val_061::divergent_genesis_set_silently_ignores_the_deployment_key_gen ... ok
+test result: ok. 1 passed; 0 failed
+
+Drives the real handle_genesis_key_gen via apply_transition.
+- A validator configured with {A,B,C,D} (missing the deployment's 5th genesis
+  member E) derives a genesis group id != the deployed {A,B,C,D,E} id.
+- The deployment's genesis KeyGen event is dropped: state stays
+  WaitingForGenesis, no commands. The early-return path (keygen.rs:46-50) has no
+  tracing, so the failure is silent; the validator never joins genesis.
+- Control: the KeyGen for the locally derived id DOES start the ceremony
+  (CollectingCommitments + KeyGenSetup effect), so the drop is specifically the
+  silent id mismatch.
+
+Bite: the control vs the drop is mutually controlling (same code, gid match vs
+mismatch -> start vs silent drop). Not covered here: the rollover half and the
+blocks_per_epoch/timeout divergences (same class, same fix site; traced in the
+finding), and running the real binary against Anvil end to end.

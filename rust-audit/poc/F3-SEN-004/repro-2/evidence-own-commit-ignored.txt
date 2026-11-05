@@ -1,0 +1,3 @@
+{"timestamp":"2026-10-08T19:41:15.245724Z","level":"DEBUG","fields":{"message":"initializing block watcher","latest":20,"safe":15,"resume":"Some(BlockStatus { latest: 12, safe: 7 })"},"target":"safenet_core::index::blocks"}
+{"timestamp":"2026-10-08T19:41:15.253339Z","level":"WARN","fields":{"message":"ignoring unexpected commitment","request_id":"0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b","state":"waiting_for_engine_check"},"target":"sentinel::service"}
+{"timestamp":"2026-10-08T19:41:15.253362Z","level":"WARN","fields":{"message":"ignoring unexpected commitment","request_id":"0x79e6f51a2d3f1d4b2e623e017d04832a3f957df25190f73a5c1ac86039b3ba9b","state":"waiting_for_engine_check"},"target":"sentinel::service"}

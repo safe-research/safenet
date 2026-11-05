@@ -1,0 +1,6 @@
+# R2: can a toml error span start off a UTF-8 char boundary? (run 3, audit commit 361aaf3)
+# Why: crates/core/src/config.rs:39 slices contents[..span.start]; an off-boundary start would panic, and std's slice panic message quotes up to 256 bytes of the document (rpc and signer are the first lines of the sample).
+# Harness: $RUN/scratch/R2/poc (copy: R2-harness-main.rs.txt), mode fuzz: inserts or substitutes 1 to 3 non-ASCII characters (é 中 😀 NBSP ß U+2028, alone or next to " = [ ]) at random char boundaries of a validator-shaped document, parses with toml 1.1.2 into a struct shaped like crates/validator/src/config.rs (deny_unknown_fields, from_str_with_env fields, flattened driver::Config), and checks err.span().start with is_char_boundary.
+# Command: ./target/debug/r2-poc fuzz 200000
+fuzz: 200000 documents, 191354 parse errors, 0 spans starting off a char boundary
+# Harness source sha256: caaf9e6d22b277690c04cde9cef224701c2500f3f71ff069b971f135f2b09ef4

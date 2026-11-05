@@ -1,0 +1,94 @@
+# F3-SEN-060 offline PoC: mutation checks (OFF3, run 3)
+# Each mutant is a scratch copy of wt/lt3/contracts/src with one edit, and a scratch copy of this
+# folder whose foundry.toml points "@/" at that copy (absolute remappings, otherwise unchanged).
+# Neither wt/lt3 nor this folder was edited: `diff -r` against wt/lt3/contracts/src shows only the
+# one edit in each copy, and `git status` in wt/lt3 lists only this untracked folder.
+# Every command ran under integ (no network), forge 1.5.1, solc 0.8.30.
+
+## M1: timeoutArbitration no longer pushes the fee refund to the sponsor
+
+--- contracts/src/SentinelOracle.sol
++++ mutant-m1/oracle-src/SentinelOracle.sol
+@@ -345,7 +345,7 @@
+         SentinelOracleRequest.T storage request = $requests.get(requestId);
+         address sponsor = request.terms.sponsor;
+         uint96 refundFee = request.timeoutArbitration();
+-        FEE_TOKEN.safeTransfer(sponsor, refundFee);
++        (sponsor, refundFee);
+         emit ArbitrationTimedOut(requestId);
+     }
+ 
+
+$ integ forge test -vv
+[FAIL: next call did not revert as expected] test_blacklistedSponsorLocksFrozenBondsUntilUnblacklisted() (gas: 588146)
+[FAIL: assertion failed: 9600000 != 10000000] test_controlWithoutBlacklistEveryClaimSucceeds() (gas: 612603)
+[PASS] test_etchedUsdcMatchesCache() (gas: 29043)
+Suite result: FAILED. 1 passed; 2 failed; 0 skipped; finished in 1.85ms (935.92µs CPU time)
+
+# Where the main test fails (-vvvv, trace lines 383-394): sentinel0's timeoutArbitration at
+# deadline + 1 now succeeds, so the expected Blacklistable revert does not happen. The control fails
+# too, because the sponsor is no longer refunded (9.6 instead of 10 USDC.e).
+    ├─ [0] VM::roll(49170842 [4.917e7])
+    │   └─ ← [Return]
+    ├─ [0] console::log("block of the sentinels' timeoutArbitration and claim", 49170842 [4.917e7]) [staticcall]
+    │   └─ ← [Stop]
+    ├─ [0] VM::prank(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xf28dceb3:  %Blacklistable: account is blacklisted)
+    │   └─ ← [Return]
+    ├─ [2306] SentinelOracle::timeoutArbitration(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ emit ArbitrationTimedOut(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   └─ ← [Stop]
+    └─ ← [Revert] next call did not revert as expected
+
+## M2: claim accepts a FROZEN request
+
+--- contracts/src/libraries/SentinelOracleRequests.sol
++++ mutant-m2/oracle-src/libraries/SentinelOracleRequests.sol
+@@ -240,7 +240,8 @@
+     function requireResolved(T storage self) internal view returns (State) {
+         State state = self.progress.state;
+         require(
+-            state == State.RESOLVED_APPROVED || state == State.RESOLVED_DENIED || state == State.TIMED_OUT,
++            state == State.RESOLVED_APPROVED || state == State.RESOLVED_DENIED || state == State.TIMED_OUT
++                || state == State.FROZEN,
+             RequestNotResolved()
+         );
+         return state;
+
+$ integ forge test -vv
+[FAIL: next call did not revert as expected] test_blacklistedSponsorLocksFrozenBondsUntilUnblacklisted() (gas: 601349)
+[PASS] test_controlWithoutBlacklistEveryClaimSucceeds() (gas: 509565)
+[PASS] test_etchedUsdcMatchesCache() (gas: 29043)
+Suite result: FAILED. 2 passed; 1 failed; 0 skipped; finished in 1.82ms (842.54µs CPU time)
+
+# Where the main test fails (-vvvv, trace lines 383-409): timeoutArbitration still reverts on the
+# blacklist, but sentinel0's claim now returns its 800 USDC.e while the request is FROZEN, so the
+# expected RequestNotResolved revert does not happen. The control is unaffected.
+    ├─ [0] VM::roll(49170842 [4.917e7])
+    │   └─ ← [Return]
+    ├─ [0] console::log("block of the sentinels' timeoutArbitration and claim", 49170842 [4.917e7]) [staticcall]
+    │   └─ ← [Stop]
+    ├─ [0] VM::prank(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xf28dceb3:  %Blacklistable: account is blacklisted)
+    │   └─ ← [Return]
+    ├─ [3482] SentinelOracle::timeoutArbitration(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ [1777] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5])
+    │   │   ├─ [1058] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sponsor: [0xeB42Ea4654c82B0dd20E908457099A7ed41deDa6], 400000 [4e5]) [delegatecall]
+    │   │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   │   └─ ← [Revert] Blacklistable: account is blacklisted
+    │   └─ ← [Revert] Blacklistable: account is blacklisted
+    ├─ [0] VM::prank(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(custom error 0xc31eb0e0: ef69e9d800000000000000000000000000000000000000000000000000000000)
+    │   └─ ← [Return]
+    ├─ [10483] SentinelOracle::claim(0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca)
+    │   ├─ [5363] 0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0::transfer(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C], 800000000 [8e8])
+    │   │   ├─ [4663] 0x107CF7fb73EA48D1D200989b156Ce1894d7AfEC7::transfer(sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C], 800000000 [8e8]) [delegatecall]
+    │   │   │   ├─ emit Transfer(from: SentinelOracle: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], to: sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C], value: 800000000 [8e8])
+    │   │   │   └─ ← [Return] true
+    │   │   └─ ← [Return] true
+    │   ├─ emit Claimed(requestId: 0xb382695fdb9d5f774779a01c2f31521e364d759cbbcf2b6dcdc1aaee126cccca, sentinel: sentinel0: [0xb2234d9c56F5cFbCfC5b6eD3F9F2982F7DADEf0C], bondReturn: 800000000 [8e8], feeReward: 0)
+    │   └─ ← [Stop]
+    └─ ← [Revert] next call did not revert as expected

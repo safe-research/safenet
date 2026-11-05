@@ -1,0 +1,21 @@
+diff --git a/crates/core/src/index/blocks.rs b/crates/core/src/index/blocks.rs
+index 8467fdc..bd68a6d 100644
+--- a/crates/core/src/index/blocks.rs
++++ b/crates/core/src/index/blocks.rs
+@@ -604,6 +604,16 @@ impl BlockWatcher {
+     /// this returns immediately and the watcher catches up as fast as it can.
+     async fn wait_for_pending_block(&self) {
+         let target = self.pending.timestamp_ms + self.timings.block_propagation_delay;
++        // QA3 bite check (F3-CORE-005 remediation 1, first half): a newest
++        // header ahead of the host clock means the host clock is behind, so
++        // do not let it delay the fetch.
++        let newest_header_ms = self
++            .pending
++            .timestamp_ms
++            .saturating_sub(self.timings.block_time);
++        if newest_header_ms > self.clock.now_ms() {
++            return;
++        }
+         self.clock.sleep_until(target).await;
+     }
+ }

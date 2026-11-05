@@ -1,0 +1,17 @@
+# rv-sen, 2026-10-08, audit commit 361aaf3, worktree wt/rv-sen
+# cargo test -p sentinel --bins rv_sen_run3::f_sen_015 -- --nocapture --test-threads=1
+# (test source pasted temporarily into `mod tests` of crates/sentinel/src/service.rs, then reverted)
+
+test service::tests::rv_sen_run3::f_sen_015_run3_replayed_check_reuses_the_committed_verdict ... [F-SEN-015 run3 v1] replayed check resumed with Denied(RuleId(2, 1)) (engine's live answer would be R-3.4)
+[F-SEN-015 run3 v1] NewBlock(21) → [Action(SentinelAction { kind: Reveal { id: 0x0eab17c7e938b286dc3d6b87bf7148fc1ba91634767ec4cba43d522b3ef616b7, approve: false, salt: 0x4fb53d5570ddb192c92d5923bbd4469036aad4be28d0711d70b3981b94aee12c, reason: "R-2.1" }, expires_at: Some(40) })]
+ok
+test service::tests::rv_sen_run3::f_sen_015_run3_engine_down_on_replay_still_reveals ... [F-SEN-015 run3 v2] unreachable engine answers Unknown; replayed check resumed with Denied(RuleId(2, 1))
+[F-SEN-015 run3 v2] NewBlock(21) → [Action(SentinelAction { kind: Reveal { id: 0x031cc2f11ba068bd4b0c8a21919dfc5a7bfebeca9fc0d2c90bd8ef99206216ae, approve: false, salt: 0x9a12fee5893e9be823b86e7a4b53e1504b7f8ee41938facfb04f2ab5c465e125, reason: "R-2.1" }, expires_at: Some(40) })]
+ok
+test service::tests::rv_sen_run3::f_sen_015_run3_concurrent_checks_resume_with_one_verdict ... [F-SEN-015 run3 v3] concurrent checks resumed with Denied(RuleId(3, 4)) and Denied(RuleId(3, 4))
+ok
+test service::tests::rv_sen_run3::f_sen_015_run3_restart_replay_reuses_the_recorded_verdict ... [F-SEN-015 run3 v4] restart replay: check resumed with Approved (engine's live answer would be R-4.1)
+ok
+test service::tests::rv_sen_run3::f_sen_015_run3_verdict_retained_until_the_snapshot_boundary ... [F-SEN-015 run3 v5] prune(safe=100) removed 0, kept Some(Denied(RuleId(2, 1))); prune(safe=101) removed 1, then None
+ok
+

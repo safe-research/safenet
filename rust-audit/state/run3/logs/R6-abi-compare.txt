@@ -1,0 +1,94 @@
+# R6: validator sol! bindings vs solc ABIs at 361aaf3 (2026-10-08)
+# Rust side: verbatim copy of crates/validator/src/bindings.rs at 361aaf3 with only #[sol(rpc)], the clippy allow and the alloy::sol import path changed; built offline against alloy-sol-types 1.6.0 (Cargo.lock pin) and run: cargo run --offline
+# Solidity side: forge build of a scratch copy of wt/base/contracts (361aaf3), artifacts build/out/{Consensus,FROSTCoordinator,IOracle}.sol; topic0 via cast keccak over the canonical ABI signature, selectors from solc methodIdentifiers
+
+## rust-abi.txt
+event Consensus EpochProposed(uint64,uint64,uint64,bytes32,(uint256,uint256)) 0x6be947707aed4e645f9b39db04fcc849c9a98cc44427e3d4bfc40258b26b7b13
+event Consensus EpochStaged(uint64,uint64,uint64,bytes32,(uint256,uint256),bytes32,((uint256,uint256),uint256)) 0xd22757d0334b80219cf27dedaf82211008f84fc412a29a27e3000dc1c6160b86
+event Consensus TransactionProposed(bytes32,bytes32,address,uint64,bytes,(uint256,address,address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256)) 0x47d867ce4d91d0487fa4d2ac80b13e7466ce53dd018a8eef564fc60c92b53d03
+event Consensus TransactionAttested(bytes32,bytes32,address,uint64,bytes32,bytes32,((uint256,uint256),uint256)) 0x1980afd018b6bb99a313d3b7a88274259621396f9b8acaa712ef114872977357
+event Consensus ValidatorStakerSet(address,address) 0xf0a005469b11e09422034ffe29da663a2969918f3663a27fae9fd5eed38778bb
+event Coordinator KeyGen(bytes32,bytes32,uint16,uint16,bytes32) 0xb3b10f23809cbdcdb7d4ff0d2cb4e573182d7704ca17ccf8321788a097a35ee7
+event Coordinator KeyGenCommitted(bytes32,address,((uint256,uint256),((uint256,uint256),uint256),(uint256,uint256)[],((uint256,uint256),uint256)),bool) 0x79b333725e240c8c77269974bf824ca6bb672fe3f7ae4f7d4b8a8e49aae34ea5
+event Coordinator KeyGenSecretShared(bytes32,address,((uint256,uint256),uint256[]),bool) 0x8ad66fd7316af8b492b75c5aa77da4d401a44f502913a095f4142696005832b7
+event Coordinator KeyGenConfirmed(bytes32,address,bool) 0x2553b3b5476eaf8b6ccc0c1656cd21552f8e85959654fd47d733f6e94bc65202
+event Coordinator KeyGenComplained(bytes32,address,address,bool) 0xfacda0c1a23c91046de84f88c9fb4f3cd4360b4ae1b821b127968fa5d9db5fb9
+event Coordinator KeyGenComplaintResponded(bytes32,address,address,uint256) 0x752c21192c04ff0d891e5e67e2e34f0411cd5285d216a8068b19842343e9cbb2
+event Coordinator Sign(address,bytes32,bytes32,bytes32,uint64) 0xb48d242879f9f3df555c800db966f65cba128c7213198748fa202ed54e092691
+event Coordinator SignCommittedNonces(bytes32,address,((uint256,uint256),(uint256,uint256))) 0xe995b4a17d436f1fe8cab93c9ace8286df3e11eb7d3fe46edfc27fb8576324f5
+event Coordinator SignShared(bytes32,bytes32,address,uint256) 0x25a4d6e8d11a9fdc20ffdd826473485ae4cdd453271726c072a16836c1882e7c
+event Coordinator SignCompleted(bytes32,bytes32,((uint256,uint256),uint256)) 0x7f1641fa8e46c311f05dc0cb9f69f0ac0f27dd12388a5587c7983de9e99a028d
+event Oracle OracleResult(bytes32,address,bytes,bool) 0x7843c453c4f7442b00e1bf3873e741f18f3447e18a13304c58bef95efd311757
+call Consensus proposeEpoch(uint64,uint64,bytes32) 0x2c0aff7a
+call Consensus stageEpoch(uint64,uint64,bytes32,bytes32) 0xea5eeafa
+call Consensus attestTransaction(uint64,address,bytes32,uint256,address,bytes32,bytes32) 0xd49400f8
+call Consensus setValidatorStaker(address) 0xbbce66a6
+call Consensus getValidatorStaker(address) 0x110aec04
+call Consensus getCoordinator() 0x71977fe0
+call Coordinator keyGenAndCommit(bytes32,uint16,uint16,bytes32,bytes32[],((uint256,uint256),((uint256,uint256),uint256),(uint256,uint256)[],((uint256,uint256),uint256))) 0x4ba77e21
+call Coordinator keyGenCommit(bytes32,bytes32[],((uint256,uint256),((uint256,uint256),uint256),(uint256,uint256)[],((uint256,uint256),uint256))) 0x55e493b6
+call Coordinator keyGenSecretShare(bytes32,((uint256,uint256),uint256[])) 0x7d10c04b
+call Coordinator keyGenComplain(bytes32,address) 0x2f559b6d
+call Coordinator keyGenComplaintResponse(bytes32,address,uint256) 0x53a8081a
+call Coordinator keyGenConfirm(bytes32) 0x1169f60e
+call Coordinator keyGenConfirmWithCallback(bytes32,(address,bytes)) 0x1896ae36
+call Coordinator sign(bytes32,bytes32) 0x86f57635
+call Coordinator signCommitNonces(bytes32,((uint256,uint256),(uint256,uint256))) 0x38e9bdda
+call Coordinator signShare(bytes32,((uint256,uint256),bytes32),((uint256,uint256),uint256,uint256),bytes32[]) 0x243e8b83
+call Coordinator signShareWithCallback(bytes32,((uint256,uint256),bytes32),((uint256,uint256),uint256,uint256),bytes32[],(address,bytes)) 0x95b57d9d
+anonymous-check false
+
+## python3 -I abi_compare.py rust-abi.txt build/out
+ok event Consensus.EpochProposed 0x6be947707aed4e645f9b39db04fcc849c9a98cc44427e3d4bfc40258b26b7b13
+ok event Consensus.EpochStaged 0xd22757d0334b80219cf27dedaf82211008f84fc412a29a27e3000dc1c6160b86
+ok event Consensus.TransactionProposed 0x47d867ce4d91d0487fa4d2ac80b13e7466ce53dd018a8eef564fc60c92b53d03
+ok event Consensus.TransactionAttested 0x1980afd018b6bb99a313d3b7a88274259621396f9b8acaa712ef114872977357
+ok event Consensus.ValidatorStakerSet 0xf0a005469b11e09422034ffe29da663a2969918f3663a27fae9fd5eed38778bb
+ok event Coordinator.KeyGen 0xb3b10f23809cbdcdb7d4ff0d2cb4e573182d7704ca17ccf8321788a097a35ee7
+ok event Coordinator.KeyGenCommitted 0x79b333725e240c8c77269974bf824ca6bb672fe3f7ae4f7d4b8a8e49aae34ea5
+ok event Coordinator.KeyGenSecretShared 0x8ad66fd7316af8b492b75c5aa77da4d401a44f502913a095f4142696005832b7
+ok event Coordinator.KeyGenConfirmed 0x2553b3b5476eaf8b6ccc0c1656cd21552f8e85959654fd47d733f6e94bc65202
+ok event Coordinator.KeyGenComplained 0xfacda0c1a23c91046de84f88c9fb4f3cd4360b4ae1b821b127968fa5d9db5fb9
+ok event Coordinator.KeyGenComplaintResponded 0x752c21192c04ff0d891e5e67e2e34f0411cd5285d216a8068b19842343e9cbb2
+ok event Coordinator.Sign 0xb48d242879f9f3df555c800db966f65cba128c7213198748fa202ed54e092691
+ok event Coordinator.SignCommittedNonces 0xe995b4a17d436f1fe8cab93c9ace8286df3e11eb7d3fe46edfc27fb8576324f5
+ok event Coordinator.SignShared 0x25a4d6e8d11a9fdc20ffdd826473485ae4cdd453271726c072a16836c1882e7c
+ok event Coordinator.SignCompleted 0x7f1641fa8e46c311f05dc0cb9f69f0ac0f27dd12388a5587c7983de9e99a028d
+ok event Oracle.OracleResult 0x7843c453c4f7442b00e1bf3873e741f18f3447e18a13304c58bef95efd311757
+ok call Consensus.proposeEpoch 0x2c0aff7a
+ok call Consensus.stageEpoch 0xea5eeafa
+ok call Consensus.attestTransaction 0xd49400f8
+ok call Consensus.setValidatorStaker 0xbbce66a6
+ok call Consensus.getValidatorStaker 0x110aec04
+ok call Consensus.getCoordinator 0x71977fe0
+ok call Coordinator.keyGenAndCommit 0x4ba77e21
+ok call Coordinator.keyGenCommit 0x55e493b6
+ok call Coordinator.keyGenSecretShare 0x7d10c04b
+ok call Coordinator.keyGenComplain 0x2f559b6d
+ok call Coordinator.keyGenComplaintResponse 0x53a8081a
+ok call Coordinator.keyGenConfirm 0x1169f60e
+ok call Coordinator.keyGenConfirmWithCallback 0x1896ae36
+ok call Coordinator.sign 0x86f57635
+ok call Coordinator.signCommitNonces 0x38e9bdda
+ok call Coordinator.signShare 0x243e8b83
+ok call Coordinator.signShareWithCallback 0x95b57d9d
+solidity events not bound in Rust: ['Consensus.EpochRolledOver']
+indexed flags (solidity):
+  Consensus.EpochProposed [True, True, False, False, False]
+  Consensus.EpochRolledOver [True]
+  Consensus.EpochStaged [True, True, False, False, False, False, False]
+  Consensus.TransactionAttested [True, True, True, False, False, False, False]
+  Consensus.TransactionProposed [True, True, True, False, False, False]
+  Consensus.ValidatorStakerSet [True, False]
+  Coordinator.KeyGen [True, False, False, False, True]
+  Coordinator.KeyGenCommitted [True, False, False, False]
+  Coordinator.KeyGenComplained [True, False, False, False]
+  Coordinator.KeyGenComplaintResponded [True, False, False, False]
+  Coordinator.KeyGenConfirmed [True, False, False]
+  Coordinator.KeyGenSecretShared [True, False, False, False]
+  Coordinator.Sign [True, True, True, False, False]
+  Coordinator.SignCommittedNonces [True, False, False]
+  Coordinator.SignCompleted [True, True, False]
+  Coordinator.SignShared [True, True, False, False]
+  Oracle.OracleResult [True, True, False, False]
+checked=33 mismatches=0

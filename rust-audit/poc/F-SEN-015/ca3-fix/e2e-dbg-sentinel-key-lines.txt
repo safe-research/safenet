@@ -1,0 +1,9 @@
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"DEBUG","fields":{"message":"reusing recorded engine verdict","request_id":"0x345f147c70c7dca259446d0df891cd6fbb9fcd8b0e1df62741876ed32bc7875b","outcome":"Denied(RuleId(2, 1))"},"target":"sentinel::effect"}
+{"level":"DEBUG","fields":{"message":"pruned engine verdicts","block":25,"safe":20,"pruned":1},"target":"sentinel::effect"}
+{"level":"INFO","fields":{"message":"starting sentinel service"},"target":"sentinel"}
+{"level":"DEBUG","fields":{"message":"pruned engine verdicts","block":40,"safe":35,"pruned":1},"target":"sentinel::effect"}
+{"level":"WARN","fields":{"message":"ignoring unexpected commitment","request_id":"0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c","state":"waiting_for_engine_check"},"target":"sentinel::service"}
+{"level":"ERROR","fields":{"message":"sentinel engine request failed; dropping the request unanswered","err":"HTTP status server error (503 Service Unavailable) for url (http://127.0.0.1:5473/v1/security-check)"},"target":"sentinel::engine","span":{"request_id":"0x4cdef111f6bb67edf1e383f4cf366420f6b
+{"level":"WARN","fields":{"message":"engine check failed; dropping request unanswered","request_id":"0x4cdef111f6bb67edf1e383f4cf366420f6baaa7a83f28adfd1ebeb9934c31c3c"},"target":"sentinel::service"}

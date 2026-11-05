@@ -1,0 +1,7 @@
+[01:12:13] F-SEN-015 E2E: iterations=2 replay-mode=down down-blocks=4
+[01:12:14] fee token 0x892bf9e2A8A0046412FEdb1912C7bADf88aC4d80, consensus 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0, oracle 0xE272FD58C5A852e64B3A4579f13ef8c7A6571513
+[01:12:14] sentinel 0x12edeFa6fE6a71aa400CCF725145476C587EAf83, sponsor 0x26da6D867a63a8db211E7b0A91345Ad83B13bb45
+[01:12:17] sentinel synced at block 18
+[01:12:29] iter 0: P=19 C=21 H=25 engine asked again=0 revealed='R-2.1' commitment=(0xa8f9b6ef0c8a2e2f2fbfb08b7a3fb5d011ca627358ae9d757520b5b81b2b114a, 4000, 3, true)
+[01:12:41] iter 1: P=34 C=36 H=40 engine asked again=1 revealed=None commitment=(0x775514cbef03048414f8b0e0a9dd0a5bb1737cd2fb0975c74fce4ce81e719f85, 4000, 1, false)
+[01:12:41] SUMMARY replay-mode=down down-blocks=4: 2 runs, engine asked again after the restart in 1, revealed the committed reason in 1, no or wrong reveal in 1

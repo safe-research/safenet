@@ -1,0 +1,94 @@
+CA3-FIX (2026-10-09), worktree wt/rv-xc at 361aaf3, PoC modules wired with #[cfg(test)] #[path] and reverted afterwards.
+Command: cargo test -p validator --bins --locked --offline -- <filters> --nocapture --test-threads=1
+Re-run of rv-val's run3 PoCs (expected: original attack 0/3 and F2-VAL-001 0/1, rejected at verify_commitment; variants 8/8), then the CA3-FIX variants.
+
+--- from r3-CA3FIX-val-existing.log (filters: frost::poc_f_val_001, frost::poc_f2_val_001, verify_commitment rejected, InvalidProofOfKnowledge, v1 , v2 , v3a, v3b, v4 , v5a, v5b, v6 , v7 , v8)
+test frost::poc_f2_val_001_run3::poc_f2_val_001_copied_q_recovers_full_share ... 
+thread 'frost::poc_f2_val_001_run3::poc_f2_val_001_copied_q_recovers_full_share' (262808) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F2-VAL-001/run3/poc_test_adapted.rs:42:68:
+called `Result::unwrap()` on an `Err` value: Participant { cause: InvalidProofOfKnowledge { culprit: Identifier("65789d905b85644bac5a7213026cb34f9e9f4e3483f1327efb2ecf3d4c8b483e") }, culprit: 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc }
+test frost::poc_f_val_001::impostor_recovers_victim_signing_share ... 
+thread 'frost::poc_f_val_001::impostor_recovers_victim_signing_share' (262809) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F-VAL-001/run3/poc_original_adapted.rs:218:21:
+verify_commitment rejected 0x976EA74026E726554dB657fA54763abd0C3a0aa9: Participant { cause: InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }, culprit: 0x976ea74026e726554db657fa54763abd0c3a0aa9 }, if this is the impostor, F-VAL-001 step 2 is REFUTED
+test frost::poc_f_val_001::impostor_share_verifies_and_group_finalizes ... 
+thread 'frost::poc_f_val_001::impostor_share_verifies_and_group_finalizes' (262810) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F-VAL-001/run3/poc_original_adapted.rs:218:21:
+verify_commitment rejected 0x976EA74026E726554dB657fA54763abd0C3a0aa9: Participant { cause: InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }, culprit: 0x976ea74026e726554db657fa54763abd0c3a0aa9 }, if this is the impostor, F-VAL-001 step 2 is REFUTED
+test frost::poc_f_val_001::pad_opens_two_recipients_slots ... 
+thread 'frost::poc_f_val_001::pad_opens_two_recipients_slots' (262811) panicked at /home/sj.guest/safe/safenet/rust-audit/poc/F-VAL-001/run3/poc_original_adapted.rs:218:21:
+verify_commitment rejected 0x976EA74026E726554dB657fA54763abd0C3a0aa9: Participant { cause: InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }, culprit: 0x976ea74026e726554db657fa54763abd0c3a0aa9 }, if this is the impostor, F-VAL-001 step 2 is REFUTED
+test frost::poc_f_val_001_run3::v1_copy_q_keep_own_pop_rejected ... v1 copy q, own pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+test frost::poc_f_val_001_run3::v2_copy_q_and_pop_verbatim_rejected ... v2 copy q and pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+test frost::poc_f_val_001_run3::v3_scalar_related_q_rejected ... v3a 2*q_A, own pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+v3b 2*q_A, victim pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+test frost::poc_f_val_001_run3::v4_additive_related_q_rejected ... v4 q_A + G, own pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+test frost::poc_f_val_001_run3::v5_negated_q_rejected ... v5a -q_A, own pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+v5b -q_A, negated victim pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+test frost::poc_f_val_001_run3::v6_random_pop_rejected ... v6 copy q, random pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("7d560b27dc1bdbc17de5216d5d5527af4aa4cba1c8f0b5df09e29133b68c0949") }
+test frost::poc_f_val_001_run3::v7_identity_q_trivial_pop_rejected ... v7 identity q, trivial pop: impostor rejected, cause = GroupError(InvalidIdentityElement)
+test frost::poc_f_val_001_run3::v8_owned_key_harvest_opens_no_victim_slot ... v8: q_M = c_M[0] with pok reused as pop is ACCEPTED (M owns it)
+v8: 5 harvested pads opened 0 of 10 victim slots
+    frost::poc_f2_val_001_run3::poc_f2_val_001_copied_q_recovers_full_share
+    frost::poc_f_val_001::impostor_recovers_victim_signing_share
+    frost::poc_f_val_001::impostor_share_verifies_and_group_finalizes
+    frost::poc_f_val_001::pad_opens_two_recipients_slots
+test result: FAILED. 19 passed; 4 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.67s
+
+--- from r3-CA3FIX-val-new.log (filters: ca3fix_f_val_001, w0 , w1a, w1b, w2 , w3 , w4 , w5 )
+test frost::ca3fix_f_val_001::w0_original_route_at_aegis_size_rejected ... w0 q := q_A at n=5 t=3: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("6d242e1272a99dc50d4c2612d74eb8e27314db7c24304f046384fdcd2f68c83d") }
+test frost::ca3fix_f_val_001::w1_victim_pok_as_pop_rejected ... w1a q := c_A[0], pop := pok_A: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("6d242e1272a99dc50d4c2612d74eb8e27314db7c24304f046384fdcd2f68c83d") }
+w1b q := c_A[0], own pop: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("6d242e1272a99dc50d4c2612d74eb8e27314db7c24304f046384fdcd2f68c83d") }
+test frost::ca3fix_f_val_001::w2_full_commitment_copy_rejected ... w2 full copy of A's commitment: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("6d242e1272a99dc50d4c2612d74eb8e27314db7c24304f046384fdcd2f68c83d") }
+test frost::ca3fix_f_val_001::w3_victim_polynomial_copy_rejected ... w3 c, pok := A's: impostor rejected, cause = InvalidProofOfKnowledge { culprit: Identifier("6d242e1272a99dc50d4c2612d74eb8e27314db7c24304f046384fdcd2f68c83d") }
+test state::keygen::ca3fix_f_val_001_state::w4_copied_q_never_enters_the_commitment_map ... w4 q := q_A: commitments held after all five events = {0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc, 0x70997970c51812dc3a010c7d01b50e0d17dc79c8, 0x90f79bf6eb2c4f870365e785982e1f101e93b906, 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266}
+w4 q := q_A: at the deadline the round restarts with {0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc, 0x70997970c51812dc3a010c7d01b50e0d17dc79c8, 0x90f79bf6eb2c4f870365e785982e1f101e93b906, 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266} (impostor excluded = true)
+test state::keygen::ca3fix_f_val_001_state::w5_copied_whole_commitment_never_enters_the_commitment_map ... w5 whole commitment copied: commitments held after all five events = {0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc, 0x70997970c51812dc3a010c7d01b50e0d17dc79c8, 0x90f79bf6eb2c4f870365e785982e1f101e93b906, 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266}
+w5 whole commitment copied: at the deadline the round restarts with {0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc, 0x70997970c51812dc3a010c7d01b50e0d17dc79c8, 0x90f79bf6eb2c4f870365e785982e1f101e93b906, 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266} (impostor excluded = true)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.33s
+
+--- mutation run (validator): python3 mutate.py <wt> pop droparm warpnb nonceover setinput, then cargo test -p validator --bins -- <filters>; reverted with git checkout
+
+--- from r3-CA3FIX-mut-val.log (filters: applied , ca3fix_, poc_f_val_001, poc_f2_val_001, poc_f_val_032_run3, poc_f2_val_003_run3, class mutation)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.10s
+applied pop to crates/validator/src/frost/ecdh.rs
+applied droparm to crates/validator/src/state/sign.rs
+applied warpnb to crates/core/src/state/mod.rs
+applied nonceover to crates/validator/src/secrets/store.rs
+applied setinput to crates/core/src/config.rs
+test config::ca3fix_config_echo::ca3fix_f2_xc_001_config_errors_never_echo_the_key ... FAILED
+test frost::ca3fix_f_val_001::w0_original_route_at_aegis_size_rejected ... FAILED
+test frost::ca3fix_f_val_001::w1_victim_pok_as_pop_rejected ... FAILED
+test frost::ca3fix_f_val_001::w2_full_commitment_copy_rejected ... ok
+test frost::ca3fix_f_val_001::w3_victim_polynomial_copy_rejected ... ok
+test frost::poc_f2_val_001_run3::poc_f2_val_001_copied_q_recovers_full_share ... ok
+test frost::poc_f_val_001::impostor_recovers_victim_signing_share ... ok
+test frost::poc_f_val_001::impostor_share_verifies_and_group_finalizes ... ok
+test frost::poc_f_val_001::pad_opens_two_recipients_slots ... ok
+test frost::poc_f_val_001_run3::v1_copy_q_keep_own_pop_rejected ... FAILED
+test frost::poc_f_val_001_run3::v2_copy_q_and_pop_verbatim_rejected ... FAILED
+test frost::poc_f_val_001_run3::v3_scalar_related_q_rejected ... FAILED
+test frost::poc_f_val_001_run3::v4_additive_related_q_rejected ... FAILED
+test frost::poc_f_val_001_run3::v5_negated_q_rejected ... FAILED
+test frost::poc_f_val_001_run3::v6_random_pop_rejected ... FAILED
+test frost::poc_f_val_001_run3::v7_identity_q_trivial_pop_rejected ... ok
+test frost::poc_f_val_001_run3::v8_owned_key_harvest_opens_no_victim_slot ... ok
+test service::effect::ca3fix_f_val_030::w1_replayed_generate_nonces_never_yields_a_fresh_or_reused_pair ... FAILED
+test state::keygen::ca3fix_f2_val_003::x1_warp_pages_split_at_the_boundary_keep_commitments ... FAILED
+test state::keygen::ca3fix_f2_val_003::x2_long_downtime_warp_covering_the_share_round ... FAILED
+test state::keygen::ca3fix_f_val_001_state::w4_copied_q_never_enters_the_commitment_map ... FAILED
+test state::keygen::ca3fix_f_val_001_state::w5_copied_whole_commitment_never_enters_the_commitment_map ... ok
+test state::keygen::poc_f2_val_003_run3::restart_warp_after_boundary_keeps_peer_commitments ... FAILED
+test state::keygen::poc_f2_val_003_run3::stale_state_still_drops_commitment ... ok
+test state::keygen::poc_f2_val_003_run3::warp_over_boundary_keeps_peer_commitments ... FAILED
+test state::keygen::poc_f2_val_003_run3::warp_over_deadline_restarts_at_the_deadline_block ... FAILED
+test state::sign::ca3fix_f_val_032::w1_attacker_sign_before_responsible_on_pending_oracle ... ok
+test state::sign::ca3fix_f_val_032::w2_sign_before_the_proposal_is_seen ... ok
+test state::sign::ca3fix_f_val_032::w3_approved_transaction_packet_survives_foreign_sign ... FAILED
+test state::sign::ca3fix_f_val_032::w4_sequence_burn_while_waiting_for_the_oracle ... ok
+test state::sign::poc_f_val_032_run3::v1_foreign_group_sign_keeps_pending_session ... FAILED
+test state::sign::poc_f_val_032_run3::v2_legitimate_sign_after_foreign_sign_advances ... FAILED
+test state::sign::poc_f_val_032_run3::v3_foreign_sign_against_every_other_state ... ok
+test state::sign::poc_f_val_032_run3::v4_sequence_burn_does_not_affect_the_real_request ... ok
+test state::sign::poc_f_val_032_run3::v5_post_timeout_window ... FAILED
+test state::sign::poc_f_val_032_run3::v6_untracked_message_on_legitimate_group ... ok
+[CA3-FIX F2-XC-001 validator] class mutation: 174108 documents, 27979 rejected, 27979 echo the key
+test result: FAILED. 16 passed; 20 failed; 0 ignored; 0 measured; 42 filtered out; finished in 139.89s
+

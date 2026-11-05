@@ -1,0 +1,8 @@
+# command: cargo clippy --workspace --all-targets --locked -- -D warnings
+# cwd: $RUN/wt/base
+# head: 361aaf3b25e12d2e04f296184c326830968f3727
+# start: 2026-10-08T14:18:01Z
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 26.37s
+# end: 2026-10-08T14:18:28Z
+# duration_s: 27
+# exit: 0
