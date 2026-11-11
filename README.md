@@ -9,7 +9,7 @@ This is a work-in-progress. Don't use it yet!
 - [Explorer](./explorer) Explorer web interface (Typescript & npm)
 - [Services core crate](./crates/core) Shared logic between the offchain Safenet services (Rust)
 - [Sentinel](./crates/sentinel) Service that watches proposals and puts up bonds for its onchain votes (Rust)
-- [Sentinel engine](./crates/sentinel-engine) Keyless transaction-verification API used by sentinels ([operator guide](./docs/sentinel-engine.md)) (Rust)
+- [Sentinel engine](./crates/sentinel-engine) Keyless transaction-verification API used by sentinels ([operator guide](./docs/sentinel-engine.md)) (Rust) — **experimental reference implementation, not authoritative for the Charter** ([see disclaimer](./docs/sentinel-engine.md#reference-implementation-status))
 - [Validator](./crates/validator) Validator service that participates in FROST signing rounds and epoch rollovers
 
 ## Developing
