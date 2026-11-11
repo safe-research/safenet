@@ -4,6 +4,16 @@ The sentinel engine is the transaction-verification service behind a Safenet sen
 
 The reference implementation lives in [`crates/sentinel-engine`](../crates/sentinel-engine). An operator can run it as-is or replace it with another implementation of the same HTTP contract.
 
+## Reference Implementation Status
+
+> [!WARNING]
+>
+> The Safenet Sentinel Engine is an experimental reference implementation and is not currently maintained in full alignment with the latest [Safenet Arbitration Charter](https://charter.safenet-gov.eth.limo/).
+>
+> Some security checks may produce verdicts that differ from the Charter or established Security Council rulings. The Charter and applicable Council rulings take precedence over the reference implementation.
+>
+> Sentinel operators are responsible for ensuring their security assessments comply with the current Charter and should not rely on the reference engine as an authoritative interpretation of its rules.
+
 ## Responsibilities and Trust Boundary
 
 An engine evaluates transactions. It does not participate in the SentinelOracle protocol directly:
