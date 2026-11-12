@@ -242,6 +242,10 @@ pub struct BlockWatcher {
     /// reorg detection. Ordered oldest-first.
     recent: VecDeque<BlockHeader>,
     queue: VecDeque<BlockUpdate>,
+    /// The hash of the block last revalidated by
+    /// [`BlockWatcher::revalidate_last_block_if_due`], and when (in Unix
+    /// epoch milliseconds).
+    last_revalidation: Option<(B256, u64)>,
 }
 
 impl BlockWatcher {
@@ -272,6 +276,7 @@ impl BlockWatcher {
             },
             recent: VecDeque::new(),
             queue: VecDeque::new(),
+            last_revalidation: None,
         };
         watcher.initialize(indexed).await?;
         Ok(watcher)
@@ -537,23 +542,8 @@ impl BlockWatcher {
     /// blocks). It only ever considers blocks in `recent`, never the `safe`
     /// anchor: by the time a block becomes `safe`, its logs have already been
     /// dealt with, so there is nothing left here that could still need it.
-    pub async fn revalidate_last_block(&mut self) -> Result<Option<InvalidatedBlock>, Error> {
-        // Re-validating while warping is not possible, as it is beyond the max
-        // reorg depth.
-        let next_number = match self.queue.front() {
-            Some(BlockUpdate::New { number, .. }) => Some(*number),
-            Some(_) => return Ok(None),
-            None => None,
-        };
-
-        // Find the last block that was emitted as a block update. This keeps
-        // `revalidate` working in the unlikely event of a reorg on startup.
-        let last_index = self
-            .recent
-            .iter()
-            .rposition(|block| next_number.is_none_or(|number| block.number < number));
-        let Some(last_index) = last_index else {
-            // We are past the max reorg depth, so there is nothing to do.
+    async fn revalidate_last_block(&mut self) -> Result<Option<InvalidatedBlock>, Error> {
+        let Some(last_index) = self.last_emitted_index() else {
             return Ok(None);
         };
         let last = &self.recent[last_index];
@@ -589,6 +579,70 @@ impl BlockWatcher {
         });
 
         Ok(Some(invalidated))
+    }
+
+    /// Re-validates the last seen block, as [`BlockWatcher::revalidate_last_block`]
+    /// does, after its logs could not be fetched, but only once that is due.
+    ///
+    /// This is time-gated, so that a block whose logs keep failing costs at most
+    /// one extra request per block time: a block the node reported as unknown
+    /// (`unknown_block`, only a latency hint) is revalidated right away, any
+    /// other failure once the next block is due (a reorg uncling the block is
+    /// visible on the node by then), and after that at most once per block time.
+    ///
+    /// Returns `None` when the block was not revalidated or is still canonical.
+    pub async fn revalidate_last_block_if_due(
+        &mut self,
+        unknown_block: bool,
+    ) -> Result<Option<InvalidatedBlock>, Error> {
+        let Some(last_index) = self.last_emitted_index() else {
+            return Ok(None);
+        };
+        let (hash, timestamp) = (
+            self.recent[last_index].hash,
+            self.recent[last_index].timestamp,
+        );
+
+        let now = self.clock.now_ms();
+        let due = match self.last_revalidation {
+            Some((last_hash, at)) if last_hash == hash => {
+                now >= at.saturating_add(self.timings.block_time)
+            }
+            _ => {
+                unknown_block
+                    || now
+                        >= timestamp
+                            .saturating_mul(1000)
+                            .saturating_add(self.timings.block_time)
+                            .saturating_add(self.timings.block_propagation_delay)
+            }
+        };
+        if !due {
+            return Ok(None);
+        }
+
+        self.last_revalidation = Some((hash, now));
+        self.revalidate_last_block().await
+    }
+
+    /// Returns the index in `recent` of the last block that was emitted as a
+    /// block update, if it can be revalidated.
+    fn last_emitted_index(&self) -> Option<usize> {
+        // Re-validating while warping is not possible, as it is beyond the max
+        // reorg depth.
+        let next_number = match self.queue.front() {
+            Some(BlockUpdate::New { number, .. }) => Some(*number),
+            Some(_) => return None,
+            None => None,
+        };
+
+        // Find the last block that was emitted as a block update. This keeps
+        // revalidation working in the unlikely event of a reorg on startup. If
+        // there is none, we are past the max reorg depth, so there is nothing
+        // to do.
+        self.recent
+            .iter()
+            .rposition(|block| next_number.is_none_or(|number| block.number < number))
     }
 
     /// Updates the pending block to follow the given latest block.
