@@ -80,8 +80,9 @@ pub struct Config {
     /// in milliseconds, to allow for propagation.
     pub block_propagation_delay: Timing<u64>,
     /// Successive delays, in milliseconds, between retries while waiting for an
-    /// expected block to become available. Once exhausted, the watcher waits a
-    /// whole `block_time` before trying again (to handle skipped slots).
+    /// expected block to become available. Once exhausted, the watcher waits for
+    /// the next slot, at least a whole `block_time`, before trying again (to
+    /// handle skipped slots).
     pub block_retry_delays: Timing<Vec<u64>>,
     /// How many of the most recent blocks are still considered mutable
     /// (i.e. how deep a reorg can be) before it is considered final. A reorg
@@ -476,7 +477,7 @@ impl BlockWatcher {
                 );
                 tokio::time::sleep(Duration::from_millis(delay)).await;
             } else {
-                self.pending.timestamp_ms += self.timings.block_time;
+                self.advance_pending_to_next_slot();
             }
         };
 
@@ -656,6 +657,26 @@ impl BlockWatcher {
             number: number + 1,
             timestamp_ms: timestamp * 1000 + self.timings.block_time,
         };
+    }
+
+    /// Moves the pending block's expected time forward by whole `block_time`
+    /// steps until it is due in the future, so the next poll lands on the next
+    /// slot. This is a single step unless the expected time is already in the
+    /// past (for example after a rewind to an uncled block), in which case
+    /// adding just one `block_time` would make the watcher poll again
+    /// immediately instead of waiting for a slot.
+    fn advance_pending_to_next_slot(&mut self) {
+        let block_time = self.timings.block_time;
+        let mut timestamp_ms = self.pending.timestamp_ms + block_time;
+        let due = self
+            .clock
+            .now_ms()
+            .saturating_sub(self.timings.block_propagation_delay);
+        if block_time > 0 && timestamp_ms <= due {
+            // First slot after `due`, counted from the block's timestamp, not from epoch 0.
+            timestamp_ms += ((due - timestamp_ms) / block_time + 1) * block_time;
+        }
+        self.pending.timestamp_ms = timestamp_ms;
     }
 
     /// Sleeps until the pending block is suspected to be ready. When the watcher
@@ -1124,6 +1145,51 @@ mod tests {
                     // At this point, we wait for the next slot which comes
                     // `block_time` minus the retry delays we already waited.
                     + (blocks.timings.block_time - blocks.timings.block_retry_delays.iter().sum::<u64>())
+            )
+        );
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn next_waits_for_the_next_slot_after_a_rewind_when_the_replacement_is_missing() {
+        let start = Instant::now();
+        let asserter = Asserter::new();
+        let mut blocks = initialized_watcher_skip_ready(
+            &asserter,
+            Config {
+                block_retry_delays: Timing::Millis(vec![]),
+                ..config()
+            },
+        )
+        .await;
+
+        // Block 1000 (at `start`) gets uncled well after its own slot, which
+        // rewinds the pending block to an expected time far in the past.
+        tokio::time::advance(Duration::from_millis(7_000)).await;
+        asserter.push_success::<Option<Block>>(&None);
+        assert_eq!(
+            blocks.revalidate_last_block().await.unwrap(),
+            Some(invalidated_block(&block(1000)))
+        );
+        assert_eq!(
+            blocks.next().await.unwrap(),
+            BlockUpdate::Uncle { number: 1000 }
+        );
+
+        // The replacement is fetched right away, but isn't served yet. With no
+        // retry delays, the watcher must then wait for the next slot (block
+        // 1004 is expected at 8 s) rather than polling again immediately.
+        let replacement = block_with(1000, |header| {
+            header.hash = keccak256("new1000");
+        });
+        asserter.push_success::<Option<Block>>(&None);
+        asserter.push_success(&replacement);
+
+        assert_eq!(blocks.next().await.unwrap(), new_block_update(&replacement));
+        assert_eq!(
+            start.elapsed(),
+            Duration::from_millis(
+                4 * blocks.timings.block_time + blocks.timings.block_propagation_delay
             )
         );
         assert!(asserter.read_q().is_empty());
