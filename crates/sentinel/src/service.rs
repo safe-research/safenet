@@ -9,6 +9,7 @@ use crate::{
     engine::{CheckOutcome, EngineClient},
     hashing::{RevealSalt as _, commit_hash, oracle_tx_proposal_hash},
     metrics::ResolvedOutcome,
+    roles::RolesModule,
     state::{Request, SentinelRequestState as RequestState, State},
     verdicts::VerdictStore,
 };
@@ -32,6 +33,8 @@ pub struct SentinelService {
     fee_token: Address,
     consensus: Address,
     signer: Signer,
+    sentinel: Address,
+    roles: Option<RolesModule>,
     chain_id: U256,
     voting_window: u64,
     claim_window: u64,
@@ -51,9 +54,12 @@ pub struct SentinelTransition {
     /// The `Consensus` contract whose `TransactionProposed` events are
     /// hashed into request ids.
     consensus: Address,
-    /// Our own account, used to compute commitment hashes and identify votes
-    /// we committed onchain.
+    /// Our own key, used to derive reveal salts.
     signer: Signer,
+    /// The account the oracle knows as this sentinel, used to compute
+    /// commitment hashes and identify our own events: the signer's account,
+    /// or the Safe its transactions are sent through (see [`RolesModule`]).
+    sentinel: Address,
     /// The chain id of the EIP-712 domain used to derive request ids.
     chain_id: U256,
     /// The number of blocks a request without an onchain commit deadline is
@@ -73,6 +79,9 @@ pub struct SentinelEncoder {
     oracle: Address,
     /// The ERC-20 token that bonds are posted in.
     fee_token: Address,
+    /// When set, every transaction is sent through this Roles modifier, so
+    /// that the sentinel Safe executes it.
+    roles: Option<RolesModule>,
 }
 
 impl SentinelService {
@@ -82,6 +91,8 @@ impl SentinelService {
         fee_token: Address,
         consensus: Address,
         signer: Signer,
+        sentinel: Address,
+        roles: Option<RolesModule>,
         chain_id: U256,
         voting_window: u64,
         claim_window: u64,
@@ -94,6 +105,8 @@ impl SentinelService {
             fee_token,
             consensus,
             signer,
+            sentinel,
+            roles,
             chain_id,
             voting_window,
             claim_window,
@@ -277,7 +290,7 @@ impl SentinelTransition {
             reveal_deadline,
         } = request;
         let salt = self.signer.reveal_salt(request_id);
-        let hash = commit_hash(self.signer.address(), request_id, approve, salt, &reason);
+        let hash = commit_hash(self.sentinel, request_id, approve, salt, &reason);
         state.0.insert(
             request_id,
             RequestState::CollectingCommitments {
@@ -376,7 +389,7 @@ impl SentinelTransition {
         block: u64,
         event: SentinelOracle::Committed,
     ) -> (State, Commands<State, Self>) {
-        let is_self = event.sentinel == self.signer.address();
+        let is_self = event.sentinel == self.sentinel;
         let Some(entry) = state.0.get_mut(&event.requestId) else {
             if is_self {
                 tracing::warn!(
@@ -482,7 +495,7 @@ impl SentinelTransition {
         } else {
             *deny_count += 1;
         }
-        if event.sentinel == self.signer.address() {
+        if event.sentinel == self.sentinel {
             *self_revealed = true;
         }
         // Only finalize early on an exact match: if the counts somehow
@@ -863,7 +876,7 @@ impl SentinelTransition {
         mut state: State,
         event: SentinelOracle::Claimed,
     ) -> (State, Commands<State, Self>) {
-        if event.sentinel != self.signer.address() {
+        if event.sentinel != self.sentinel {
             return (state, Vec::new());
         }
         if !event.feeReward.is_zero() {
@@ -1095,6 +1108,15 @@ impl SentinelTransition {
 
 impl SentinelEncoder {
     fn encode_action_kind(&self, kind: SentinelActionKind) -> Transaction {
+        let transaction = self.encode_call(kind);
+        match &self.roles {
+            Some(roles) => roles.wrap(transaction),
+            None => transaction,
+        }
+    }
+
+    /// The call the sentinel itself makes for `kind`.
+    fn encode_call(&self, kind: SentinelActionKind) -> Transaction {
         match kind {
             SentinelActionKind::ApproveToken { bond } => Transaction {
                 to: self.fee_token,
@@ -1264,6 +1286,8 @@ impl Service for SentinelService {
             fee_token,
             consensus,
             signer,
+            sentinel,
+            roles,
             chain_id,
             voting_window,
             claim_window,
@@ -1276,13 +1300,18 @@ impl Service for SentinelService {
                 oracle,
                 consensus,
                 signer,
+                sentinel,
                 chain_id,
                 voting_window,
                 claim_window,
             },
             DefaultInitializer,
             effect::Handler::new(engine, engine_timeout, verdicts),
-            SentinelEncoder { oracle, fee_token },
+            SentinelEncoder {
+                oracle,
+                fee_token,
+                roles,
+            },
         )
     }
 }
@@ -1335,6 +1364,7 @@ mod tests {
             oracle: ORACLE,
             consensus: CONSENSUS,
             signer: self_signer(),
+            sentinel: self_address(),
             chain_id: U256::from(CHAIN_ID),
             voting_window: VOTING_WINDOW,
             claim_window: CLAIM_WINDOW,
@@ -3051,5 +3081,130 @@ mod tests {
         let (state, _) =
             resolve_engine_check(&svc, state, id, CheckOutcome::Denied(RuleId::new(42, 1337)));
         assert_eq!(state.0[&id], advanced);
+    }
+
+    /// A sentinel Safe whose transactions are sent through a Roles modifier.
+    const SENTINEL_SAFE: Address = address!("9999999999999999999999999999999999999999");
+
+    /// When the sentinel is a Safe, its commitment must name the Safe (the
+    /// oracle's `msg.sender`), and only the Safe's events are our own: the
+    /// signer's own account is just another address.
+    #[test]
+    fn safe_sentinel_commits_and_recognises_its_votes_as_the_safe() {
+        let svc = SentinelTransition {
+            sentinel: SENTINEL_SAFE,
+            ..transition()
+        };
+        let safe_tx_hash = B256::repeat_byte(0x09);
+        let id = request_id(safe_tx_hash, 7, ORACLE);
+
+        let (state, _) = svc.apply_transition(
+            State::default(),
+            Message::Event(log(1, proposed_event(ORACLE, safe_tx_hash, TO))),
+        );
+        let (state, _) = resolve_engine_check(&svc, state, id, CheckOutcome::Approved);
+        let (state, commands) = svc.apply_transition(
+            state,
+            Message::Event(log(
+                2,
+                new_request_event(
+                    id,
+                    U256::from(1_000u64),
+                    U256::from(500u64),
+                    U256::from(500u64),
+                    20,
+                    40,
+                ),
+            )),
+        );
+        let hash = commit_hash(
+            SENTINEL_SAFE,
+            id,
+            true,
+            self_signer().reveal_salt(id),
+            REASON,
+        );
+        assert!(
+            commands.contains(
+                &SentinelAction {
+                    kind: SentinelActionKind::Commit { id, hash },
+                    expires_at: Some(20),
+                }
+                .into()
+            )
+        );
+
+        // A commitment from the signer's own account is another sentinel's.
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(3, committed_event(id, self_address(), 500u64))),
+        );
+        let RequestState::CollectingCommitments { self_committed, .. } = state.0[&id] else {
+            panic!("unexpected state: {:?}", state.0[&id]);
+        };
+        assert!(!self_committed);
+
+        // The Safe's commitment is ours.
+        let (state, _) = svc.apply_transition(
+            state,
+            Message::Event(log(4, committed_event(id, SENTINEL_SAFE, 500u64))),
+        );
+        let RequestState::CollectingCommitments {
+            self_committed,
+            committed_count,
+            ..
+        } = state.0[&id]
+        else {
+            panic!("unexpected state: {:?}", state.0[&id]);
+        };
+        assert!(self_committed);
+        assert_eq!(committed_count, 2);
+    }
+
+    /// With a Roles modifier configured, every action is the same call, sent
+    /// through the modifier; without one, it is sent directly.
+    #[test]
+    fn encoder_sends_every_action_through_the_roles_module_when_configured() {
+        const FEE_TOKEN: Address = address!("2222222222222222222222222222222222222222");
+        let roles = RolesModule {
+            module: address!("6666666666666666666666666666666666666666"),
+            role_key: B256::repeat_byte(0x77),
+            gas_overhead: 150_000,
+        };
+        let direct = SentinelEncoder {
+            oracle: ORACLE,
+            fee_token: FEE_TOKEN,
+            roles: None,
+        };
+        let through_roles = SentinelEncoder {
+            oracle: ORACLE,
+            fee_token: FEE_TOKEN,
+            roles: Some(roles),
+        };
+        let id = B256::repeat_byte(0x0a);
+        let kinds = [
+            SentinelActionKind::ApproveToken {
+                bond: U256::from(500u64),
+            },
+            SentinelActionKind::Commit {
+                id,
+                hash: B256::repeat_byte(0x0b),
+            },
+            SentinelActionKind::Reveal {
+                id,
+                approve: true,
+                salt: B256::repeat_byte(0x0c),
+                reason: REASON.to_string(),
+            },
+            SentinelActionKind::Finalize { id },
+            SentinelActionKind::Claim { id },
+            SentinelActionKind::TimeoutArbitration { id },
+        ];
+
+        for kind in kinds {
+            let call = direct.encode_action_kind(kind.clone());
+            assert!(call.to == ORACLE || call.to == FEE_TOKEN);
+            assert_eq!(through_roles.encode_action_kind(kind), roles.wrap(call));
+        }
     }
 }

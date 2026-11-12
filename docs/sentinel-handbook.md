@@ -92,6 +92,33 @@ docker run --name safenet-sentinel \
     --config-file=sentinel.toml
 ```
 
+### Running as a Safe
+
+By default, the sentinel's key is also the account that holds its bonds and fee rewards. To keep those funds in a Safe instead, register the Safe as the sentinel and give the key only a [Zodiac Roles](https://github.com/gnosisguild/zodiac-modifier-roles) role on it. The key can then make the Safe send the sentinel's transactions and nothing else, so a stolen key can't move the Safe's funds.
+
+`SentinelOracle` identifies a sentinel by `msg.sender`, so `commit`, `reveal` and `claim` must all come from the Safe. Configure the `[sentinel.roles]` table of your [configuration file](../crates/sentinel/sentinel.sample.toml):
+
+```toml
+[sentinel.roles]
+module = "0x…"     # the Roles modifier attached to the Safe
+role_key = "0x…"   # the role the signer is a member of
+```
+
+At startup, the sentinel reads the modifier's `target` and uses it as its sentinel address: it builds commitments for it and recognizes its own `Committed`, `Revealed` and `Claimed` events by it. It refuses to start unless that Safe is a registered sentinel and the role lets the signer make it approve a bond to the oracle. Every transaction is sent to the modifier as `execTransactionWithRole(to, 0, data, Call, role_key, true)`, so a call the role denies reverts like the direct call would. Its gas limit is the direct call's plus `gas_overhead` (default 150,000).
+
+Set the Safe up as follows:
+
+1. Attach a Roles v2 modifier to the Safe, with the Safe as its owner, avatar and target, and enable it as a module.
+2. Scope a role to exactly the sentinel's calls: on the fee token, `approve` with the oracle as spender and an amount of at most one bond; on the oracle, `commit`, `reveal`, `finalize`, `claim` and `timeoutArbitration`. Allow no ETH value and no delegatecall.
+3. Assign the role to the signer's address. The signer needs gas only; the Safe holds the fee token.
+4. Have the Safe registered as a sentinel with `addSentinel(safe)`.
+
+To move an existing sentinel to a Safe, register the Safe, start a sentinel with the new configuration and its own database, and only then remove the old account with `removeSentinel`. Removal only stops new commitments, so the old account can still reveal and claim the requests it committed to: keep the old instance running until they are settled, since it alone tracks them.
+
+> [!WARNING]
+>
+> Reveal salts are derived from the signer's key. If the key is rotated while a commitment is open, the new key derives a different salt and can't reveal it. Rotate only once every committed request has been revealed. An unrevealed bond loses its `slashAmount`; the remainder is still claimable.
+
 ## Bonds
 
 Each `commit` puts up a bond in the fee token. The sentinel tracks every request it has committed to until its own `claim` for that request lands onchain, so that the bond (minus any slash) and its fee share are returned:

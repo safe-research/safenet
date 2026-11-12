@@ -50,6 +50,17 @@ voting_window = 6
 # appends the versioned security-check path itself.
 engine = "http://localhost:5473"
 
+# Optional: run the sentinel as a Safe instead of as the signer's own account
+# (see the sentinel handbook's "Running as a Safe" section). The Safe is the
+# registered sentinel and holds the bonds; `signer` only holds a Zodiac Roles
+# role, and every transaction is sent to the Roles modifier as
+# `execTransactionWithRole`. The sentinel address is the modifier's `target`,
+# read onchain at startup.
+# [sentinel.roles]
+# module = "0x0000000000000000000000000000000000000000"
+# role_key = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# gas_overhead = 150000   # default: gas added to each transaction for the role check
+
 [observability]
 # The `tracing` env-filter directive controlling log verbosity.
 log_filter = "info"
