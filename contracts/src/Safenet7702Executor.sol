@@ -35,9 +35,9 @@ contract Safenet7702Executor is ISafenet7702Executor {
     /**
      * @notice Emitted when a call within a batch fails, after which the remaining calls still execute.
      * @param index The position of the failing call within the `calls` array passed to {execute}.
-     * @param result The revert data returned by the failing call.
+     * @param selector The first 4 bytes of the failing call's revert data, or zero if it returned fewer than 4.
      */
-    event CallFailed(uint256 index, bytes result);
+    event CallFailed(uint256 index, bytes4 selector);
 
     // ============================================================
     // ERRORS
@@ -76,14 +76,14 @@ contract Safenet7702Executor is ISafenet7702Executor {
     /**
      * @inheritdoc ISafenet7702Executor
      * @dev Each entry in `calls` is forwarded to its target `to` with its `value` and at most `gasLimit` gas.
-     *      The batch is NOT atomic: if a call reverts, its index and revert data are recorded with a
+     *      The batch is NOT atomic: if a call reverts, its index and revert selector are recorded with a
      *      {CallFailed} event and execution continues with the remaining calls, so one failing call does not
      *      prevent the others from running. Bounding each call's gas also prevents a single call from consuming
      *      the gas needed by the rest of the batch.
      *
      *      This function is not payable, so the batch transaction itself carries no value: each call's `value`
      *      is paid from the account's own balance. A call whose `value` exceeds the remaining balance fails
-     *      like any other call, emitting {CallFailed} with empty revert data, and the batch carries on.
+     *      like any other call, emitting {CallFailed} with a zero selector, and the batch carries on.
      *
      *      Each call is preceded by a best-effort check that enough gas remains to forward it its whole
      *      `gasLimit`, so an underfunded batch reverts (see {InsufficientGas}) rather than truncating its
@@ -103,9 +103,26 @@ contract Safenet7702Executor is ISafenet7702Executor {
             // report success having silently dropped it.
             require(gasleft() * 63 / 64 >= call.gasLimit, InsufficientGas(i));
 
-            (bool success, bytes memory result) = call.to.call{gas: call.gasLimit, value: call.value}(call.data);
+            // Make the call in assembly so that none of its return data is copied back: Solidity copies all of it
+            // into memory, even when discarded, at a cost paid from the batch's gas rather than the call's. The
+            // calldata is copied past the free memory pointer without allocating it, so memory grows with the
+            // largest call's data rather than with the sum over the batch. Of a failing call's revert data, only
+            // the selector is copied, so that cost is constant whatever the call returns.
+            (address to, uint256 value, uint256 gasLimit, bytes calldata data) =
+                (call.to, call.value, call.gasLimit, call.data);
+            bool success;
+            bytes4 selector;
+            assembly ("memory-safe") {
+                let ptr := mload(0x40)
+                calldatacopy(ptr, data.offset, data.length)
+                success := call(gasLimit, to, value, ptr, data.length, 0, 0)
+                if and(iszero(success), iszero(lt(returndatasize(), 4))) {
+                    returndatacopy(0, 0, 4)
+                    selector := mload(0)
+                }
+            }
             if (!success) {
-                emit CallFailed(i, result);
+                emit CallFailed(i, selector);
             }
         }
     }

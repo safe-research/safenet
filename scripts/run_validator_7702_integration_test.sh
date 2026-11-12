@@ -41,7 +41,7 @@ SENDER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 SENDER_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 
 EXECUTE_SIG='execute((address,uint256,uint256,bytes)[])'
-CALL_FAILED_SIG='CallFailed(uint256,bytes)'
+CALL_FAILED_SIG='CallFailed(uint256,bytes4)'
 SAFE_TRANSACTION='(uint256,address,address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,uint256)'
 TRANSACTION_PROPOSED_SIG="TransactionProposed(bytes32,bytes32,address,uint64,bytes,$SAFE_TRANSACTION)"
 TRANSACTION_ATTESTED_SIG='TransactionAttested(bytes32,bytes32,address,uint64,bytes32,bytes32,((uint256,uint256),uint256))'
