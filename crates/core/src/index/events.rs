@@ -11,7 +11,7 @@ use alloy::{
     eips::BlockId,
     primitives::{Address, B256, Bloom},
     providers::Provider as _,
-    rpc::types::{Filter, Log},
+    rpc::types::{Filter, Log, error::EthRpcErrorCode},
     transports::TransportError,
 };
 use serde::Deserialize;
@@ -119,7 +119,18 @@ impl Default for Config {
 pub enum Error {
     /// An RPC request failed.
     #[error(transparent)]
-    Rpc(#[from] TransportError),
+    Rpc(TransportError),
+    /// An RPC request failed because the node does not know the requested
+    /// block: a JSON-RPC "resource not found" error (see
+    /// [EIP-1474](https://eips.ethereum.org/EIPS/eip-1474), as reported by
+    /// Reth), or geth's "unknown block" error.
+    ///
+    /// Recognizing it is only a hint: it lets the watcher revalidate an uncled
+    /// block right away and avoid splitting a query that cannot succeed. Nodes
+    /// that report an unknown block differently must still be handled
+    /// correctly, just less efficiently.
+    #[error(transparent)]
+    UnknownBlock(TransportError),
     /// An error decoding a log into an event.
     #[error("failed to decode log index {log_index} on block {block_hash:?}")]
     DecodeLog { block_hash: B256, log_index: u64 },
@@ -143,6 +154,24 @@ pub enum Error {
     /// currently being fetched.
     #[error("received a block invalidation that does not match the in-progress block")]
     UnexpectedBlockInvalidation,
+}
+
+impl From<TransportError> for Error {
+    fn from(err: TransportError) -> Self {
+        let unknown_block = err.as_error_resp().is_some_and(|payload| {
+            payload.code == EthRpcErrorCode::ResourceNotFound.code() as i64
+                || (payload.code == EthRpcErrorCode::InvalidInput.code() as i64
+                    && payload
+                        .message
+                        .to_ascii_lowercase()
+                        .contains("unknown block"))
+        });
+        if unknown_block {
+            Self::UnknownBlock(err)
+        } else {
+            Self::Rpc(err)
+        }
+    }
 }
 
 /// The blocks a log query is scoped to.
@@ -204,7 +233,8 @@ enum Step {
         fetched: Option<FetchedPage>,
     },
     /// Fetching the logs of a single new block by hash, having already failed
-    /// `retries` times.
+    /// `retries` times with an error other than
+    /// [`UnknownBlock`](Error::UnknownBlock).
     Block {
         block_number: u64,
         block_hash: B256,
@@ -443,11 +473,15 @@ where
     }
 
     /// Fetches the logs of a single new block, returning to idle on success and
-    /// staying on the block (with an incremented retry count) on failure.
+    /// staying on the block on failure.
     ///
-    /// The first `block_single_query_retry_count` attempts use a single query
+    /// The first `block_single_query_retry_count` retries use a single query
     /// (node-filtered or, with `use_client_filtering`, client-filtered); once
-    /// those are exhausted it falls back to one query per event.
+    /// those are exhausted it falls back to one query per event. Splitting the
+    /// query helps with oversized responses and timeouts, but not with a node
+    /// that does not know the block at all, so
+    /// [`UnknownBlock`](Error::UnknownBlock) failures are not counted as
+    /// retries.
     async fn block(
         &mut self,
         block_number: u64,
@@ -477,16 +511,18 @@ where
             decode_and_sort(&logs, &block_timestamps)
         });
 
-        self.step = if result.is_ok() {
-            Step::Idle
-        } else {
-            Step::Block {
+        self.step = match &result {
+            Ok(_) => Step::Idle,
+            Err(err) => Step::Block {
                 block_number,
                 block_hash,
                 block_timestamp,
                 logs_bloom,
-                retries: retries + 1,
-            }
+                retries: match err {
+                    Error::UnknownBlock(_) => retries,
+                    _ => retries + 1,
+                },
+            },
         };
 
         result.map(|logs| EventUpdate {
@@ -797,7 +833,10 @@ mod tests {
     use alloy::{
         consensus,
         primitives::{Address, address},
-        rpc::types::{Block, Header},
+        rpc::{
+            json_rpc::ErrorPayload,
+            types::{Block, Header},
+        },
         sol,
         sol_types::SolEvent,
         transports::mock::Asserter,
@@ -1981,6 +2020,134 @@ mod tests {
                     )
                 ],
             })
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    fn unknown_block() -> ErrorPayload {
+        ErrorPayload {
+            code: -32000,
+            message: "unknown block".into(),
+            data: None,
+        }
+    }
+
+    fn transfer_and_approval_logs() -> (Vec<Log>, Vec<Log>) {
+        let transfer = log(
+            (1337, 0),
+            Erc20::Transfer {
+                amount: uint!(1_U256),
+                ..Default::default()
+            },
+        );
+        let approval = log(
+            (1337, 1),
+            Erc20::Approval {
+                amount: uint!(2_U256),
+                ..Default::default()
+            },
+        );
+        (vec![transfer], vec![approval])
+    }
+
+    fn transfer_and_approval_update() -> EventUpdate<Erc20::Erc20Events> {
+        EventUpdate {
+            blocks: range(1337..=1337),
+            logs: vec![
+                event_log(
+                    (1337, 0),
+                    Erc20::Erc20Events::Transfer(Erc20::Transfer {
+                        amount: uint!(1_U256),
+                        ..Default::default()
+                    }),
+                ),
+                event_log(
+                    (1337, 1),
+                    Erc20::Erc20Events::Approval(Erc20::Approval {
+                        amount: uint!(2_U256),
+                        ..Default::default()
+                    }),
+                ),
+            ],
+        }
+    }
+
+    #[tokio::test]
+    async fn new_block_keeps_a_single_query_on_unknown_block_errors() {
+        let asserter = Asserter::new();
+        let mut events = watcher(
+            &asserter,
+            Config {
+                block_single_query_retry_count: NonZeroU64::new(2).unwrap(),
+                ..Default::default()
+            },
+        );
+        events
+            .on_block_update(BlockUpdate::New {
+                number: 1337,
+                hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
+                logs_bloom: Bloom::ZERO,
+            })
+            .unwrap();
+
+        // The node does not know the block for more attempts than the single
+        // query retry count. Splitting the query cannot help, so each attempt
+        // stays a single query...
+        for _ in 0..4 {
+            asserter.push_failure(unknown_block());
+            assert_matches!(events.next().await, Err(Error::UnknownBlock(_)));
+        }
+        // ...including the one that finally succeeds, which returns the logs of
+        // every watched event in one response.
+        let (transfers, approvals) = transfer_and_approval_logs();
+        asserter.push_success(&[transfers, approvals].concat());
+
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(transfer_and_approval_update())
+        );
+        assert_eq!(events.next().await.unwrap(), None);
+        assert!(asserter.read_q().is_empty());
+    }
+
+    #[tokio::test]
+    async fn new_block_falls_back_to_multiple_queries_after_other_errors() {
+        let asserter = Asserter::new();
+        let mut events = watcher(
+            &asserter,
+            Config {
+                block_single_query_retry_count: NonZeroU64::new(2).unwrap(),
+                ..Default::default()
+            },
+        );
+        events
+            .on_block_update(BlockUpdate::New {
+                number: 1337,
+                hash: B256::repeat_byte(0x13),
+                timestamp: block_timestamp(1337),
+                logs_bloom: Bloom::ZERO,
+            })
+            .unwrap();
+
+        // Unknown block errors are interleaved with other errors. Only the
+        // other errors count as retries...
+        for _ in 0..2 {
+            asserter.push_failure(unknown_block());
+            assert_matches!(events.next().await, Err(Error::UnknownBlock(_)));
+            asserter.push_failure_msg("response too large");
+            assert_matches!(events.next().await, Err(Error::Rpc(_)));
+        }
+        // ...so after two of them the query is split into one per event (two
+        // for `Erc20`).
+        let (transfers, approvals) = transfer_and_approval_logs();
+        asserter.push_success(&transfers);
+        asserter.push_success(&approvals);
+
+        assert_eq!(
+            events.next().await.unwrap(),
+            Some(transfer_and_approval_update())
         );
         assert_eq!(events.next().await.unwrap(), None);
         assert!(asserter.read_q().is_empty());
