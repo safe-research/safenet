@@ -19,6 +19,8 @@ The Safenet Sentinel Oracle audit was performed on commit [49d7e398ac35c315da2b5
 
 The Safenet Consensus and FROSTCoordinator audit was performed on commit [a84cef3a99a56f62c3e9d16e227c76d114642c87](https://github.com/safe-research/safenet/tree/a84cef3a99a56f62c3e9d16e227c76d114642c87), with all fixes included in commit [7fc1e08c3f016b0f799b553edf3ece593889b659](https://github.com/safe-research/safenet/tree/7fc1e08c3f016b0f799b553edf3ece593889b659).
 
+The Safenet 7702 Executor audit was performed on commit [31baeae88533d3577644f66b6bcc499cb54b0a92](https://github.com/safe-research/safenet/tree/31baeae88533d3577644f66b6bcc499cb54b0a92), with all fixes included in commit [666b02af62cee65e5f0d32aaed5bd65937be1508](https://github.com/safe-research/safenet/tree/666b02af62cee65e5f0d32aaed5bd65937be1508).
+
 #### Files
 
 - [Safenet Beta Staking Audit Report - Certora](./2026_01_audit_certora_safenet_beta_staking.pdf)
@@ -26,6 +28,7 @@ The Safenet Consensus and FROSTCoordinator audit was performed on commit [a84cef
 - [Safenet FROST Audit Report - Certora](./2026_08_audit_certora_safenet_frost.pdf)
 - [Safenet Sentinel Oracle Audit Report - Certora](./2026_09_audit_certora_safenet_sentinel_oracle.pdf)
 - [Safenet Consensus & Coordinator Audit Report - Certora](./2026_10_audit_certora_safenet_consensus_coordinator.pdf)
+- [Safenet 7702 Executor Audit Report - Certora](./2026_10_audit_certora_safenet_7702_executor.pdf)
 
 ### Nethermind
 
