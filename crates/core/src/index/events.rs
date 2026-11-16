@@ -309,6 +309,12 @@ where
         }
     }
 
+    /// Whether the watcher is fetching the logs of a single new block (the
+    /// last one the block watcher emitted), as opposed to idle or warping.
+    pub fn is_fetching_block(&self) -> bool {
+        matches!(self.step, Step::Block { .. })
+    }
+
     /// Fetches the next batch of logs, advancing the state machine.
     ///
     /// Returns `None` once the current work is complete and the watcher is idle,
