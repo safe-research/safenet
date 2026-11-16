@@ -23,9 +23,14 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sqlx::sqlite::SqlitePool;
 use std::{fmt::Debug, time::Duration};
 
-/// How long to wait after a failed step before retrying, to avoid spinning on a
-/// persistent failure (such as an unreachable RPC node).
-const STEP_RETRY_DELAY: Duration = Duration::from_millis(100);
+/// How long to wait after a failed watcher step before retrying, to avoid
+/// spinning on a persistent failure (such as an unreachable RPC node).
+const RETRY_BASE_DELAY: Duration = Duration::from_millis(100);
+
+/// Number of consecutive watcher failures retried after [`RETRY_BASE_DELAY`]
+/// before the delay starts doubling. This keeps the latency of the expected,
+/// short "block known before its logs" lag unchanged.
+const RETRY_FLAT_ATTEMPTS: u32 = 4;
 
 /// Driver configuration, aggregating the configuration of each component the
 /// driver wires together.
@@ -113,6 +118,7 @@ where
     effects: EffectManager<S::Effects, S::Effect, S::Resume>,
     actions: S::Actions,
     transactions: TransactionQueue,
+    backoff: Backoff,
 }
 
 impl<S> Driver<S>
@@ -140,6 +146,7 @@ where
         let effects = EffectManager::new(effects);
         let block_status = state.block_status().await?;
         let watcher = Watcher::new(provider.clone(), config.index, addresses, block_status).await?;
+        let backoff = Backoff::new(RETRY_BASE_DELAY, RETRY_FLAT_ATTEMPTS, watcher.block_time());
         let transactions =
             TransactionQueue::new(provider, signer, pool, config.transactions).await?;
 
@@ -156,6 +163,7 @@ where
             effects,
             actions,
             transactions,
+            backoff,
         })
     }
 
@@ -174,8 +182,8 @@ where
     /// a shutdown signal (such as Ctrl-C) is received or an unrecoverable error
     /// occurs.
     ///
-    /// Failures while waiting for the next indexer update are retried after a
-    /// short delay. Errors encountered after an update has been received are
+    /// Failures while waiting for the next indexer update are retried with a
+    /// bounded backoff. Errors encountered after an update has been received are
     /// handled according to their component's recovery policy.
     pub async fn run(mut self) {
         let shutdown = utils::shutdown_signal();
@@ -209,26 +217,49 @@ where
 
     /// Reads the next state machine input to process.
     ///
-    /// Watcher failures are retried after a short delay while completed
-    /// effects remain eligible for selection, except a reorg deeper than the
+    /// Watcher failures are retried with a bounded exponential backoff, capped
+    /// at the block time, while completed effects remain eligible for
+    /// selection. The backoff lives on the driver, so an effect winning the
+    /// selection does not reset it; only a successful update does. The
+    /// exception is a reorg deeper than the
     /// configured `max_reorg_depth`: the watcher cannot recover from that on
     /// its own, so it is returned instead of retried.
     async fn next_input(&mut self) -> Result<Input<S::Event, S::Resume>, index::Error> {
         let update = async {
             loop {
                 match self.watcher.next().await {
-                    Ok(update) => return Ok(update),
+                    Ok(update) => {
+                        if self.backoff.attempts() > 0 {
+                            self.backoff.reset();
+                            metrics::watcher_consecutive_failures().absolute(0);
+                        }
+                        return Ok(update);
+                    }
                     Err(
                         err @ index::Error::Blocks(index::blocks::Error::ExceededMaxReorgDepth(_)),
                     ) => {
                         return Err(err);
                     }
                     Err(err) => {
+                        let was_capped = self.backoff.is_capped();
+                        let delay = self.backoff.next_delay();
+                        let attempt = self.backoff.attempts();
+                        let delay_ms = delay.as_millis();
+                        metrics::watcher_consecutive_failures().increment(1);
                         tracing::warn!(
                             ?err,
+                            attempt,
+                            delay_ms,
                             "failed to get next blockchain update; retrying after delay"
                         );
-                        tokio::time::sleep(STEP_RETRY_DELAY).await;
+                        if !was_capped && self.backoff.is_capped() {
+                            tracing::error!(
+                                attempt,
+                                delay_ms,
+                                "blockchain updates keep failing; retry delay reached its cap"
+                            );
+                        }
+                        tokio::time::sleep(delay).await;
                     }
                 }
             }
@@ -305,6 +336,55 @@ where
     }
 }
 
+/// Retry delays for consecutive failures: flat at `base` for the first
+/// `flat_attempts` failures, then doubling on each further failure, capped at
+/// `cap` (but never below `base`).
+#[derive(Debug)]
+struct Backoff {
+    base: Duration,
+    flat_attempts: u32,
+    cap: Duration,
+    attempt: u32,
+}
+
+impl Backoff {
+    fn new(base: Duration, flat_attempts: u32, cap: Duration) -> Self {
+        Self {
+            base,
+            flat_attempts,
+            cap: cap.max(base),
+            attempt: 0,
+        }
+    }
+
+    /// Records a failure and returns how long to wait before retrying.
+    fn next_delay(&mut self) -> Duration {
+        self.attempt = self.attempt.saturating_add(1);
+        self.delay(self.attempt)
+    }
+
+    /// Records a success, restarting the schedule.
+    fn reset(&mut self) {
+        self.attempt = 0;
+    }
+
+    /// Returns the number of consecutive failures.
+    fn attempts(&self) -> u32 {
+        self.attempt
+    }
+
+    /// Returns whether the last returned delay was at the cap.
+    fn is_capped(&self) -> bool {
+        self.attempt > 0 && self.delay(self.attempt) >= self.cap
+    }
+
+    fn delay(&self, attempt: u32) -> Duration {
+        let doublings = attempt.saturating_sub(self.flat_attempts);
+        let factor = 1u32.checked_shl(doublings).unwrap_or(u32::MAX);
+        self.base.saturating_mul(factor).min(self.cap)
+    }
+}
+
 /// Records a block update with the metrics.
 struct UpdateRecorder(Option<u64>);
 
@@ -332,5 +412,62 @@ impl UpdateRecorder {
         if let Some(block) = self.0 {
             metrics::block_number(ProcessingStatus::Processed).set(block as f64);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn delays(backoff: &mut Backoff, count: usize) -> Vec<u64> {
+        (0..count)
+            .map(|_| backoff.next_delay().as_millis() as u64)
+            .collect()
+    }
+
+    #[test]
+    fn backoff_is_flat_then_doubles_up_to_the_cap() {
+        let mut backoff = Backoff::new(Duration::from_millis(100), 4, Duration::from_secs(5));
+        assert_eq!(
+            delays(&mut backoff, 12),
+            [
+                100, 100, 100, 100, 200, 400, 800, 1_600, 3_200, 5_000, 5_000, 5_000
+            ],
+        );
+        assert_eq!(backoff.attempts(), 12);
+    }
+
+    #[test]
+    fn backoff_reports_when_it_reaches_the_cap() {
+        let mut backoff = Backoff::new(Duration::from_millis(100), 1, Duration::from_millis(400));
+        let capped = (0..5)
+            .map(|_| {
+                backoff.next_delay();
+                backoff.is_capped()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(capped, [false, false, true, true, true]);
+    }
+
+    #[test]
+    fn backoff_restarts_after_reset() {
+        let mut backoff = Backoff::new(Duration::from_millis(100), 2, Duration::from_secs(5));
+        delays(&mut backoff, 6);
+        backoff.reset();
+        assert_eq!(backoff.attempts(), 0);
+        assert!(!backoff.is_capped());
+        assert_eq!(delays(&mut backoff, 4), [100, 100, 200, 400]);
+    }
+
+    #[test]
+    fn backoff_never_overflows_and_never_drops_below_the_base() {
+        let mut backoff = Backoff::new(Duration::from_millis(100), 0, Duration::from_millis(10));
+        assert_eq!(delays(&mut backoff, 3), [100, 100, 100]);
+
+        let mut backoff = Backoff::new(Duration::from_secs(u64::MAX / 2), 0, Duration::MAX);
+        backoff.attempt = u32::MAX - 1;
+        assert_eq!(backoff.next_delay(), Duration::MAX);
+        assert_eq!(backoff.next_delay(), Duration::MAX);
+        assert_eq!(backoff.attempts(), u32::MAX);
     }
 }

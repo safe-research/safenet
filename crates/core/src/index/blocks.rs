@@ -432,6 +432,11 @@ impl BlockWatcher {
         self.queue.drain(..)
     }
 
+    /// Returns the expected time between blocks, in milliseconds.
+    pub fn block_time(&self) -> u64 {
+        self.timings.block_time
+    }
+
     /// Returns the watcher's current view of the latest and reorg-safe blocks.
     pub fn status(&self) -> BlockStatus {
         BlockStatus {
