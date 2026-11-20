@@ -5,6 +5,7 @@ mod effect;
 mod engine;
 mod hashing;
 mod metrics;
+mod roles;
 mod service;
 mod state;
 mod verdicts;
@@ -64,11 +65,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
     };
 
+    // The account the oracle knows as this sentinel: the signer's own, or the
+    // Safe a Roles modifier executes the signer's transactions on.
+    let sentinel = match &config.sentinel.roles {
+        None => config.signer.address(),
+        Some(roles) => {
+            let safe = roles
+                .sentinel_safe(
+                    &provider,
+                    config.signer.address(),
+                    config.oracle,
+                    config.sentinel.fee_token,
+                )
+                .await
+                .inspect_err(|err| tracing::error!(%err, "can't run the sentinel as a Safe"))?;
+            tracing::info!(
+                %safe,
+                module = %roles.module,
+                role_key = %roles.role_key,
+                signer = %config.signer.address(),
+                "sentinel acts as a Safe through a Zodiac Roles role"
+            );
+            safe
+        }
+    };
+
     let service = SentinelService::new(
         config.oracle,
         config.sentinel.fee_token,
         config.consensus,
         config.signer.clone(),
+        sentinel,
+        config.sentinel.roles,
         U256::from(chain_id),
         config.sentinel.voting_window,
         config.sentinel.claim_window,

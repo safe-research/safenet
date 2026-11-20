@@ -6,6 +6,12 @@
 # this does not require a full validator/FROST genesis: a `TestConsensus` contract
 # stands in for `Consensus`, only emitting the `TransactionProposed`
 # event the sentinels need.
+#
+# Sentinel A is a plain account. Sentinel B is a Safe whose key only holds a
+# Zodiac Roles role scoped to the sentinel's calls (see the sentinel handbook's
+# "Running as a Safe"): the test checks that the role denies everything else,
+# that the sentinel refuses to start on a broken Roles setup, and finally
+# measures the gas the Roles path costs.
 set -eo pipefail
 # Job control, so each `&`-backgrounded command below gets its own process
 # group (its PID doubling as its PGID) instead of sharing this script's.
@@ -50,6 +56,24 @@ DEPLOYER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 DEPLOYER_PK=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 TX_SAFE=0x1111111111111111111111111111111111111111
 TX_RECIPIENT=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ZERO_ADDRESS=0x0000000000000000000000000000000000000000
+# Sentinel B's Safe and Roles modifier: Safe v1.5.0 and Zodiac Roles v2.1.1,
+# installed at their Gnosis Chain addresses from their production bytecode
+# (see step 3).
+SAFE_SINGLETON=0xFf51A5898e281Db6DfC7855790607438dF2ca44b
+SAFE_PROXY_FACTORY=0x14F2982D601c9458F93bd70B218933A6f8165e7b
+ROLES_MASTERCOPY=0xF2964CE6161ce0e75964Fe7927cE114cb0B283D5
+ROLES_INTEGRITY=0x6a6Af4b16458Bc39817e4019fB02BD3b26d41049
+ROLES_PACKER=0x869718C939652084BC491fBC5ce0D3C1d5B309F0
+SINGLETON_FACTORY=0xce0042B868300000d44A59004Da54A005ffdcf9f
+SENTINEL_ROLE_KEY=$(cast keccak "SENTINEL")
+# The sentinel's default `[sentinel.roles] gas_overhead`, which sentinel B
+# runs with.
+ROLES_GAS_OVERHEAD=150000
+# Where step 18 reads the current Gnosis Chain gas price to price the Roles
+# path in USD (xDAI is pegged to the dollar). Optional: the step skips the
+# USD figures if it can't be reached.
+GNOSIS_RPC_URL="${GNOSIS_RPC_URL:-https://rpc.gnosischain.com}"
 
 # Register cleanup before anything, to make sure we don't leave anything running
 # in the background in case of an error.
@@ -63,7 +87,8 @@ cleanup() {
 		kill -- "-$pid" >/dev/null 2>&1 || true
 	done
 	rm -f "$SENTINEL_A_CONFIG" "$SENTINEL_B_CONFIG" \
-		"$SENTINEL_A_ENGINE_CONFIG" "$SENTINEL_B_ENGINE_CONFIG"
+		"$SENTINEL_A_ENGINE_CONFIG" "$SENTINEL_B_ENGINE_CONFIG" \
+		"$BROKEN_SENTINEL_CONFIG" "$GAS_MEASUREMENTS"
 }
 trap cleanup EXIT
 
@@ -136,27 +161,127 @@ env \
 ORACLE=$(jq -r '.returns.sentinelOracle.value' "$ROOT/contracts/build/broadcast/DeploySentinelOracle.s.sol/$CHAIN_ID/run-latest.json")
 echo "Sentinel oracle deployed at $ORACLE"
 
+echo "Installing Safe v1.5.0 and Zodiac Roles v2.1.1..."
+install_code() {
+	cast rpc --rpc-url "$RPC_URL" anvil_setCode "$1" "$(cat "$ROOT/scripts/bytecode/$2.hex")" >/dev/null
+}
+install_code "$SAFE_SINGLETON" Safe
+install_code "$SAFE_PROXY_FACTORY" SafeProxyFactory
+# When a function is scoped, the mastercopy checks and packs its conditions
+# with its `Integrity` and `Packer` libraries, and stores them as a contract
+# deployed through the EIP-2470 singleton factory.
+install_code "$ROLES_MASTERCOPY" ZodiacRoles
+install_code "$ROLES_INTEGRITY" ZodiacRolesIntegrity
+install_code "$ROLES_PACKER" ZodiacRolesPacker
+install_code "$SINGLETON_FACTORY" SingletonFactory
+
 # --- 4. Fund the required accounts ---
 echo "Generating sentinel and sponsor accounts..."
 WALLETS=$(cast wallet new --json --number 3)
 SENTINEL_A_ADDR=$(echo "$WALLETS" | jq -r '.[0].address')
 SENTINEL_A_PK=$(echo "$WALLETS" | jq -r '.[0].private_key')
-SENTINEL_B_ADDR=$(echo "$WALLETS" | jq -r '.[1].address')
+# Sentinel B's key only signs; the sentinel itself is the Safe deployed below.
+SENTINEL_B_KEY_ADDR=$(echo "$WALLETS" | jq -r '.[1].address')
 SENTINEL_B_PK=$(echo "$WALLETS" | jq -r '.[1].private_key')
 SPONSOR_ADDR=$(echo "$WALLETS" | jq -r '.[2].address')
 SPONSOR_PK=$(echo "$WALLETS" | jq -r '.[2].private_key')
-echo "Sentinel A: $SENTINEL_A_ADDR"
-echo "Sentinel B: $SENTINEL_B_ADDR"
-echo "Sponsor:    $SPONSOR_ADDR"
 
+echo "Deploying sentinel B's Safe, owned by the deployer..."
+SAFE_SETUP=$(cast calldata "setup(address[],uint256,address,bytes,address,address,uint256,address)" \
+	"[$DEPLOYER]" 1 "$ZERO_ADDRESS" 0x "$ZERO_ADDRESS" "$ZERO_ADDRESS" 0 "$ZERO_ADDRESS")
+SENTINEL_B_ADDR=$(cast call --rpc-url "$RPC_URL" --from "$DEPLOYER" "$SAFE_PROXY_FACTORY" \
+	"createProxyWithNonce(address,bytes,uint256)(address)" "$SAFE_SINGLETON" "$SAFE_SETUP" 0)
+cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$SAFE_PROXY_FACTORY" \
+	"createProxyWithNonce(address,bytes,uint256)" "$SAFE_SINGLETON" "$SAFE_SETUP" 0 >/dev/null
+
+# Executes a call as the Safe, signed by its only owner as the sender itself
+# (an "approved hash" signature: r = owner, s = 0, v = 1).
+safe_exec() {
+	local signature="0x000000000000000000000000${DEPLOYER:2}0000000000000000000000000000000000000000000000000000000000000000""01"
+	cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$SENTINEL_B_ADDR" \
+		"execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)" \
+		"$1" 0 "$2" 0 0 0 0 "$ZERO_ADDRESS" "$ZERO_ADDRESS" "$signature" >/dev/null
+}
+
+echo "Deploying a Roles modifier for the Safe and enabling it as a module..."
+# An EIP-1167 minimal proxy to the mastercopy, as Zodiac's module factory
+# deploys, set up with the Safe as avatar and target. The deployer owns it, so
+# it can scope the role directly; production setups have the Safe own it.
+ROLES_MODULE=$(cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --json --create \
+	"0x3d602d80600a3d3981f3363d3d373d3d3d363d73${ROLES_MASTERCOPY:2}5af43d82803e903d91602b57fd5bf3" |
+	jq -r '.contractAddress')
+roles_owner() {
+	cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$ROLES_MODULE" "$@" >/dev/null
+}
+roles_owner "setUp(bytes)" \
+	"$(cast abi-encode "f(address,address,address)" "$DEPLOYER" "$SENTINEL_B_ADDR" "$SENTINEL_B_ADDR")"
+safe_exec "$SENTINEL_B_ADDR" "$(cast calldata "enableModule(address)" "$ROLES_MODULE")"
+
+echo "Scoping the SENTINEL role to the sentinel's calls and granting it to sentinel B's key..."
+# Each request's bond is its fee times the bond multiplier.
+SENTINEL_BOND=$((REQUEST_FEE * BOND_MULTIPLIER))
+# `approve(spender, amount)` with spender == oracle and amount <= one bond:
+# conditions (parent, ParameterType, Operator, compValue) with Calldata = 5,
+# Static = 1, Matches = 5, EqualTo = 16 and LessThan = 18.
+APPROVE_CONDITIONS="[(0,5,5,0x),(0,1,16,$(cast abi-encode "f(address)" "$ORACLE")),(0,1,18,$(cast abi-encode "f(uint256)" $((SENTINEL_BOND + 1))))]"
+roles_owner "scopeTarget(bytes32,address)" "$SENTINEL_ROLE_KEY" "$FEE_TOKEN"
+roles_owner "scopeFunction(bytes32,address,bytes4,(uint8,uint8,uint8,bytes)[],uint8)" \
+	"$SENTINEL_ROLE_KEY" "$FEE_TOKEN" "$(cast sig "approve(address,uint256)")" "$APPROVE_CONDITIONS" 0
+roles_owner "scopeTarget(bytes32,address)" "$SENTINEL_ROLE_KEY" "$ORACLE"
+for function in "commit(bytes32,bytes32)" "reveal(bytes32,bool,bytes32,string)" \
+	"finalize(bytes32)" "claim(bytes32)" "timeoutArbitration(bytes32)"; do
+	roles_owner "allowFunction(bytes32,address,bytes4,uint8)" \
+		"$SENTINEL_ROLE_KEY" "$ORACLE" "$(cast sig "$function")" 0
+done
+roles_owner "assignRoles(address,bytes32[],bool[])" "$SENTINEL_B_KEY_ADDR" "[$SENTINEL_ROLE_KEY]" "[true]"
+
+echo "Sentinel A:     $SENTINEL_A_ADDR"
+echo "Sentinel B:     $SENTINEL_B_ADDR (Safe, through Roles modifier $ROLES_MODULE)"
+echo "Sentinel B key: $SENTINEL_B_KEY_ADDR"
+echo "Sponsor:        $SPONSOR_ADDR"
+
+# Sentinel B's key pays its gas; its Safe holds its bonds.
 echo "Funding accounts with ETH and the fee token..."
 cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" \
 	"$FEE_TOKEN" "configureMinter(address,uint256)" "$DEPLOYER" "$((FUNDING_TOKEN * 3))" >/dev/null
-for addr in "$SENTINEL_A_ADDR" "$SENTINEL_B_ADDR" "$SPONSOR_ADDR"; do
+for addr in "$SENTINEL_A_ADDR" "$SENTINEL_B_KEY_ADDR" "$SPONSOR_ADDR"; do
 	cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" --value "$FUNDING_ETH" "$addr" >/dev/null
+done
+for addr in "$SENTINEL_A_ADDR" "$SENTINEL_B_ADDR" "$SPONSOR_ADDR"; do
 	cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" \
 		"$FEE_TOKEN" "mint(address,uint256)" "$addr" "$FUNDING_TOKEN" >/dev/null
 done
+
+# --- 4b. Check what a stolen sentinel B key can make the Safe do ---
+# Simulated from the key, as `execTransactionWithRole` calls: only the bond
+# approval goes through, so the key can't move the Safe's funds or take it
+# over.
+role_call() {
+	cast call --rpc-url "$RPC_URL" --from "$SENTINEL_B_KEY_ADDR" "$ROLES_MODULE" \
+		"execTransactionWithRole(address,uint256,bytes,uint8,bytes32,bool)(bool)" \
+		"$1" 0 "$2" 0 "$SENTINEL_ROLE_KEY" true >/dev/null 2>&1
+}
+if ! role_call "$FEE_TOKEN" "$(cast calldata "approve(address,uint256)" "$ORACLE" "$SENTINEL_BOND")"; then
+	echo "FAILED: the SENTINEL role doesn't let sentinel B's key approve one bond to the oracle"
+	exit 1
+fi
+expect_role_denies() {
+	if role_call "$2" "$3"; then
+		echo "FAILED: the SENTINEL role lets sentinel B's key $1"
+		exit 1
+	fi
+}
+expect_role_denies "transfer the Safe's fee tokens" \
+	"$FEE_TOKEN" "$(cast calldata "transfer(address,uint256)" "$SENTINEL_B_KEY_ADDR" 1)"
+expect_role_denies "approve the fee token to another spender" \
+	"$FEE_TOKEN" "$(cast calldata "approve(address,uint256)" "$SENTINEL_B_KEY_ADDR" 1)"
+expect_role_denies "approve more than one bond to the oracle" \
+	"$FEE_TOKEN" "$(cast calldata "approve(address,uint256)" "$ORACLE" $((SENTINEL_BOND + 1)))"
+expect_role_denies "add itself as a Safe owner" \
+	"$SENTINEL_B_ADDR" "$(cast calldata "addOwnerWithThreshold(address,uint256)" "$SENTINEL_B_KEY_ADDR" 1)"
+expect_role_denies "disable the Roles module" \
+	"$SENTINEL_B_ADDR" "$(cast calldata "disableModule(address,address)" 0x0000000000000000000000000000000000000001 "$ROLES_MODULE")"
+echo "OK: sentinel B's key can only make the Safe send the sentinel's calls."
 
 echo "Deploying transaction token..."
 env FACTORY=2 \
@@ -173,10 +298,6 @@ cast rpc --rpc-url "$RPC_URL" anvil_impersonateAccount "$TX_SAFE" >/dev/null
 cast send --rpc-url "$RPC_URL" --unlocked --from "$TX_SAFE" \
 	"$TX_TOKEN" "transfer(address,uint256)" "$TX_RECIPIENT" 1 >/dev/null
 cast rpc --rpc-url "$RPC_URL" anvil_stopImpersonatingAccount "$TX_SAFE" >/dev/null
-
-echo "Registering both sentinels..."
-cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$ORACLE" "addSentinel(address)" "$SENTINEL_A_ADDR" >/dev/null
-cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$ORACLE" "addSentinel(address)" "$SENTINEL_B_ADDR" >/dev/null
 
 echo "Approving the oracle to pull the request fee from the sponsor..."
 cast send --rpc-url "$RPC_URL" --private-key "$SPONSOR_PK" \
@@ -231,9 +352,18 @@ blocklist = $blocklist
 address_poisoning_lookback_blocks = 1000
 EOF
 }
+# An optional third and fourth argument run the sentinel as a Safe, through
+# that Roles modifier and role.
 sentinel_config() {
 	local signer=$1
 	local engine=$2
+	local roles=""
+	if [ -n "${3:-}" ]; then
+		roles="
+[sentinel.roles]
+module = \"$3\"
+role_key = \"$4\""
+	fi
 	cat <<EOF
 rpc = "$RPC_URL"
 signer = "$signer"
@@ -246,6 +376,7 @@ fee_token = "$FEE_TOKEN"
 voting_window = $((COMMIT_WINDOW + REVEAL_WINDOW))
 claim_window = 10
 engine = "http://$engine"
+$roles
 
 [index]
 block_time = $((BLOCK_TIME_SECONDS * 1000))
@@ -266,7 +397,42 @@ sentinel_config "$SENTINEL_A_PK" "$SENTINEL_A_ENGINE_ADDR" >"$SENTINEL_A_CONFIG"
 SENTINEL_B_ENGINE_CONFIG=$(mktemp)
 sentinel_engine_config "$SENTINEL_B_ENGINE_ADDR" "[\"$TX_TOKEN\"]" >"$SENTINEL_B_ENGINE_CONFIG"
 SENTINEL_B_CONFIG=$(mktemp)
-sentinel_config "$SENTINEL_B_PK" "$SENTINEL_B_ENGINE_ADDR" >"$SENTINEL_B_CONFIG"
+sentinel_config "$SENTINEL_B_PK" "$SENTINEL_B_ENGINE_ADDR" "$ROLES_MODULE" "$SENTINEL_ROLE_KEY" >"$SENTINEL_B_CONFIG"
+
+# Starts a sentinel with config `$2`, expecting it to refuse to start with the
+# error `$3` instead of running with a Roles setup that can't work.
+BROKEN_SENTINEL_CONFIG=$(mktemp)
+expect_startup_failure() {
+	local log="$ROOT/sentinel_startup_failure_logs.txt"
+	"$ROOT/target/debug/sentinel" --config-file "$2" >"$log" 2>&1 &
+	local pid=$!
+	PIDS+=("$pid")
+	for _ in $(seq 1 20); do
+		kill -0 "$pid" 2>/dev/null || break
+		sleep 1
+	done
+	if kill -0 "$pid" 2>/dev/null; then
+		echo "FAILED: the sentinel started $1"
+		exit 1
+	fi
+	if wait "$pid" || ! grep -q "$3" "$log"; then
+		echo "FAILED: expected the sentinel to refuse to start $1 with $3:"
+		cat "$log"
+		exit 1
+	fi
+	echo "OK: the sentinel refused to start $1."
+}
+
+expect_startup_failure "as a Safe that is not a registered sentinel" "$SENTINEL_B_CONFIG" "NotRegistered"
+
+echo "Registering both sentinels..."
+cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$ORACLE" "addSentinel(address)" "$SENTINEL_A_ADDR" >/dev/null
+cast send --rpc-url "$RPC_URL" --private-key "$DEPLOYER_PK" "$ORACLE" "addSentinel(address)" "$SENTINEL_B_ADDR" >/dev/null
+
+sentinel_config "$SENTINEL_B_PK" "$SENTINEL_B_ENGINE_ADDR" "$ROLES_MODULE" "$(cast keccak "NOT_A_ROLE")" >"$BROKEN_SENTINEL_CONFIG"
+expect_startup_failure "with a role its key isn't a member of" "$BROKEN_SENTINEL_CONFIG" "RoleDenied"
+sentinel_config "$SENTINEL_B_PK" "$SENTINEL_B_ENGINE_ADDR" "$SENTINEL_B_KEY_ADDR" "$SENTINEL_ROLE_KEY" >"$BROKEN_SENTINEL_CONFIG"
+expect_startup_failure "with a Roles modifier address that has no code" "$BROKEN_SENTINEL_CONFIG" "NoModule"
 
 echo "Starting sentinel engine A..."
 "$ROOT/target/debug/sentinel-engine" --config-file "$SENTINEL_A_ENGINE_CONFIG" >"$ROOT/sentinel_engine_a_logs.txt" 2>&1 &
@@ -561,7 +727,7 @@ ARBITRATION_TIMEOUT_TX=$(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --
 	'ArbitrationTimedOut(bytes32)' "$UNRULED_REQUEST_ID" | jq -r '.[0].transactionHash')
 ARBITRATION_TIMEOUT_SENDER=$(cast tx --rpc-url "$RPC_URL" --json "$ARBITRATION_TIMEOUT_TX" | jq -r '.from')
 ARBITRATION_TIMEOUT_SENDER=$(cast to-check-sum-address "$ARBITRATION_TIMEOUT_SENDER")
-if [ "$ARBITRATION_TIMEOUT_SENDER" != "$SENTINEL_A_ADDR" ] && [ "$ARBITRATION_TIMEOUT_SENDER" != "$SENTINEL_B_ADDR" ]; then
+if [ "$ARBITRATION_TIMEOUT_SENDER" != "$SENTINEL_A_ADDR" ] && [ "$ARBITRATION_TIMEOUT_SENDER" != "$SENTINEL_B_KEY_ADDR" ]; then
 	echo "FAILED: expected a sentinel to have submitted timeoutArbitration, but it came from $ARBITRATION_TIMEOUT_SENDER"
 	exit 1
 fi
@@ -604,5 +770,97 @@ if [ "$UNRULED_SPONSOR_CHANGE" != "0" ]; then
 	exit 1
 fi
 echo "OK: the sentinels timed out the unruled arbitration and recovered their bonds in full."
+
+# --- 18. Measure the gas the Roles path costs sentinel B ---
+# Each of sentinel B's transactions went through the Roles modifier, and its
+# Safe logged `ExecutionFromModuleSuccess` for it. Tracing one finds the
+# Safe's own call to the oracle or fee token inside it, which gives:
+#   - the Roles overhead: the gas used, minus that call's gas and the
+#     intrinsic gas of sending the same call directly;
+#   - the headroom: the gas that call received, minus the gas limit the
+#     sentinel sets for the direct call (the transaction's limit minus
+#     `gas_overhead`). It must not be negative, or `gas_overhead` is too small
+#     and a call that fits its own limit could run out of gas through Roles.
+echo "Measuring the gas of sentinel B's transactions through the Roles modifier..."
+ACTIONS=$(jq -n \
+	--arg approve "$(cast sig "approve(address,uint256)")" \
+	--arg commit "$(cast sig "commit(bytes32,bytes32)")" \
+	--arg reveal "$(cast sig "reveal(bytes32,bool,bytes32,string)")" \
+	--arg finalize "$(cast sig "finalize(bytes32)")" \
+	--arg claim "$(cast sig "claim(bytes32)")" \
+	--arg timeout "$(cast sig "timeoutArbitration(bytes32)")" \
+	'{($approve): "approve", ($commit): "commit", ($reveal): "reveal",
+	  ($finalize): "finalize", ($claim): "claim", ($timeout): "timeoutArbitration"}')
+GAS_MEASUREMENTS=$(mktemp)
+for tx in $(cast logs --rpc-url "$RPC_URL" --json --from-block 0 --address "$SENTINEL_B_ADDR" \
+	"ExecutionFromModuleSuccess(address)" | jq -r '.[].transactionHash' | sort -u); do
+	cast rpc --rpc-url "$RPC_URL" debug_traceTransaction "$tx" '{"tracer":"callTracer"}' | jq -c \
+		--arg tx "$tx" \
+		--arg safe "$SENTINEL_B_ADDR" \
+		--argjson actions "$ACTIONS" \
+		--argjson receipt "$(cast receipt --rpc-url "$RPC_URL" --json "$tx")" \
+		--argjson overheadLimit "$ROLES_GAS_OVERHEAD" '
+		def num: if type == "number" then . else ltrimstr("0x") | ascii_downcase | explode
+			| reduce .[] as $c (0; . * 16 + (if $c >= 97 then $c - 87 else $c - 48 end)) end;
+		def calldata_gas: ltrimstr("0x") | [range(0; length; 2) as $i | .[$i:$i + 2]]
+			| map(if . == "00" then 4 else 16 end) | add;
+		. as $outer
+		| [.. | objects | select(.type? == "CALL" and ((.from? // "") | ascii_downcase) == ($safe | ascii_downcase))]
+		| first as $inner
+		| ($receipt.gasUsed | num) as $gasUsed
+		| {
+			tx: $tx,
+			action: ($actions[$inner.input[0:10]] // $inner.input[0:10]),
+			success: (($receipt.status | num) == 1),
+			gasUsed: $gasUsed,
+			overhead: ($gasUsed - ($inner.gasUsed | num) - 21000 - ($inner.input | calldata_gas)),
+			headroom: (($inner.gas | num) - (($outer.gas | num) - $overheadLimit))
+		}' >>"$GAS_MEASUREMENTS"
+done
+
+FAILED_TXS=$(jq -s -r 'map(select(.success | not) | .tx) | join(" ")' "$GAS_MEASUREMENTS")
+if [ -n "$FAILED_TXS" ]; then
+	echo "FAILED: sentinel B's transactions through Roles reverted: $FAILED_TXS"
+	exit 1
+fi
+MISSING_ACTIONS=$(jq -s -r '[map(.action) as $seen | ("approve", "commit", "reveal", "claim")
+	| select(. as $a | $seen | index($a) | not)] | join(" ")' "$GAS_MEASUREMENTS")
+if [ -n "$MISSING_ACTIONS" ]; then
+	echo "FAILED: expected sentinel B to have sent through Roles: $MISSING_ACTIONS"
+	exit 1
+fi
+SHORT_TXS=$(jq -s -r 'map(select(.headroom < 0) | "\(.action) \(.tx) (\(.headroom))") | join(", ")' "$GAS_MEASUREMENTS")
+if [ -n "$SHORT_TXS" ]; then
+	echo "FAILED: gas_overhead ($ROLES_GAS_OVERHEAD) leaves these calls less gas than sent directly: $SHORT_TXS"
+	exit 1
+fi
+
+# The USD cost at the current Gnosis Chain gas price, if it can be read.
+GAS_PRICE_WEI=$(cast gas-price --rpc-url "$GNOSIS_RPC_URL" 2>/dev/null) || GAS_PRICE_WEI=""
+echo
+echo "Sentinel B (Safe v1.5.0 + Zodiac Roles v2.1.1) gas per action, worst case over this run:"
+printf "  %-19s %4s %10s %15s %10s %13s %13s\n" \
+	action txs "gas used" "Roles overhead" headroom "cost (USD)" "overhead (USD)"
+jq -s -r --arg price "${GAS_PRICE_WEI:-0}" '
+	($price | tonumber) as $price
+	| group_by(.action)[]
+	| [.[0].action, length, (map(.gasUsed) | max), (map(.overhead) | max), (map(.headroom) | min),
+	   ((map(.gasUsed) | max) * $price / 1e18), ((map(.overhead) | max) * $price / 1e18)]
+	| @tsv' "$GAS_MEASUREMENTS" |
+	while IFS=$'\t' read -r action count gas_used overhead headroom cost overhead_cost; do
+		if [ -n "$GAS_PRICE_WEI" ]; then
+			printf "  %-19s %4s %10s %15s %10s %13.3g %13.3g\n" \
+				"$action" "$count" "$gas_used" "$overhead" "$headroom" "$cost" "$overhead_cost"
+		else
+			printf "  %-19s %4s %10s %15s %10s %13s %13s\n" \
+				"$action" "$count" "$gas_used" "$overhead" "$headroom" - -
+		fi
+	done
+if [ -n "$GAS_PRICE_WEI" ]; then
+	echo "  USD at the current Gnosis Chain gas price of $GAS_PRICE_WEI wei (xDAI = \$1)."
+else
+	echo "  USD skipped: couldn't read the gas price from $GNOSIS_RPC_URL."
+fi
+echo "OK: every sentinel B transaction went through Roles within gas_overhead ($ROLES_GAS_OVERHEAD)."
 
 echo "Sentinel integration test finished successfully."

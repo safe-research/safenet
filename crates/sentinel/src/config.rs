@@ -1,3 +1,4 @@
+use crate::roles::RolesModule;
 use alloy::primitives::Address;
 use safenet_core::{config, driver, observability, tx::Signer};
 use serde::Deserialize;
@@ -55,6 +56,11 @@ pub struct SentinelConfig {
     pub claim_window: u64,
     /// Base URL of the transaction-verification engine used by this sentinel.
     pub engine: Url,
+    /// Run as a Safe instead of as the signer's own account: the Safe is the
+    /// registered sentinel and holds the bonds, and `signer` is a member of a
+    /// Zodiac Roles role that may only send the sentinel's transactions. When
+    /// omitted, the signer's account is the sentinel.
+    pub roles: Option<RolesModule>,
 }
 
 impl SentinelConfig {
@@ -73,7 +79,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy::primitives::address;
+    use alloy::primitives::{B256, address};
 
     const TOML: &str = r#"
         rpc = "https://eth.llamarpc.com"
@@ -112,6 +118,7 @@ mod tests {
         assert_eq!(config.sentinel.voting_window, 100);
         assert_eq!(config.sentinel.claim_window, 720);
         assert_eq!(config.sentinel.engine.as_str(), "http://localhost:5473/");
+        assert!(config.sentinel.roles.is_none());
         assert_eq!(
             config.observability.log_filter.to_string(),
             observability::Config::default().log_filter.to_string()
@@ -130,6 +137,40 @@ mod tests {
             1,
         );
         assert!(toml::from_str::<Config>(&without_oracle).is_err());
+    }
+
+    #[test]
+    fn deserializes_roles_with_a_default_gas_overhead() {
+        let with_roles = format!(
+            r#"{TOML}
+            [sentinel.roles]
+            module = "0x0404040404040404040404040404040404040404"
+            role_key = "0x0505050505050505050505050505050505050505050505050505050505050505"
+            "#
+        );
+        let roles = toml::from_str::<Config>(&with_roles)
+            .unwrap()
+            .sentinel
+            .roles
+            .unwrap();
+
+        assert_eq!(
+            roles.module,
+            address!("0x0404040404040404040404040404040404040404")
+        );
+        assert_eq!(roles.role_key, B256::repeat_byte(0x05));
+        assert_eq!(roles.gas_overhead, 150_000);
+    }
+
+    #[test]
+    fn rejects_roles_missing_the_role_key() {
+        let without_role_key = format!(
+            r#"{TOML}
+            [sentinel.roles]
+            module = "0x0404040404040404040404040404040404040404"
+            "#
+        );
+        assert!(toml::from_str::<Config>(&without_role_key).is_err());
     }
 
     #[test]
