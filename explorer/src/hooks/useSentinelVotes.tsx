@@ -26,6 +26,7 @@ export function useSentinelVotes(
 			oracleData,
 			proposedAt.toString(),
 			revealDeadline?.toString(),
+			settings.maxBlockRange,
 		],
 		queryFn: () =>
 			getOracleWorker().loadSentinelVotes({
@@ -37,10 +38,11 @@ export function useSentinelVotes(
 				oracleData,
 				proposedAt,
 				revealDeadline: revealDeadline ?? 0n,
+				maxBlockRange: BigInt(settings.maxBlockRange),
 			}),
 		initialData: { votes: [], final: false },
 		enabled: revealDeadline !== undefined,
-		// Once the reveal window has closed the votes can no longer change.
+		// Once the reveal deadline block is finalized the votes can no longer change, not even through a reorg.
 		refetchInterval: (query) =>
 			!query.state.data?.final && settings.refetchInterval > 0 ? settings.refetchInterval : false,
 	});

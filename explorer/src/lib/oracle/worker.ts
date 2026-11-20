@@ -15,7 +15,7 @@ type LoadVotesParams = {
 	maxBlockRange: bigint;
 };
 
-type LoadSentinelVotesParams = Omit<LoadVotesParams, "maxBlockRange"> & {
+type LoadSentinelVotesParams = LoadVotesParams & {
 	proposedAt: bigint;
 	revealDeadline: bigint;
 };
