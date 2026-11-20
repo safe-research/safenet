@@ -79,14 +79,7 @@ function SafeTxProposalVoting({ oracle, proposal }: { oracle: Address; proposal:
 	const votingStatus = useVotingStatus(oracle, proposal.epoch, proposal.safeTxHash, proposal.oracleData);
 	const isSentinel = votingStatus.data?.kind === "sentinel";
 	const revealDeadline = votingStatus.data?.kind === "sentinel" ? votingStatus.data.revealDeadline : undefined;
-	const sentinelVotes = useSentinelVotes(
-		oracle,
-		proposal.epoch,
-		proposal.safeTxHash,
-		proposal.oracleData,
-		proposal.proposedAt.block,
-		revealDeadline,
-	);
+	const sentinelVotes = useSentinelVotes(oracle, proposal.requestId, proposal.proposedAt.block, revealDeadline);
 	return (
 		<div className="space-y-2">
 			<div className="md:flex md:justify-between">
@@ -102,7 +95,7 @@ function SafeTxProposalVoting({ oracle, proposal }: { oracle: Address; proposal:
 				</div>
 				<VotingStatusBadge status={votingStatus.data} />
 			</div>
-			{isSentinel && <SentinelVoteList votes={sentinelVotes.data.votes} />}
+			{isSentinel && <SentinelVoteList votes={sentinelVotes.data} />}
 		</div>
 	);
 }

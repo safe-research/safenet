@@ -32,7 +32,7 @@ vi.mock("@/hooks/useVotingStatus", () => ({
 }));
 
 vi.mock("@/hooks/useSentinelVotes", () => ({
-	useSentinelVotes: vi.fn(() => ({ data: { votes: [], final: false } })),
+	useSentinelVotes: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/hooks/useSentinelInfo", () => ({
@@ -168,17 +168,14 @@ describe("SafeTxProposals", () => {
 			data: { kind: "sentinel", state: "PENDING", approveCount: 1n, denyCount: 0n, revealDeadline: 150n },
 		} as never);
 		vi.mocked(useSentinelVotes).mockReturnValue({
-			data: {
-				votes: [
-					{ sentinel: "0x0000000000000000000000000000000000000011" as Address, state: "committed" },
-					{
-						sentinel: "0x0000000000000000000000000000000000000022" as Address,
-						state: "approved",
-						reason: "looks fine",
-					},
-				],
-				final: false,
-			},
+			data: [
+				{ sentinel: "0x0000000000000000000000000000000000000011" as Address, state: "committed" },
+				{
+					sentinel: "0x0000000000000000000000000000000000000022" as Address,
+					state: "approved",
+					reason: "looks fine",
+				},
+			],
 		} as never);
 		vi.mocked(useProposalsForTransaction).mockReturnValue(
 			mockQueryResult([makeProposal({ oracle: "0x0000000000000000000000000000000000000099" as Address })]),

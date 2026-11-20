@@ -49,19 +49,6 @@ export const getBlockRange = async (
 	return { fromBlock, toBlock };
 };
 
-// Splits `[fromBlock, toBlock]` into consecutive ranges of at most `maxBlockRange` blocks each, for RPCs
-// that reject wider `eth_getLogs` spans. 0 means unlimited: the range is returned whole. An empty range
-// (`fromBlock > toBlock`) yields no ranges.
-export const splitBlockRange = ({ fromBlock, toBlock }: BlockRange, maxBlockRange: bigint): BlockRange[] => {
-	const ranges: BlockRange[] = [];
-	for (let start = fromBlock; start <= toBlock; ) {
-		const end = maxBlockRange > 0n && start + maxBlockRange - 1n < toBlock ? start + maxBlockRange - 1n : toBlock;
-		ranges.push({ fromBlock: start, toBlock: end });
-		start = end + 1n;
-	}
-	return ranges;
-};
-
 type SortableLog = Pick<Log<bigint, number, false>, "blockNumber" | "logIndex">;
 
 // Chain order of two logs: by block, then by position within the block.

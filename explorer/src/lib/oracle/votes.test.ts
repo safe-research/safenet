@@ -9,31 +9,16 @@ import {
 } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { sentinelOracleAbi } from "./abi";
-import { oracleRequestId } from "./hashing";
 import { loadSentinelVotes } from "./votes";
 
 const ORACLE: Address = "0x1234567890123456789012345678901234567890";
-const CONSENSUS: Address = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
-const EPOCH = 1n;
-const SAFE_TX_HASH: Hex = "0xfe8b85e8d090b16fe8f142d3c9292dc1fc77daf9eb4af8f7cf4a7707d95f4028";
-const CHAIN_ID = 1;
-const REQUEST_ID: Hex = oracleRequestId({
-	chainId: CHAIN_ID,
-	consensus: CONSENSUS,
-	epoch: EPOCH,
-	oracle: ORACLE,
-	safeTxHash: SAFE_TX_HASH,
-	oracleData: "0x",
-});
+const REQUEST_ID: Hex = "0x8140f61f913a7d3602ddc7d468be9b047c6dec24481ed4ca71f608f13ad46d46";
 const SENTINEL_A: Address = "0x1111111111111111111111111111111111111111";
 const SENTINEL_B: Address = "0x2222222222222222222222222222222222222222";
 
 const commonParams = {
 	oracle: ORACLE,
-	consensus: CONSENSUS,
-	epoch: EPOCH,
-	safeTxHash: SAFE_TX_HASH,
-	oracleData: "0x" as Hex,
+	requestId: REQUEST_ID,
 	proposedAt: 1n,
 	revealDeadline: 900n,
 	maxBlockRange: 0n,
@@ -89,24 +74,14 @@ const makeRevealedLog = (sentinel: Address, approved: boolean, reason: string, b
 		logIndex,
 	});
 
-const makeProvider = (
-	logs: unknown[],
-	latestBlock = 1000n,
-	finalizedBlock: bigint | null = latestBlock,
-): PublicClient =>
+const makeProvider = (logs: unknown[], latestBlock = 1000n): PublicClient =>
 	({
 		getBlockNumber: vi.fn().mockResolvedValue(latestBlock),
-		getBlock: vi.fn(() =>
-			finalizedBlock === null
-				? Promise.reject(new Error("unsupported block tag"))
-				: Promise.resolve({ number: finalizedBlock }),
-		),
 		request: vi.fn().mockResolvedValue(logs),
-		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
 	}) as unknown as PublicClient;
 
 describe("loadSentinelVotes", () => {
-	it("makes a single eth_getLogs request filtered by the derived requestId", async () => {
+	it("makes a single eth_getLogs request filtered by the given requestId", async () => {
 		const provider = makeProvider([]);
 
 		await loadSentinelVotes({ provider, ...commonParams });
@@ -126,25 +101,23 @@ describe("loadSentinelVotes", () => {
 			params[0].toBlock,
 		]);
 
-	it("searches an old request's whole vote window and marks its votes final", async () => {
-		const provider = makeProvider([], 1_000_000n, 999_000n);
+	it("searches an old request's whole vote window", async () => {
+		const provider = makeProvider([], 1_000_000n);
 
-		const result = await loadSentinelVotes({ provider, ...commonParams, proposedAt: 100n, revealDeadline: 150n });
+		await loadSentinelVotes({ provider, ...commonParams, proposedAt: 100n, revealDeadline: 150n });
 
 		expect(getLogsRanges(provider)).toEqual([[numberToHex(100n), numberToHex(150n)]]);
-		expect(result.final).toBe(true);
 	});
 
 	it("caps the vote window at the latest block while a request is still being voted on", async () => {
 		const provider = makeProvider([], 1000n);
 
-		const result = await loadSentinelVotes({ provider, ...commonParams, proposedAt: 990n, revealDeadline: 1040n });
+		await loadSentinelVotes({ provider, ...commonParams, proposedAt: 990n, revealDeadline: 1040n });
 
 		expect(getLogsRanges(provider)).toEqual([[numberToHex(990n), numberToHex(1000n)]]);
-		expect(result.final).toBe(false);
 	});
 
-	it("splits the vote window into requests of at most maxBlockRange blocks", async () => {
+	it("splits the vote window into maxBlockRange-sized requests and joins commits and reveals across them", async () => {
 		const provider = makeProvider([], 1000n);
 		vi.mocked(provider.request)
 			.mockResolvedValueOnce([makeCommittedLog(SENTINEL_A, 110n)] as never)
@@ -164,32 +137,16 @@ describe("loadSentinelVotes", () => {
 			[numberToHex(120n), numberToHex(139n)],
 			[numberToHex(140n), numberToHex(150n)],
 		]);
-		expect(result.votes).toEqual([
+		expect(result).toEqual([
 			{ sentinel: SENTINEL_A, state: "approved", reason: "ok" },
 			{ sentinel: SENTINEL_B, state: "committed" },
 		]);
 	});
 
-	it("does not mark votes final until the reveal deadline block is finalized", async () => {
-		const provider = makeProvider([], 1000n, 140n);
-
-		const result = await loadSentinelVotes({ provider, ...commonParams, proposedAt: 100n, revealDeadline: 150n });
-
-		expect(result.final).toBe(false);
-	});
-
-	it("never marks votes final when the RPC has no finalized block", async () => {
-		const provider = makeProvider([], 1_000_000n, null);
-
-		const result = await loadSentinelVotes({ provider, ...commonParams, proposedAt: 100n, revealDeadline: 150n });
-
-		expect(result.final).toBe(false);
-	});
-
 	it("returns an empty array when nobody has voted", async () => {
 		const provider = makeProvider([]);
 
-		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([]);
 	});
@@ -197,7 +154,7 @@ describe("loadSentinelVotes", () => {
 	it("marks a sentinel as committed when it hasn't revealed yet", async () => {
 		const provider = makeProvider([makeCommittedLog(SENTINEL_A, 1n)]);
 
-		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([{ sentinel: SENTINEL_A, state: "committed" }]);
 	});
@@ -208,7 +165,7 @@ describe("loadSentinelVotes", () => {
 			makeRevealedLog(SENTINEL_A, true, "looks good", 2n),
 		]);
 
-		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([{ sentinel: SENTINEL_A, state: "approved", reason: "looks good" }]);
 	});
@@ -219,7 +176,7 @@ describe("loadSentinelVotes", () => {
 			makeRevealedLog(SENTINEL_A, false, "suspicious payload", 2n),
 		]);
 
-		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([{ sentinel: SENTINEL_A, state: "denied", reason: "suspicious payload" }]);
 	});
@@ -232,7 +189,7 @@ describe("loadSentinelVotes", () => {
 			makeRevealedLog(SENTINEL_B, false, "no", 6n, 1),
 		]);
 
-		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
+		const result = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([
 			{ sentinel: SENTINEL_A, state: "approved", reason: "ok" },

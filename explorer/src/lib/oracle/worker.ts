@@ -15,9 +15,13 @@ type LoadVotesParams = {
 	maxBlockRange: bigint;
 };
 
-type LoadSentinelVotesParams = LoadVotesParams & {
+type LoadSentinelVotesParams = {
+	rpc: string;
+	oracle: Address;
+	requestId: Hex;
 	proposedAt: bigint;
 	revealDeadline: bigint;
+	maxBlockRange: bigint;
 };
 
 const workerApi = {

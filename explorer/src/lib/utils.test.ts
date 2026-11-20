@@ -1,7 +1,7 @@
 import type { Address, PublicClient } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { shortAddress } from "@/lib/address";
-import { getBlockRange, loadChainId, mapAddressLabel, mostRecentFirst, oldestFirst, splitBlockRange } from "./utils";
+import { getBlockRange, loadChainId, mapAddressLabel, mostRecentFirst, oldestFirst } from "./utils";
 
 const CURRENT_BLOCK = 10000n;
 const MAX_BLOCK_RANGE = 1000n;
@@ -42,30 +42,6 @@ describe("getBlockRange", () => {
 		const { fromBlock, toBlock } = await getBlockRange(provider, 0n);
 		expect(toBlock).toBe(CURRENT_BLOCK);
 		expect(fromBlock).toBe(0n);
-	});
-});
-
-describe("splitBlockRange", () => {
-	it("splits a range into consecutive pieces of at most maxBlockRange blocks", () => {
-		expect(splitBlockRange({ fromBlock: 10n, toBlock: 34n }, 10n)).toEqual([
-			{ fromBlock: 10n, toBlock: 19n },
-			{ fromBlock: 20n, toBlock: 29n },
-			{ fromBlock: 30n, toBlock: 34n },
-		]);
-	});
-
-	it("returns a range that fits the limit whole", () => {
-		expect(splitBlockRange({ fromBlock: 10n, toBlock: 19n }, 10n)).toEqual([{ fromBlock: 10n, toBlock: 19n }]);
-	});
-
-	it("returns the range whole when maxBlockRange is 0 (unlimited)", () => {
-		expect(splitBlockRange({ fromBlock: 0n, toBlock: 1_000_000n }, 0n)).toEqual([
-			{ fromBlock: 0n, toBlock: 1_000_000n },
-		]);
-	});
-
-	it("returns no ranges for an empty range", () => {
-		expect(splitBlockRange({ fromBlock: 11n, toBlock: 10n }, 10n)).toEqual([]);
 	});
 });
 
