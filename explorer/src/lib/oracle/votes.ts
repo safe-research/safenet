@@ -1,5 +1,5 @@
 import { type Address, formatLog, type Hex, numberToHex, type PublicClient, parseEventLogs } from "viem";
-import { getBlockRange, loadChainId } from "@/lib/utils";
+import { loadChainId } from "@/lib/utils";
 import { sentinelOracleAbi, sentinelVoteEventSelectors } from "./abi";
 import { oracleRequestId } from "./hashing";
 
@@ -7,10 +7,18 @@ export type SentinelVote =
 	| { sentinel: Address; state: "committed" }
 	| { sentinel: Address; state: "approved" | "denied"; reason: string };
 
+// `final` is set once the reveal window has closed: the votes can no longer change.
+export type SentinelVotes = { votes: SentinelVote[]; final: boolean };
+
 // Per-sentinel breakdown for a `SentinelOracle` request, discovered from indexed `Committed`/
 // `Revealed` logs rather than a configured roster — only sentinels who acted appear, ordered by
 // their `Committed` log position (first vote first). Callers should only invoke this once
 // `loadVotingStatus` has confirmed `kind === "sentinel"`; a generic `IOracle` has no such events.
+//
+// Logs are searched in the request's own vote window rather than a window counted back from the
+// latest block, so votes on requests of any age are found. The request is created in the block its
+// proposal was made in (`Consensus.proposeTransaction` posts it), and no vote can be committed or
+// revealed after `revealDeadline`.
 export const loadSentinelVotes = async ({
 	provider,
 	oracle,
@@ -18,7 +26,8 @@ export const loadSentinelVotes = async ({
 	epoch,
 	safeTxHash,
 	oracleData,
-	maxBlockRange,
+	proposedAt,
+	revealDeadline,
 }: {
 	provider: PublicClient;
 	oracle: Address;
@@ -26,11 +35,14 @@ export const loadSentinelVotes = async ({
 	epoch: bigint;
 	safeTxHash: Hex;
 	oracleData: Hex;
-	maxBlockRange: bigint;
-}): Promise<SentinelVote[]> => {
+	proposedAt: bigint;
+	revealDeadline: bigint;
+}): Promise<SentinelVotes> => {
 	const chainId = await loadChainId(provider);
 	const requestId = oracleRequestId({ chainId, consensus, epoch, oracle, safeTxHash, oracleData });
-	const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange);
+	const latest = await provider.getBlockNumber();
+	const fromBlock = proposedAt;
+	const toBlock = revealDeadline < latest ? revealDeadline : latest;
 
 	// A single `eth_getLogs` here, in order to filter on the `requestId` topic while still
 	// matching either event — `getLogs`'s typed `events` option can't be combined with `args`.
@@ -55,7 +67,7 @@ export const loadSentinelVotes = async ({
 		logs.filter((log) => log.eventName === "Revealed").map((log) => [log.args.sentinel, log.args]),
 	);
 
-	return logs
+	const votes = logs
 		.filter((log) => log.eventName === "Committed")
 		.sort((left, right) => {
 			if (left.blockNumber !== right.blockNumber) {
@@ -70,4 +82,5 @@ export const loadSentinelVotes = async ({
 			}
 			return { sentinel, state: revealed.approved ? "approved" : "denied", reason: revealed.reason };
 		});
+	return { votes, final: latest > revealDeadline };
 };

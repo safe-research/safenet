@@ -32,7 +32,7 @@ vi.mock("@/hooks/useVotingStatus", () => ({
 }));
 
 vi.mock("@/hooks/useSentinelVotes", () => ({
-	useSentinelVotes: vi.fn(() => ({ data: [] })),
+	useSentinelVotes: vi.fn(() => ({ data: { votes: [], final: false } })),
 }));
 
 vi.mock("@/hooks/useSentinelInfo", () => ({
@@ -165,17 +165,20 @@ describe("SafeTxProposals", () => {
 
 	it("shows the per-sentinel vote list for a sentinel oracle request", () => {
 		vi.mocked(useVotingStatus).mockReturnValue({
-			data: { kind: "sentinel", state: "PENDING", approveCount: 1n, denyCount: 0n },
+			data: { kind: "sentinel", state: "PENDING", approveCount: 1n, denyCount: 0n, revealDeadline: 150n },
 		} as never);
 		vi.mocked(useSentinelVotes).mockReturnValue({
-			data: [
-				{ sentinel: "0x0000000000000000000000000000000000000011" as Address, state: "committed" },
-				{
-					sentinel: "0x0000000000000000000000000000000000000022" as Address,
-					state: "approved",
-					reason: "looks fine",
-				},
-			],
+			data: {
+				votes: [
+					{ sentinel: "0x0000000000000000000000000000000000000011" as Address, state: "committed" },
+					{
+						sentinel: "0x0000000000000000000000000000000000000022" as Address,
+						state: "approved",
+						reason: "looks fine",
+					},
+				],
+				final: false,
+			},
 		} as never);
 		vi.mocked(useProposalsForTransaction).mockReturnValue(
 			mockQueryResult([makeProposal({ oracle: "0x0000000000000000000000000000000000000099" as Address })]),
@@ -302,6 +305,7 @@ describe("SafeTxProposals", () => {
 			approveCount: 0n,
 			denyCount: 0n,
 			noVotes: true,
+			revealDeadline: 150n,
 		};
 
 		const renderTimedOut = (votingStatus: VotingStatus) => {
@@ -327,7 +331,14 @@ describe("SafeTxProposals", () => {
 		});
 
 		it("keeps loading the signing progress of a timed-out proposal the oracle approved", () => {
-			renderTimedOut({ kind: "sentinel", state: "RESOLVED_APPROVED", approveCount: 1n, denyCount: 0n, noVotes: false });
+			renderTimedOut({
+				kind: "sentinel",
+				state: "RESOLVED_APPROVED",
+				approveCount: 1n,
+				denyCount: 0n,
+				noVotes: false,
+				revealDeadline: 150n,
+			});
 			expect(useAttestationStatus).toHaveBeenCalled();
 			expect(SafeTxAttestationStatus).toHaveBeenCalled();
 			expect(rowText("Attested:")).toBe("Attested:-");

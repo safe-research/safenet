@@ -85,7 +85,14 @@ describe("loadVotingStatus", () => {
 
 		const result = await loadVotingStatus({ provider, ...commonParams });
 
-		expect(result).toEqual({ kind: "sentinel", state: name, approveCount: 3n, denyCount: 1n, noVotes: false });
+		expect(result).toEqual({
+			kind: "sentinel",
+			state: name,
+			approveCount: 3n,
+			denyCount: 1n,
+			noVotes: false,
+			revealDeadline: 0n,
+		});
 	});
 
 	type SentinelRequest = Parameters<typeof makeSentinelProvider>[0];

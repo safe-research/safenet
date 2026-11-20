@@ -25,6 +25,8 @@ export type VotingStatus =
 			denyCount: bigint;
 			// No vote was revealed and none can be any more.
 			noVotes: boolean;
+			// Last block a vote can be revealed in; no `Committed`/`Revealed` log comes after it.
+			revealDeadline: bigint;
 	  }
 	| { kind: "generic"; approved: boolean }
 	| null;
@@ -74,6 +76,7 @@ export const loadVotingStatus = async ({
 			approveCount: BigInt(progress.approveSentinelCount),
 			denyCount: BigInt(progress.denySentinelCount),
 			noVotes,
+			revealDeadline: terms.revealDeadline,
 		};
 	} catch {
 		const { fromBlock, toBlock } = await getBlockRange(provider, maxBlockRange, block);

@@ -34,7 +34,8 @@ const commonParams = {
 	epoch: EPOCH,
 	safeTxHash: SAFE_TX_HASH,
 	oracleData: "0x" as Hex,
-	maxBlockRange: 500n,
+	proposedAt: 1n,
+	revealDeadline: 900n,
 };
 
 // biome-ignore lint/suspicious/noExplicitAny: viem's ABI input types don't always include the `indexed` property
@@ -87,9 +88,9 @@ const makeRevealedLog = (sentinel: Address, approved: boolean, reason: string, b
 		logIndex,
 	});
 
-const makeProvider = (logs: unknown[]): PublicClient =>
+const makeProvider = (logs: unknown[], latestBlock = 1000n): PublicClient =>
 	({
-		getBlockNumber: vi.fn().mockResolvedValue(1000n),
+		getBlockNumber: vi.fn().mockResolvedValue(latestBlock),
 		request: vi.fn().mockResolvedValue(logs),
 		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
 	}) as unknown as PublicClient;
@@ -109,10 +110,34 @@ describe("loadSentinelVotes", () => {
 		expect(params.topics[1]).toBe(REQUEST_ID);
 	});
 
+	it("searches an old request's whole vote window and marks its votes final", async () => {
+		const provider = makeProvider([], 1_000_000n);
+
+		const result = await loadSentinelVotes({ provider, ...commonParams, proposedAt: 100n, revealDeadline: 150n });
+
+		const requestMock = provider.request as unknown as ReturnType<typeof vi.fn>;
+		const params = requestMock.mock.calls[0][0].params[0];
+		expect(params.fromBlock).toBe(numberToHex(100n));
+		expect(params.toBlock).toBe(numberToHex(150n));
+		expect(result.final).toBe(true);
+	});
+
+	it("caps the vote window at the latest block while a request is still being voted on", async () => {
+		const provider = makeProvider([], 1000n);
+
+		const result = await loadSentinelVotes({ provider, ...commonParams, proposedAt: 990n, revealDeadline: 1040n });
+
+		const requestMock = provider.request as unknown as ReturnType<typeof vi.fn>;
+		const params = requestMock.mock.calls[0][0].params[0];
+		expect(params.fromBlock).toBe(numberToHex(990n));
+		expect(params.toBlock).toBe(numberToHex(1000n));
+		expect(result.final).toBe(false);
+	});
+
 	it("returns an empty array when nobody has voted", async () => {
 		const provider = makeProvider([]);
 
-		const result = await loadSentinelVotes({ provider, ...commonParams });
+		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([]);
 	});
@@ -120,7 +145,7 @@ describe("loadSentinelVotes", () => {
 	it("marks a sentinel as committed when it hasn't revealed yet", async () => {
 		const provider = makeProvider([makeCommittedLog(SENTINEL_A, 1n)]);
 
-		const result = await loadSentinelVotes({ provider, ...commonParams });
+		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([{ sentinel: SENTINEL_A, state: "committed" }]);
 	});
@@ -131,7 +156,7 @@ describe("loadSentinelVotes", () => {
 			makeRevealedLog(SENTINEL_A, true, "looks good", 2n),
 		]);
 
-		const result = await loadSentinelVotes({ provider, ...commonParams });
+		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([{ sentinel: SENTINEL_A, state: "approved", reason: "looks good" }]);
 	});
@@ -142,7 +167,7 @@ describe("loadSentinelVotes", () => {
 			makeRevealedLog(SENTINEL_A, false, "suspicious payload", 2n),
 		]);
 
-		const result = await loadSentinelVotes({ provider, ...commonParams });
+		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([{ sentinel: SENTINEL_A, state: "denied", reason: "suspicious payload" }]);
 	});
@@ -155,7 +180,7 @@ describe("loadSentinelVotes", () => {
 			makeRevealedLog(SENTINEL_B, false, "no", 6n, 1),
 		]);
 
-		const result = await loadSentinelVotes({ provider, ...commonParams });
+		const { votes: result } = await loadSentinelVotes({ provider, ...commonParams });
 
 		expect(result).toEqual([
 			{ sentinel: SENTINEL_A, state: "approved", reason: "ok" },

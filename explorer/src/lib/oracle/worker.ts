@@ -15,12 +15,17 @@ type LoadVotesParams = {
 	maxBlockRange: bigint;
 };
 
+type LoadSentinelVotesParams = Omit<LoadVotesParams, "maxBlockRange"> & {
+	proposedAt: bigint;
+	revealDeadline: bigint;
+};
+
 const workerApi = {
 	loadArbitrator: ({ rpc, oracle }: { rpc: string; oracle: Address }) =>
 		loadArbitrator({ provider: createRpcClient(rpc), oracle }),
 	loadVotingStatus: ({ rpc, ...params }: LoadVotesParams) =>
 		loadVotingStatus({ ...params, provider: createRpcClient(rpc) }),
-	loadSentinelVotes: ({ rpc, ...params }: LoadVotesParams) =>
+	loadSentinelVotes: ({ rpc, ...params }: LoadSentinelVotesParams) =>
 		loadSentinelVotes({ ...params, provider: createRpcClient(rpc) }),
 };
 

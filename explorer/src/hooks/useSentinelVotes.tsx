@@ -1,14 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
 import { useSettings } from "@/hooks/useSettings";
-import { getOracleWorker, type SentinelVote } from "@/lib/oracle";
+import { getOracleWorker, type SentinelVotes } from "@/lib/oracle";
 
-// `enabled` should be false until the caller knows the oracle is `SentinelOracle`-shaped
-// (i.e. `useVotingStatus(...).data?.kind === "sentinel"`) — a generic `IOracle` has no
+// `revealDeadline` should stay undefined until the caller knows the oracle is `SentinelOracle`-shaped
+// (i.e. from `useVotingStatus(...).data` with `kind === "sentinel"`) — a generic `IOracle` has no
 // `Committed`/`Revealed` events to read, so querying it is pure wasted RPC traffic.
-export function useSentinelVotes(oracle: Address, epoch: bigint, safeTxHash: Hex, oracleData: Hex, enabled = false) {
+export function useSentinelVotes(
+	oracle: Address,
+	epoch: bigint,
+	safeTxHash: Hex,
+	oracleData: Hex,
+	proposedAt: bigint,
+	revealDeadline: bigint | undefined,
+) {
 	const [settings] = useSettings();
-	return useQuery<SentinelVote[], Error>({
+	return useQuery<SentinelVotes, Error>({
 		queryKey: [
 			"sentinelVotes",
 			settings.rpc,
@@ -17,7 +24,8 @@ export function useSentinelVotes(oracle: Address, epoch: bigint, safeTxHash: Hex
 			epoch.toString(),
 			safeTxHash,
 			oracleData,
-			settings.maxBlockRange,
+			proposedAt.toString(),
+			revealDeadline?.toString(),
 		],
 		queryFn: () =>
 			getOracleWorker().loadSentinelVotes({
@@ -27,10 +35,13 @@ export function useSentinelVotes(oracle: Address, epoch: bigint, safeTxHash: Hex
 				epoch,
 				safeTxHash,
 				oracleData,
-				maxBlockRange: BigInt(settings.maxBlockRange),
+				proposedAt,
+				revealDeadline: revealDeadline ?? 0n,
 			}),
-		initialData: [],
-		enabled,
-		refetchInterval: () => (settings.refetchInterval > 0 ? settings.refetchInterval : false),
+		initialData: { votes: [], final: false },
+		enabled: revealDeadline !== undefined,
+		// Once the reveal window has closed the votes can no longer change.
+		refetchInterval: (query) =>
+			!query.state.data?.final && settings.refetchInterval > 0 ? settings.refetchInterval : false,
 	});
 }
