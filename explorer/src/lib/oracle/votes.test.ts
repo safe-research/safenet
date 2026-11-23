@@ -9,32 +9,19 @@ import {
 } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { sentinelOracleAbi } from "./abi";
-import { oracleRequestId } from "./hashing";
 import { loadSentinelVotes } from "./votes";
 
 const ORACLE: Address = "0x1234567890123456789012345678901234567890";
-const CONSENSUS: Address = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
-const EPOCH = 1n;
-const SAFE_TX_HASH: Hex = "0xfe8b85e8d090b16fe8f142d3c9292dc1fc77daf9eb4af8f7cf4a7707d95f4028";
-const CHAIN_ID = 1;
-const REQUEST_ID: Hex = oracleRequestId({
-	chainId: CHAIN_ID,
-	consensus: CONSENSUS,
-	epoch: EPOCH,
-	oracle: ORACLE,
-	safeTxHash: SAFE_TX_HASH,
-	oracleData: "0x",
-});
+const REQUEST_ID: Hex = "0x8140f61f913a7d3602ddc7d468be9b047c6dec24481ed4ca71f608f13ad46d46";
 const SENTINEL_A: Address = "0x1111111111111111111111111111111111111111";
 const SENTINEL_B: Address = "0x2222222222222222222222222222222222222222";
 
 const commonParams = {
 	oracle: ORACLE,
-	consensus: CONSENSUS,
-	epoch: EPOCH,
-	safeTxHash: SAFE_TX_HASH,
-	oracleData: "0x" as Hex,
-	maxBlockRange: 500n,
+	requestId: REQUEST_ID,
+	proposedAt: 1n,
+	revealDeadline: 900n,
+	maxBlockRange: 0n,
 };
 
 // biome-ignore lint/suspicious/noExplicitAny: viem's ABI input types don't always include the `indexed` property
@@ -87,15 +74,14 @@ const makeRevealedLog = (sentinel: Address, approved: boolean, reason: string, b
 		logIndex,
 	});
 
-const makeProvider = (logs: unknown[]): PublicClient =>
+const makeProvider = (logs: unknown[], latestBlock = 1000n): PublicClient =>
 	({
-		getBlockNumber: vi.fn().mockResolvedValue(1000n),
+		getBlockNumber: vi.fn().mockResolvedValue(latestBlock),
 		request: vi.fn().mockResolvedValue(logs),
-		getChainId: vi.fn().mockResolvedValue(CHAIN_ID),
 	}) as unknown as PublicClient;
 
 describe("loadSentinelVotes", () => {
-	it("makes a single eth_getLogs request filtered by the derived requestId", async () => {
+	it("makes a single eth_getLogs request filtered by the given requestId", async () => {
 		const provider = makeProvider([]);
 
 		await loadSentinelVotes({ provider, ...commonParams });
@@ -107,6 +93,54 @@ describe("loadSentinelVotes", () => {
 		expect(Array.isArray(params.topics[0])).toBe(true);
 		expect(params.topics[0]).toHaveLength(2);
 		expect(params.topics[1]).toBe(REQUEST_ID);
+	});
+
+	const getLogsRanges = (provider: PublicClient) =>
+		(provider.request as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([{ params }]) => [
+			params[0].fromBlock,
+			params[0].toBlock,
+		]);
+
+	it("searches an old request's whole vote window", async () => {
+		const provider = makeProvider([], 1_000_000n);
+
+		await loadSentinelVotes({ provider, ...commonParams, proposedAt: 100n, revealDeadline: 150n });
+
+		expect(getLogsRanges(provider)).toEqual([[numberToHex(100n), numberToHex(150n)]]);
+	});
+
+	it("caps the vote window at the latest block while a request is still being voted on", async () => {
+		const provider = makeProvider([], 1000n);
+
+		await loadSentinelVotes({ provider, ...commonParams, proposedAt: 990n, revealDeadline: 1040n });
+
+		expect(getLogsRanges(provider)).toEqual([[numberToHex(990n), numberToHex(1000n)]]);
+	});
+
+	it("splits the vote window into maxBlockRange-sized requests and joins commits and reveals across them", async () => {
+		const provider = makeProvider([], 1000n);
+		vi.mocked(provider.request)
+			.mockResolvedValueOnce([makeCommittedLog(SENTINEL_A, 110n)] as never)
+			.mockResolvedValueOnce([makeCommittedLog(SENTINEL_B, 125n)] as never)
+			.mockResolvedValueOnce([makeRevealedLog(SENTINEL_A, true, "ok", 145n)] as never);
+
+		const result = await loadSentinelVotes({
+			provider,
+			...commonParams,
+			proposedAt: 100n,
+			revealDeadline: 150n,
+			maxBlockRange: 20n,
+		});
+
+		expect(getLogsRanges(provider)).toEqual([
+			[numberToHex(100n), numberToHex(119n)],
+			[numberToHex(120n), numberToHex(139n)],
+			[numberToHex(140n), numberToHex(150n)],
+		]);
+		expect(result).toEqual([
+			{ sentinel: SENTINEL_A, state: "approved", reason: "ok" },
+			{ sentinel: SENTINEL_B, state: "committed" },
+		]);
 	});
 
 	it("returns an empty array when nobody has voted", async () => {

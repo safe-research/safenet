@@ -78,7 +78,8 @@ function ProposalInfoButton({ proposal }: { proposal: TransactionProposal }) {
 function SafeTxProposalVoting({ oracle, proposal }: { oracle: Address; proposal: TransactionProposal }) {
 	const votingStatus = useVotingStatus(oracle, proposal.epoch, proposal.safeTxHash, proposal.oracleData);
 	const isSentinel = votingStatus.data?.kind === "sentinel";
-	const sentinelVotes = useSentinelVotes(oracle, proposal.epoch, proposal.safeTxHash, proposal.oracleData, isSentinel);
+	const revealDeadline = votingStatus.data?.kind === "sentinel" ? votingStatus.data.revealDeadline : undefined;
+	const sentinelVotes = useSentinelVotes(oracle, proposal.requestId, proposal.proposedAt.block, revealDeadline);
 	return (
 		<div className="space-y-2">
 			<div className="md:flex md:justify-between">
