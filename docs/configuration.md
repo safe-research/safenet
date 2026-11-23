@@ -122,6 +122,8 @@ voting_window = 6
 engine = "..."
 ```
 
+To run the sentinel as a Safe, with `signer` holding only a Zodiac Roles role, add a `[sentinel.roles]` table; see [Running as a Safe](./sentinel-handbook.md#running-as-a-safe).
+
 ## Staking
 
 The `staker` setting in the `[validator]` table of the validator's [configuration file](../crates/validator/validator.sample.toml) is of particular importance: it specifies which account is responsible for putting up the validator stake **on Ethereum Mainnet**. This allows a separate account (such as a Safe multisig) to be used to manage the large validator stake, instead of the same private key that is used by the validator for participating in consensus on Gnosis Chain. On startup, the validator registers this account onchain with `Consensus.setValidatorStaker` if it is not already set. Validators earn a commission on delegated stake which will only be earned if `staker` is set and the minimum stake has been put up by the `staker` account. This value must be set to the Ethereum Mainnet account that will put up the validator stake on the Safenet staking contract ([Etherscan](https://etherscan.io/address/0x115E78f160e1E3eF163B05C84562Fa16fA338509)).

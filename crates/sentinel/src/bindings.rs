@@ -21,6 +21,7 @@ pub mod oracle {
             TIMED_OUT
         }
 
+        #[sol(rpc)]
         #[derive(Debug)]
         contract SentinelOracle {
             event NewRequest(
@@ -61,6 +62,8 @@ pub mod oracle {
             function finalize(bytes32 requestId) external;
             function claim(bytes32 requestId) external;
             function timeoutArbitration(bytes32 requestId) external;
+            // Zero when `sentinel` is not registered.
+            function sentinelActiveAt(address sentinel) external view returns (uint256);
         }
 
         #[derive(Debug)]
@@ -161,6 +164,31 @@ pub mod safe {
             address gasToken;
             address refundReceiver;
             uint256 nonce;
+        }
+    }
+}
+
+// Zodiac Roles v2 modifier, through which a sentinel Safe's role member sends
+// the sentinel's transactions (see `crate::roles`).
+pub mod roles {
+    use alloy::sol;
+
+    sol! {
+        #[sol(rpc)]
+        #[derive(Debug)]
+        contract Roles {
+            // The account the modifier executes transactions on, here the
+            // Safe registered as the sentinel.
+            function target() external view returns (address);
+            // `operation` is Zodiac's `Enum.Operation`, encoded as `uint8`.
+            function execTransactionWithRole(
+                address to,
+                uint256 value,
+                bytes calldata data,
+                uint8 operation,
+                bytes32 roleKey,
+                bool shouldRevert
+            ) external returns (bool success);
         }
     }
 }
